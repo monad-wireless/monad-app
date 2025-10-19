@@ -51,9 +51,10 @@ kotlin {
             implementation(libs.lifecycle.runtime.compose)
             implementation(libs.material.icons.core)
 
-            implementation(libs.decompose)
-            implementation(libs.decompose.extensions)
-            implementation(libs.essenty.lifecycle.coroutines)
+            implementation(libs.voyager.navigator)
+            implementation(libs.voyager.screenmodel)
+            implementation(libs.voyager.koin)
+            implementation(libs.voyager.transitions)
 
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)

@@ -1,37 +1,50 @@
 package sk.martinvanco.blarp
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import cafe.adriel.voyager.navigator.Navigator
+import cafe.adriel.voyager.transitions.SlideTransition
+import org.koin.core.context.startKoin
+import org.koin.dsl.KoinAppDeclaration
+import sk.martinvanco.blarp.core.di.appModule
+import sk.martinvanco.blarp.home_screen.presentation.HomeScreen
 import sk.martinvanco.blarp.navigation.RootComponent
 import sk.martinvanco.blarp.ui.theme.AppTheme
 
+fun initKoin(appDeclaration: KoinAppDeclaration = {}) {
+    startKoin {
+        appDeclaration()
+        modules(appModule)
+    }
+}
+
 @Composable
 fun App(root: RootComponent) {
+    // Initialize Koin once
+    remember {
+        try {
+            initKoin()
+        } catch (e: Exception) {
+            // Koin already initialized
+        }
+    }
+
     AppTheme(darkTheme = false) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            HomeScreen()
+            Navigator(HomeScreen()) { navigator ->
+                SlideTransition(navigator)
+            }
         }
-    }
-}
-
-@Composable
-fun HomeScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Welcome to Yo mama",
-            style = MaterialTheme.typography.headlineMedium
-        )
     }
 }
