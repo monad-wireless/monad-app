@@ -1,7 +1,31 @@
 {
   "images" : [
     {
-      "filename" : "app-icon-1024.png",
+      "filename" : "ic_launcher_monad_ios-scaled.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "ic_launcher_monad_ios_dark.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "tinted"
+        }
+      ],
+      "filename" : "ic_launcher_monad_ios_tined.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"

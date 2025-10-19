@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
-import com.arkivanov.decompose.defaultComponentContext
 import sk.martinvanco.blarp.navigation.RootComponent
 
 class MainActivity : ComponentActivity() {
@@ -14,9 +13,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val rootComponent = RootComponent(
-            componentContext = defaultComponentContext()
-        )
+        val rootComponent = RootComponent()
 
         setContent {
             // Remove when https://issuetracker.google.com/issues/364713509 is fixed
