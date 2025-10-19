@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<resources>
+    <!-- App name -->
+    <string name="app_name">Blarp</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Domov</string>
+    <string name="nav_back">Späť</string>
+
+    <!-- Common -->
+    <string name="loading">Načítava sa...</string>
+    <string name="error">Chyba</string>
+    <string name="retry">Skúsiť znova</string>
+    <string name="empty_state">Žiadne položky</string>
+    <string name="no_data_available">Žiadne dáta</string>
+</resources>

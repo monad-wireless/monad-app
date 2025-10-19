@@ -1,0 +1,21 @@
+-- Sample table to get started
+-- Replace this with your actual database schema
+
+CREATE TABLE IF NOT EXISTS SampleTable (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    createdAt INTEGER NOT NULL
+);
+
+-- Sample queries
+selectAll:
+SELECT * FROM SampleTable;
+
+selectById:
+SELECT * FROM SampleTable WHERE id = ?;
+
+insert:
+INSERT INTO SampleTable(name, createdAt) VALUES (?, ?);
+
+deleteById:
+DELETE FROM SampleTable WHERE id = ?;

@@ -1,19 +1,18 @@
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinxSerialization)
+    alias(libs.plugins.sqldelight)
 }
 
 kotlin {
     androidTarget {
-        @OptIn(ExperimentalKotlinGradlePluginApi::class)
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+        compilations.all {
+            kotlinOptions {
+                jvmTarget = "11"
+            }
         }
     }
 
@@ -25,6 +24,7 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
+            linkerOpts("-lsqlite3")
         }
     }
 
@@ -33,9 +33,11 @@ kotlin {
             implementation(libs.androidx.compose.ui.tooling.preview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.sqldelight.android.driver)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
+            implementation(libs.sqldelight.native.driver)
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -49,6 +51,10 @@ kotlin {
             implementation(libs.lifecycle.runtime.compose)
             implementation(libs.material.icons.core)
 
+            implementation(libs.decompose)
+            implementation(libs.decompose.extensions)
+            implementation(libs.essenty.lifecycle.coroutines)
+
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
@@ -57,6 +63,7 @@ kotlin {
             implementation(libs.coil.network.ktor)
             implementation(libs.koin.core)
             implementation(libs.koin.compose.viewmodel)
+            implementation(libs.sqldelight.runtime)
         }
     }
 }
@@ -90,4 +97,12 @@ android {
 
 dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+sqldelight {
+    databases {
+        create("Database") {
+            packageName.set("sk.martinvanco.blarp")
+        }
+    }
 }
