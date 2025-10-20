@@ -1,5 +1,5 @@
 package sk.martinvanco.blarp.news.presentation
 
 data class NewsState(
-    // TODO: Add state properties
+    val placeholder: Unit = Unit // TODO: Add state properties
 )

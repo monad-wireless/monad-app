@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <resources>
     <!-- App name -->
-    <string name="app_name">Blarp</string>
+    <string name="app_name">Monad</string>
 
     <!-- Navigation -->
     <string name="nav_home">Home</string>
@@ -13,4 +13,24 @@
     <string name="retry">Retry</string>
     <string name="empty_state">No items found</string>
     <string name="no_data_available">No data available</string>
+    <string name="field_label_name">Your name</string>
+    <string name="field_label_email">Email</string>
+    <string name="field_label_password">Password</string>
+    <string name="field_label_repeat_password">Repeat password</string>
+
+    <!-- Screen Names -->
+    <string name="login_screen">Login</string>
+        <string name="login_screen_login">Login</string>
+        <string name="login_screen_forgot_password">Forgot Password?</string>
+        <string name="login_screen_reset_password">Reset Password</string>
+        <string name="login_screen_no_acc">No account yet?</string>
+
+
+    <string name="create_account_screen">Create Account</string>
+        <string name="create_account_screen_already_have_acc">Already have an account?</string>
+        <string name="create_account_screen_log_in">Log In</string>
+
+
+
+
 </resources>

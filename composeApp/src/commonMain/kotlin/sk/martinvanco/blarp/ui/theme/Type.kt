@@ -2,6 +2,7 @@ package sk.martinvanco.blarp.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -37,40 +38,109 @@ fun OnestFontFamily() = FontFamily(
 
 @Composable
 fun AppTypography() = Typography(
-    displayLarge = TextStyle(
+    // H1
+    headlineLarge = TextStyle(
         fontFamily = OnestFontFamily(),
-        fontSize = 40.sp,
-        fontWeight = FontWeight(700),
-        letterSpacing = (-0.03).em,
+        fontSize = 32.sp,
+        fontWeight = FontWeight.Bold,
     ),
-    displayMedium = TextStyle(
+    // H2
+    headlineMedium = TextStyle(
         fontFamily = OnestFontFamily(),
-        fontSize = 22.sp,
+        fontSize = 24.sp,
         fontWeight = FontWeight.SemiBold
     ),
-    displaySmall = TextStyle(
+    // H3
+    headlineSmall = TextStyle(
         fontFamily = OnestFontFamily(),
-        fontSize = 18.sp,
+        fontSize = 20.sp,
         fontWeight = FontWeight.SemiBold,
     ),
+    // Text LG (20sp)
+    titleLarge = TextStyle(
+        fontFamily = OnestFontFamily(),
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Normal,
+    ),
+    // Text MD (18sp)
+    titleMedium = TextStyle(
+        fontFamily = OnestFontFamily(),
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Normal,
+    ),
+    // Text Regular (16sp)
     bodyLarge = TextStyle(
         fontFamily = OnestFontFamily(),
-        fontWeight = FontWeight.Light,
         fontSize = 16.sp,
+        fontWeight = FontWeight.Normal,
     ),
+    // Text Small (14sp)
     bodyMedium = TextStyle(
         fontFamily = OnestFontFamily(),
-        fontWeight = FontWeight.Light,
-        fontSize = 14.sp
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Normal,
     ),
-    labelLarge = TextStyle(
-        fontFamily = OnestFontFamily(),
-        fontWeight = FontWeight.Bold,
-        fontSize = 16.sp
-    ),
+    // Text Tiny (12sp)
     bodySmall = TextStyle(
         fontFamily = OnestFontFamily(),
+        fontSize = 12.sp,
         fontWeight = FontWeight.Normal,
-        fontSize = 12.sp
+    ),
+    // Label variants
+    labelLarge = TextStyle(
+        fontFamily = OnestFontFamily(),
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium,
+    ),
+    labelMedium = TextStyle(
+        fontFamily = OnestFontFamily(),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+    ),
+    labelSmall = TextStyle(
+        fontFamily = OnestFontFamily(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
     ),
 )
+
+// Custom typography extension properties with semantic names
+val Typography.h1: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = headlineLarge
+
+val Typography.h2: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = headlineMedium
+
+val Typography.h3: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = headlineSmall
+
+val Typography.textLg: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = titleLarge
+
+val Typography.textMd: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = titleMedium
+
+val Typography.textRegular: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = bodyLarge
+
+val Typography.textSmall: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = bodyMedium
+
+val Typography.textTiny: TextStyle
+    @Composable
+    @ReadOnlyComposable
+    get() = bodySmall

@@ -1,5 +1,5 @@
 package sk.martinvanco.blarp.quests.presentation
 
 data class QuestsState(
-    // TODO: Add state properties
+    val placeholder: Unit = Unit // TODO: Add state properties
 )

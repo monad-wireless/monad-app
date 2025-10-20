@@ -1,5 +1,5 @@
 package sk.martinvanco.blarp.auth.presentation.register
 
 data class RegisterState(
-    // TODO: Add state properties
+    val placeholder: Unit = Unit // TODO: Add state properties
 )

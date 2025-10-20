@@ -1,5 +1,5 @@
 package sk.martinvanco.blarp.home.presentation
 
 data class HomeState(
-    // TODO: Add state properties
+    val placeholder: Unit = Unit // TODO: Add state properties
 )

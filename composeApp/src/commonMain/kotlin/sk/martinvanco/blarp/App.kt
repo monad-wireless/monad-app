@@ -14,9 +14,9 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
 import org.koin.core.context.startKoin
 import org.koin.dsl.KoinAppDeclaration
+import sk.martinvanco.blarp.auth.presentation.splash.SplashScreen
 import sk.martinvanco.blarp.core.di.appModule
-import sk.martinvanco.blarp.home_screen.presentation.HomeScreen
-import sk.martinvanco.blarp.navigation.RootComponent
+import sk.martinvanco.blarp.core.util.Logger
 import sk.martinvanco.blarp.ui.theme.AppTheme
 
 fun initKoin(appDeclaration: KoinAppDeclaration = {}) {
@@ -27,13 +27,14 @@ fun initKoin(appDeclaration: KoinAppDeclaration = {}) {
 }
 
 @Composable
-fun App(root: RootComponent) {
-    // Initialize Koin once
+fun App() {
+    // Initialize Logger and Koin once
     remember {
         try {
+            Logger.init()
             initKoin()
         } catch (e: Exception) {
-            // Koin already initialized
+            // Already initialized
         }
     }
 
@@ -42,7 +43,7 @@ fun App(root: RootComponent) {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            Navigator(HomeScreen()) { navigator ->
+            Navigator(SplashScreen()) { navigator ->
                 SlideTransition(navigator)
             }
         }
