@@ -42,7 +42,6 @@ class SplashScreen : Screen {
     override fun Content() {
         val screenModel = koinScreenModel<SplashScreenModel>()
         val state by screenModel.state.collectAsState()
-        val navigator = LocalNavigator.currentOrThrow
 
         // Logo fade in animation
         val logoAlpha = remember { Animatable(0f) }
@@ -54,20 +53,8 @@ class SplashScreen : Screen {
                 animationSpec = tween(durationMillis = 800)
             )
 
-            // Simulate loading/authentication check
+            // Start authentication check - navigation handled in ScreenModel
             screenModel.checkAuthStatus()
-        }
-
-        // Navigate when auth check is complete
-        LaunchedEffect(state.isAuthChecked) {
-            if (state.isAuthChecked) {
-                delay(500) // Small delay for UX
-                if (state.isAuthenticated) {
-                    navigator.replace(HomeScreen())
-                } else {
-                    navigator.replace(LoginScreen())
-                }
-            }
         }
 
         Box(

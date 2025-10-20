@@ -34,9 +34,10 @@ import monad.composeapp.generated.resources.login_screen_no_acc
 import monad.composeapp.generated.resources.monad_logo_dark
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import org.jetbrains.compose.ui.tooling.preview.Preview
 import sk.martinvanco.monad.core.presentation.components.button_primary.ButtonPrimary
 import sk.martinvanco.monad.core.presentation.components.filled_input.FilledInput
 import sk.martinvanco.monad.core.util.dismissKeyboardOnTap
@@ -90,14 +91,14 @@ class LoginScreen : Screen {
                         imeAction = ImeAction.Done
                     ),
                     keyboardActions = KeyboardActions(
-                        onDone = { screenModel.onEvent(LoginEvent.OnLoginButtonClick) }
+                        onDone = { screenModel.onEvent(LoginEvent.LoginButtonClick) }
                     )
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 TextButton(
-                    onClick = { screenModel.onEvent(LoginEvent.OnForgotPasswordClick) },
+                    onClick = { screenModel.onEvent(LoginEvent.ForgotPasswordClick) },
                     modifier = Modifier.align(Alignment.End)
                 ) {
                     Text(
@@ -110,14 +111,14 @@ class LoginScreen : Screen {
 
                 ButtonPrimary(
                     text = stringResource(Res.string.login_screen_login),
-                    onClick = { screenModel.onEvent(LoginEvent.OnLoginButtonClick) },
+                    onClick = { screenModel.onEvent(LoginEvent.LoginButtonClick) },
                     isLoading = false
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 TextButton(
-                    onClick = { screenModel.onEvent(LoginEvent.OnCreateAccountButtonClick) }
+                    onClick = { screenModel.onEvent(LoginEvent.CreateAccountButtonClick) }
                 ) {
                     Text(text = stringResource(Res.string.login_screen_no_acc))
                 }
