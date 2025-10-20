@@ -55,6 +55,9 @@ fun FilledInput(
         keyboardActions
     }
 
+    // Use label as placeholder if no placeholder is provided
+    val finalPlaceholder = placeholder.ifEmpty { label }
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -64,11 +67,9 @@ fun FilledInput(
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
             enabled = enabled,
-            label = if (label.isNotEmpty()) {
-                { Text(text = label) }
-            } else null,
-            placeholder = if (placeholder.isNotEmpty()) {
-                { Text(text = placeholder) }
+            label = null, // Remove animated label
+            placeholder = if (finalPlaceholder.isNotEmpty()) {
+                { Text(text = finalPlaceholder) }
             } else null,
             singleLine = singleLine,
             isError = isError,
@@ -88,9 +89,8 @@ fun FilledInput(
                 disabledBorderColor = Color.Transparent,
                 errorBorderColor = MaterialTheme.colorScheme.error,
                 cursorColor = MaterialTheme.colorScheme.secondary,
-                focusedLabelColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
-                errorLabelColor = MaterialTheme.colorScheme.error,
+                focusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             ),
             textStyle = MaterialTheme.typography.bodyLarge,
         )

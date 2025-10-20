@@ -19,7 +19,7 @@ class SplashScreenModel(
 
             // TODO: Replace with actual authentication check
             // For now, we'll assume user is not authenticated
-            val isAuthenticated = false // Change to true if user has valid token/session
+            val isAuthenticated = true // Change to true if user has valid token/session
 
             mutableState.value = state.value.copy(
                 isAuthChecked = true,
