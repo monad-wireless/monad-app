@@ -8,7 +8,7 @@
     <string name="nav_back">Back</string>
 
     <!-- Common -->
-    <string name="loading">Loading...</string>
+    <string name="loading">Loadi ng...</string>
     <string name="error">Error</string>
     <string name="retry">Retry</string>
     <string name="empty_state">No items found</string>

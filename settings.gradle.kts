@@ -1,4 +1,4 @@
-rootProject.name = "blarp-app"
+rootProject.name = "Monad"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

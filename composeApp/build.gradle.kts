@@ -71,11 +71,11 @@ kotlin {
 }
 
 android {
-    namespace = "sk.martinvanco.blarp"
+    namespace = "sk.martinvanco.monad"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "sk.martinvanco.blarp"
+        applicationId = "sk.martinvanco.monad"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -104,7 +104,7 @@ dependencies {
 sqldelight {
     databases {
         create("Database") {
-            packageName.set("sk.martinvanco.blarp")
+            packageName.set("sk.martinvanco.monad")
         }
     }
 }

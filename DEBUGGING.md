@@ -5,7 +5,7 @@
 ### Using the Logger Utility (Recommended)
 
 ```kotlin
-import sk.martinvanco.blarp.core.util.Logger
+import sk.martinvanco.monad.core.util.Logger
 
 class LoginScreenModel : StateScreenModel<LoginState>(LoginState()) {
 
@@ -63,7 +63,7 @@ println("Debug: Login clicked")
 
 In Android Studio:
 - Click **Logcat** tab at bottom
-- Filter by package: `sk.martinvanco.blarp`
+- Filter by package: `sk.martinvanco.monad`
 - Or filter by tag: `LoginScreen`, `Auth`, etc.
 
 #### 2. Set Breakpoints

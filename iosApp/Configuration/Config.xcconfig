@@ -1,4 +1,4 @@
 TEAM_ID=
-BUNDLE_ID=sk.martinvanco.blarp
-APP_NAME=Blarp
+BUNDLE_ID=sk.martinvanco.monad
+APP_NAME=Monad
 OTHER_LDFLAGS = $(inherited) -lsqlite3
