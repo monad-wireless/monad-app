@@ -6,7 +6,6 @@ import sk.martinvanco.monad.auth.presentation.register.RegisterScreenModel
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
-import sk.martinvanco.monad.detail_screen.presentation.DetailScreenModel
 import sk.martinvanco.monad.home.presentation.HomeScreenModel
 import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
 import sk.martinvanco.monad.news.presentation.NewsScreenModel

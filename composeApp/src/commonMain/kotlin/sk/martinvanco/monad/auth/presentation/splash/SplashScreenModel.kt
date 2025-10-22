@@ -6,7 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
-import sk.martinvanco.monad.home.presentation.HomeScreen
+import sk.martinvanco.monad.main.presentation.MainContainerScreen
 
 class SplashScreenModel(
     private val navigationManager: NavigationManager
@@ -29,7 +29,7 @@ class SplashScreenModel(
             // Navigate based on authentication status
             delay(500) // Small delay for UX
             if (isAuthenticated) {
-                navigationManager.replace(HomeScreen())
+                navigationManager.replace(MainContainerScreen())
             } else {
                 navigationManager.replace(LoginScreen())
             }

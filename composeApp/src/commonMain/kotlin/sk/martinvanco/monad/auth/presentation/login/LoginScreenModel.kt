@@ -23,8 +23,8 @@ class LoginScreenModel(
             LoginEvent.LoginButtonClick -> {
                 Logger.i("Login button clicked", tag = "LoginScreen")
                 // TODO: Implement login logic
-                // Example: After successful login, navigate to home
-                // navigationManager.replace(HomeScreen())
+                // Example: After successful login, navigate to main screen
+                // navigationManager.replace(MainContainerScreen())
             }
             is LoginEvent.OnPasswordFieldChange -> {
                 Logger.d("Password field changed (length: ${event.value.length})", tag = "LoginScreen")

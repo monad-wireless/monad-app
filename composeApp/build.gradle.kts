@@ -55,6 +55,7 @@ kotlin {
             implementation(libs.voyager.screenmodel)
             implementation(libs.voyager.koin)
             implementation(libs.voyager.transitions)
+            implementation(libs.voyager.tab.navigator)
 
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
