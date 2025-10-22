@@ -4,7 +4,8 @@ import org.koin.dsl.module
 import sk.martinvanco.monad.auth.presentation.login.LoginScreenModel
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreenModel
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
-import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
+import sk.martinvanco.monad.ble.data.BleScannerImpl
+import sk.martinvanco.monad.ble.domain.BleScanner
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.home.presentation.HomeScreenModel
@@ -18,14 +19,14 @@ val appModule = module {
     // Navigation
     single<NavigationManager> { NavigationManagerImpl() }
 
-    // Services
-    single { WifiConnectionService() }
+    // BLE
+    single<BleScanner> { BleScannerImpl() }
 
     // New screen models
     factory { SplashScreenModel(get()) }
     factory { LoginScreenModel(get()) }
     factory { RegisterScreenModel(get()) }
-    factory { HomeScreenModel() }
+    factory { HomeScreenModel(get()) }
     factory { QuestsScreenModel() }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }

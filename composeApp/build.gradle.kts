@@ -28,6 +28,11 @@ kotlin {
         }
     }
 
+    // Enable experimental UUID API
+    sourceSets.all {
+        languageSettings.optIn("kotlin.uuid.ExperimentalUuidApi")
+    }
+
     sourceSets {
         androidMain.dependencies {
             implementation(libs.androidx.compose.ui.tooling.preview)
@@ -69,19 +74,19 @@ kotlin {
             implementation(libs.koin.compose.viewmodel)
             implementation(libs.sqldelight.runtime)
             implementation(libs.napier)
-            implementation(libs.kmm.wifi.connect)
+            implementation(libs.kable.core)
         }
     }
 }
 
 android {
     namespace = "sk.martinvanco.monad"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "sk.martinvanco.monad"
-        minSdk = 29
-        targetSdk = 35
+        minSdk = 24
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
