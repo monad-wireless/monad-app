@@ -16,6 +16,8 @@ navigationCompose = "2.9.0-beta03"
 lifecycleCompose = "2.9.1"
 sqldelight = "2.0.2"
 voyager = "1.1.0-beta03"
+kmmWifiConnect = "1.2.0"
+androidxStartup = "1.1.1"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
@@ -45,6 +47,9 @@ voyager-screenmodel = { module = "cafe.adriel.voyager:voyager-screenmodel", vers
 voyager-koin = { module = "cafe.adriel.voyager:voyager-koin", version.ref = "voyager" }
 voyager-transitions = { module = "cafe.adriel.voyager:voyager-transitions", version.ref = "voyager" }
 voyager-tab-navigator = { module = "cafe.adriel.voyager:voyager-tab-navigator", version.ref = "voyager" }
+kmm-wifi-connect = { module = "net.mattiascibien:kmm-wifi-connect", version.ref = "kmmWifiConnect" }
+kmm-wifi-connect-android = { module = "net.mattiascibien:kmm-wifi-connect-android", version.ref = "kmmWifiConnect" }
+androidx-startup-runtime = { module = "androidx.startup:startup-runtime", version.ref = "androidxStartup" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

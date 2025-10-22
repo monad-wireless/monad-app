@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +25,7 @@ import sk.martinvanco.monad.home.domain.model.QuestCardDt
 import sk.martinvanco.monad.quests.presentation.QuestDetailScreen
 import sk.martinvanco.monad.ui.theme.h1
 import sk.martinvanco.monad.ui.theme.h3
+import sk.martinvanco.monad.wifi_test.presentation.WifiTestScreen
 
 class HomeScreen : Screen {
     // Sample quest data
@@ -127,6 +130,15 @@ class HomeScreen : Screen {
                 .padding(16.dp, 16.dp, 16.dp, 0.dp)
         ) {
             Text("Home Screen", style = MaterialTheme.typography.h1)
+            Spacer(Modifier.height(24.dp))
+
+            // WiFi Test Button
+            Button(
+                onClick = { navigator.parent?.push(WifiTestScreen()) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("WiFi Connection Test")
+            }
             Spacer(Modifier.height(24.dp))
 
             Text("Available Quests", style = MaterialTheme.typography.h3)

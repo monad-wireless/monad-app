@@ -34,6 +34,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.sqldelight.android.driver)
+            implementation(libs.kmm.wifi.connect.android)
+            implementation(libs.androidx.startup.runtime)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -67,6 +69,7 @@ kotlin {
             implementation(libs.koin.compose.viewmodel)
             implementation(libs.sqldelight.runtime)
             implementation(libs.napier)
+            implementation(libs.kmm.wifi.connect)
         }
     }
 }
@@ -77,7 +80,7 @@ android {
 
     defaultConfig {
         applicationId = "sk.martinvanco.monad"
-        minSdk = 24
+        minSdk = 29
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
