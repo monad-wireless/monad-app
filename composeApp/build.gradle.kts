@@ -75,6 +75,7 @@ kotlin {
             implementation(libs.sqldelight.runtime)
             implementation(libs.napier)
             implementation(libs.kable.core)
+            implementation(libs.qrkit.compose)
         }
     }
 }

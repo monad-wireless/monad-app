@@ -22,6 +22,8 @@ sealed class TabScreen(
     val icon: DrawableResource,
 ) : Tab {
 
+    override val key: String get() = label
+
     data object HomeTab : TabScreen(
         label = "Home",
         icon = Res.drawable.menu_home,

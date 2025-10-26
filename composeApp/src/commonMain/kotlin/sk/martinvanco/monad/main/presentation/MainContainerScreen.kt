@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -48,7 +49,7 @@ class MainContainerScreen : Screen {
     override fun Content() {
         TabNavigator(TabScreen.HomeTab) { tabNavigator ->
             val pagerState = rememberPagerState(
-                initialPage = TabScreen.tabs.indexOf(tabNavigator.current),
+                initialPage = TabScreen.tabs.indexOf(tabNavigator.current).coerceAtLeast(0),
                 pageCount = { TabScreen.tabs.size }
             )
             val coroutineScope = rememberCoroutineScope()
@@ -56,7 +57,13 @@ class MainContainerScreen : Screen {
             // Sync pager state with tab navigator
             LaunchedEffect(pagerState) {
                 snapshotFlow { pagerState.currentPage }.collect { page ->
-                    val newTab = TabScreen.tabs[page]
+                    val newTab = when (page) {
+                        0 -> TabScreen.HomeTab
+                        1 -> TabScreen.QuestsTab
+                        2 -> TabScreen.NewsTab
+                        3 -> TabScreen.NotificationsTab
+                        else -> TabScreen.HomeTab
+                    }
                     if (tabNavigator.current != newTab) {
                         tabNavigator.current = newTab
                     }
@@ -75,18 +82,46 @@ class MainContainerScreen : Screen {
                                 .padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            TabScreen.tabs.forEachIndexed { index, tab ->
-                                TabNavigationItem(
-                                    tab = tab,
-                                    selected = tabNavigator.current.key == tab.key,
-                                    onClick = {
-                                        tabNavigator.current = tab
-                                        coroutineScope.launch {
-                                            pagerState.animateScrollToPage(index)
-                                        }
+                            TabNavigationItem(
+                                tab = TabScreen.HomeTab,
+                                selected = tabNavigator.current == TabScreen.HomeTab,
+                                onClick = {
+                                    tabNavigator.current = TabScreen.HomeTab
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(0)
                                     }
-                                )
-                            }
+                                }
+                            )
+                            TabNavigationItem(
+                                tab = TabScreen.QuestsTab,
+                                selected = tabNavigator.current == TabScreen.QuestsTab,
+                                onClick = {
+                                    tabNavigator.current = TabScreen.QuestsTab
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(1)
+                                    }
+                                }
+                            )
+                            TabNavigationItem(
+                                tab = TabScreen.NewsTab,
+                                selected = tabNavigator.current == TabScreen.NewsTab,
+                                onClick = {
+                                    tabNavigator.current = TabScreen.NewsTab
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(2)
+                                    }
+                                }
+                            )
+                            TabNavigationItem(
+                                tab = TabScreen.NotificationsTab,
+                                selected = tabNavigator.current == TabScreen.NotificationsTab,
+                                onClick = {
+                                    tabNavigator.current = TabScreen.NotificationsTab
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(3)
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -98,7 +133,12 @@ class MainContainerScreen : Screen {
                         .padding(paddingValues)
                 ) { page ->
                     Box(modifier = Modifier.fillMaxSize()) {
-                        TabScreen.tabs[page].Content()
+                        when (page) {
+                            0 -> TabScreen.HomeTab.Content()
+                            1 -> TabScreen.QuestsTab.Content()
+                            2 -> TabScreen.NewsTab.Content()
+                            3 -> TabScreen.NotificationsTab.Content()
+                        }
                     }
                 }
             }
@@ -108,10 +148,13 @@ class MainContainerScreen : Screen {
 
 @Composable
 private fun RowScope.TabNavigationItem(
-    tab: TabScreen,
+    tab: TabScreen?,
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    // Safety check - tab should never be null, but let's be defensive
+    if (tab == null) return
+
     val inactiveColor = Color(0xFF888888)
     val primaryColor = MaterialTheme.colorScheme.primary
     val interactionSource = remember { MutableInteractionSource() }
