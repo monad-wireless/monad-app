@@ -14,13 +14,19 @@ import sk.martinvanco.monad.news.presentation.NewsScreenModel
 import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
 import sk.martinvanco.monad.quests.presentation.QuestsScreenModel
 import sk.martinvanco.monad.wifi_test.presentation.WifiTestScreenModel
+import sk.martinvanco.monad.wifi_test_v2.presentation.WifiTestV2ScreenModel
+import sk.martinvanco.monad.core.domain.wifi_v2.WifiConnectionServiceV2
 
 val appModule = module {
     // Navigation
     single<NavigationManager> { NavigationManagerImpl() }
 
-    // BLE
-    single<BleScanner> { BleScannerImpl() }
+    // Services
+    single { WifiConnectionService() }
+    single { WifiConnectionServiceV2() }
+
+    // BLE - now with dependencies
+    single<BleScanner> { BleScannerImpl(get(), get()) }
 
     // New screen models
     factory { SplashScreenModel(get()) }
@@ -32,4 +38,5 @@ val appModule = module {
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel() }
     factory { WifiTestScreenModel(get()) }
+    factory { WifiTestV2ScreenModel(get()) }
 }

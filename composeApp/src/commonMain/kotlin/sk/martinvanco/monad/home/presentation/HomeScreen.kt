@@ -2,6 +2,7 @@ package sk.martinvanco.monad.home.presentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -152,6 +153,26 @@ class HomeScreen : Screen {
                 .padding(16.dp, 16.dp, 16.dp, 0.dp)
         ) {
             Text("Home Screen", style = MaterialTheme.typography.h1)
+            Spacer(Modifier.height(24.dp))
+
+            // WiFi Test Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { navigator.parent?.push(WifiTestScreen()) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("WiFi Test (Old)")
+                }
+                Button(
+                    onClick = { navigator.parent?.push(sk.martinvanco.monad.wifi_test_v2.presentation.WifiTestV2Screen()) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("WiFi Test (V2)")
+                }
+            }
             Spacer(Modifier.height(24.dp))
 
             // BLE Scanner Section
