@@ -17,17 +17,18 @@ import sk.martinvanco.monad.quests.presentation.QuestsScreen
 /**
  * Sealed class representing bottom navigation tabs
  */
-sealed class TabScreen(
-    val label: String,
-    val icon: DrawableResource,
-) : Tab {
+sealed class TabScreen : Tab, java.io.Serializable {
+
+    abstract val label: String
+    abstract val icon: DrawableResource
 
     override val key: String get() = label
 
-    data object HomeTab : TabScreen(
-        label = "Home",
-        icon = Res.drawable.menu_home,
-    ) {
+    data object HomeTab : TabScreen() {
+        override val label: String = "Home"
+        @Transient
+        override val icon: DrawableResource = Res.drawable.menu_home
+
         override val options: TabOptions
             @Composable
             get() = TabOptions(
@@ -41,10 +42,11 @@ sealed class TabScreen(
         }
     }
 
-    data object QuestsTab : TabScreen(
-        label = "Quests",
-        icon = Res.drawable.menu_quests,
-    ) {
+    data object QuestsTab : TabScreen() {
+        override val label: String = "Quests"
+        @Transient
+        override val icon: DrawableResource = Res.drawable.menu_quests
+
         override val options: TabOptions
             @Composable
             get() = TabOptions(
@@ -58,10 +60,11 @@ sealed class TabScreen(
         }
     }
 
-    data object NewsTab : TabScreen(
-        label = "News",
-        icon = Res.drawable.menu_news,
-    ) {
+    data object NewsTab : TabScreen() {
+        override val label: String = "News"
+        @Transient
+        override val icon: DrawableResource = Res.drawable.menu_news
+
         override val options: TabOptions
             @Composable
             get() = TabOptions(
@@ -75,10 +78,11 @@ sealed class TabScreen(
         }
     }
 
-    data object NotificationsTab : TabScreen(
-        label = "Notifications",
-        icon = Res.drawable.menu_notifications,
-    ) {
+    data object NotificationsTab : TabScreen() {
+        override val label: String = "Notifications"
+        @Transient
+        override val icon: DrawableResource = Res.drawable.menu_notifications
+
         override val options: TabOptions
             @Composable
             get() = TabOptions(

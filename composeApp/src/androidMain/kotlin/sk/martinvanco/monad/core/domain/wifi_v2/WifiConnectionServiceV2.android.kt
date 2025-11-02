@@ -9,6 +9,7 @@ import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import androidx.annotation.RequiresApi
+import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -37,6 +38,7 @@ actual class WifiConnectionServiceV2 {
         password: String?,
         securityType: WifiSecurityType
     ): Result<Unit> {
+        var networkCallback: ConnectivityManager.NetworkCallback? = null
         return try {
             // Check if WiFi is enabled
             if (!wifiManager.isWifiEnabled) {
@@ -83,35 +85,62 @@ actual class WifiConnectionServiceV2 {
             // Connect with timeout
             val connected = withTimeout(30000) { // 30 second timeout
                 suspendCoroutine { continuation ->
+                    var resumed = false
                     val callback = object : ConnectivityManager.NetworkCallback() {
                         override fun onAvailable(network: Network) {
                             super.onAvailable(network)
-                            currentNetworkCallback = this
-                            continuation.resume(true)
+                            Napier.i("🟢 [WiFiV2-Android] onAvailable - Network connected!")
+                            if (!resumed) {
+                                resumed = true
+                                currentNetworkCallback = this
+                                continuation.resume(true)
+                            }
                         }
 
                         override fun onUnavailable() {
                             super.onUnavailable()
-                            continuation.resume(false)
+                            Napier.e("🔴 [WiFiV2-Android] onUnavailable - Connection failed (wrong password or network unavailable)")
+                            if (!resumed) {
+                                resumed = true
+                                // Unregister immediately on failure
+                                try {
+                                    Napier.d("🔵 [WiFiV2-Android] Unregistering network callback after failure")
+                                    connectivityManager.unregisterNetworkCallback(this)
+                                } catch (e: Exception) {
+                                    Napier.w("⚠️ [WiFiV2-Android] Callback already unregistered: ${e.message}")
+                                }
+                                continuation.resume(false)
+                            }
                         }
 
                         override fun onLost(network: Network) {
                             super.onLost(network)
+                            Napier.w("⚠️ [WiFiV2-Android] onLost - Network connection lost")
                             if (currentNetworkCallback == this) {
                                 currentNetworkCallback = null
                             }
                         }
                     }
 
+                    networkCallback = callback
+                    Napier.d("🔵 [WiFiV2-Android] Requesting network connection to: $ssid")
                     connectivityManager.requestNetwork(request, callback)
 
                     // Set a backup timeout
                     CoroutineScope(Dispatchers.Main).launch {
                         delay(29000)
-                        try {
-                            continuation.resume(false)
-                        } catch (e: Exception) {
-                            // Already resumed
+                        if (!resumed) {
+                            resumed = true
+                            try {
+                                connectivityManager.unregisterNetworkCallback(callback)
+                            } catch (e: Exception) {
+                                // Already unregistered
+                            }
+                            try {
+                                continuation.resume(false)
+                            } catch (e: Exception) {
+                                // Already resumed
+                            }
                         }
                     }
                 }
@@ -124,10 +153,26 @@ actual class WifiConnectionServiceV2 {
             }
 
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            // Cleanup on timeout
+            networkCallback?.let { callback ->
+                try {
+                    connectivityManager.unregisterNetworkCallback(callback)
+                } catch (ex: Exception) {
+                    // Already unregistered
+                }
+            }
             Result.failure(Exception("Connection timed out"))
         } catch (e: SecurityException) {
             Result.failure(Exception("Permission denied. Please grant WiFi permissions."))
         } catch (e: Exception) {
+            // Cleanup on any other exception
+            networkCallback?.let { callback ->
+                try {
+                    connectivityManager.unregisterNetworkCallback(callback)
+                } catch (ex: Exception) {
+                    // Already unregistered
+                }
+            }
             Result.failure(Exception(e.message ?: "Unknown error"))
         }
     }

@@ -176,9 +176,11 @@ Use the WiFi Test V2 screen to test:
 - **Wrong Password Detection**: If SSID doesn't match after 2 seconds, connection failed (wrong password or network out of range)
 
 #### Android:
-- Connection is app-scoped (shows "Accessible via Monad")
-- Requires Android 10+ (API 29+)
-- WEP not supported (deprecated by Android)
+- **Connection is app-scoped** (shows "Accessible via Monad" in WiFi settings)
+- **Requires Android 10+** (API 29+)
+- **WEP not supported** (deprecated by Android)
+- **Network Callback Cleanup**: Fixed issue where NetworkCallback wasn't unregistered on failure, causing Android to show indefinite connection spinner even after error was returned
+- **Solution Implemented**: NetworkCallback is now properly unregistered in `onUnavailable()`, timeout, and exception handlers
 
 ### Improvements Over Original
 
