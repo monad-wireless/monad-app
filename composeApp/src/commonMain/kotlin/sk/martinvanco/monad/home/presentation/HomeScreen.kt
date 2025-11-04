@@ -48,7 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
-import sk.martinvanco.monad.main.presentation.LocalOverlayNavigator
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import qrscanner.CameraLens
 import qrscanner.QrScanner
 import sk.martinvanco.monad.ble.domain.BleAdvertisement
@@ -106,36 +107,33 @@ class HomeScreen : Screen {
 
     @Composable
     override fun Content() {
-        val overlayNavigator = LocalOverlayNavigator.current
+        val navigator = LocalNavigator.currentOrThrow
         val screenModel = koinScreenModel<HomeScreenModel>()
         val state by screenModel.state.collectAsState()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp, 16.dp, 24.dp, 0.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
-
         ) {
             GreetingsMessage("Martin")
 
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(0.dp, 12.dp),
+                    .padding(top = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text("Upcomig Quests", fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = -1.sp, color = Color(0xFF000000))
 
                 Column (
-                    Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(top = 20.dp),
+                    Modifier.padding(top = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
                     questsSample.forEach { quest ->
                         QuestCard(quest = quest, onClick = {
-                            overlayNavigator?.show(QuestDetailScreen(quest.id))
+                            navigator.parent?.push(QuestDetailScreen(quest.id))
                         })
                     }
                 }

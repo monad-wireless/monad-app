@@ -8,17 +8,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import sk.martinvanco.monad.core.components.ScreenWithBackNavigation
-import sk.martinvanco.monad.main.presentation.LocalOverlayNavigator
 
 data class QuestDetailScreen(val questId: String) : Screen {
     @Composable
     override fun Content() {
-        val overlayNavigator = LocalOverlayNavigator.current
+        val navigator = LocalNavigator.currentOrThrow
 
         ScreenWithBackNavigation(
             title = "Quest Detail",
-            onBackClick = { overlayNavigator?.dismiss() }
+            onBackClick = { navigator.pop() }
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
