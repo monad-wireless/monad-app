@@ -30,7 +30,9 @@
     <string name="create_account_screen_already_have_acc">Already have an account?</string>
     <string name="create_account_screen_log_in">Log In</string>
 
-
+    <!-- Top Bar -->
+    <string name="logo">Logo</string>
+    <string name="profile">Profil</string>
 
 
 </resources>

@@ -38,6 +38,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.tab.TabNavigator
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
+import sk.martinvanco.monad.core.navigation.CustomTopBar
 import sk.martinvanco.monad.core.navigation.TabScreen
 
 /**
@@ -124,6 +125,13 @@ class MainContainerScreen : Screen {
                             )
                         }
                     }
+                },
+                topBar = {
+                    CustomTopBar(
+                        onProfileIconClick = {
+                            // TODO: Navigate to profile screen
+                        }
+                    )
                 }
             ) { paddingValues ->
                 HorizontalPager(
@@ -152,7 +160,6 @@ private fun RowScope.TabNavigationItem(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    // Safety check - tab should never be null, but let's be defensive
     if (tab == null) return
 
     val inactiveColor = Color(0xFF888888)

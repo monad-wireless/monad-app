@@ -5,21 +5,31 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.Timelapse
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -32,7 +42,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -42,16 +55,17 @@ import qrscanner.QrScanner
 import sk.martinvanco.monad.ble.domain.BleAdvertisement
 import sk.martinvanco.monad.home.domain.model.QuestCardDt
 import sk.martinvanco.monad.quests.presentation.QuestDetailScreen
+import sk.martinvanco.monad.ui.theme.Primary50
 import sk.martinvanco.monad.ui.theme.h1
+import sk.martinvanco.monad.ui.theme.h2
 import sk.martinvanco.monad.ui.theme.h3
 import sk.martinvanco.monad.wifi_test.presentation.WifiTestScreen
 
 class HomeScreen : Screen {
-    // Sample quest data
     private val questsSample = listOf(
         QuestCardDt(
             id = "1",
-            name = "Morning Meditation",
+            name = "Morning Meditation to scan XY and more",
             numTasks = 3,
             timeEstimateMin = 15,
             points = 50f,
@@ -67,75 +81,27 @@ class HomeScreen : Screen {
         ),
         QuestCardDt(
             id = "3",
-            name = "Daily Learning Path",
-            numTasks = 4,
-            timeEstimateMin = 30,
-            points = 100f,
-            questType = "Education"
+            name = "Code Review Challenge",
+            numTasks = 5,
+            timeEstimateMin = 45,
+            points = 150f,
+            questType = "Development"
         ),
         QuestCardDt(
             id = "4",
-            name = "Fitness Sprint",
-            numTasks = 6,
-            timeEstimateMin = 25,
-            points = 75f,
-            questType = "Health"
+            name = "Code Review Challenge",
+            numTasks = 5,
+            timeEstimateMin = 45,
+            points = 150f,
+            questType = "Development"
         ),
         QuestCardDt(
             id = "5",
-            name = "Creative Writing",
-            numTasks = 2,
-            timeEstimateMin = 20,
-            points = 60f,
-            questType = "Creativity"
-        ),
-        QuestCardDt(
-            id = "5",
-            name = "Creative Writing",
-            numTasks = 2,
-            timeEstimateMin = 20,
-            points = 60f,
-            questType = "Creativity"
-        ),
-        QuestCardDt(
-            id = "5",
-            name = "Creative Writing",
-            numTasks = 2,
-            timeEstimateMin = 20,
-            points = 60f,
-            questType = "Creativity"
-        ),
-        QuestCardDt(
-            id = "5",
-            name = "Creative Writing",
-            numTasks = 2,
-            timeEstimateMin = 20,
-            points = 60f,
-            questType = "Creativity"
-        ),
-        QuestCardDt(
-            id = "5",
-            name = "Creative Writing",
-            numTasks = 2,
-            timeEstimateMin = 20,
-            points = 60f,
-            questType = "Creativity"
-        ),
-        QuestCardDt(
-            id = "5",
-            name = "Creative Writing",
-            numTasks = 2,
-            timeEstimateMin = 20,
-            points = 60f,
-            questType = "Creativity"
-        ),
-        QuestCardDt(
-            id = "5",
-            name = "Creative Writing",
-            numTasks = 2,
-            timeEstimateMin = 20,
-            points = 60f,
-            questType = "Creativity"
+            name = "Code Review Challenge",
+            numTasks = 5,
+            timeEstimateMin = 45,
+            points = 150f,
+            questType = "Development"
         )
     )
 
@@ -144,298 +110,167 @@ class HomeScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = koinScreenModel<HomeScreenModel>()
         val state by screenModel.state.collectAsState()
-        var showQrScanner by remember { mutableStateOf(false) }
-        var scannedQrValue by remember { mutableStateOf<String?>(null) }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp, 16.dp, 16.dp, 0.dp)
+                .padding(24.dp, 16.dp, 24.dp, 0.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+
         ) {
-            Text("Home Screen", style = MaterialTheme.typography.h1)
-            Spacer(Modifier.height(24.dp))
+            GreetingsMessage("Martin")
 
-            // WiFi Test Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = { navigator.parent?.push(WifiTestScreen()) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("WiFi Test (Old)")
-                }
-                Button(
-                    onClick = { navigator.parent?.push(sk.martinvanco.monad.wifi_test_v2.presentation.WifiTestV2Screen()) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("WiFi Test (V2)")
-                }
-            }
-            Spacer(Modifier.height(24.dp))
+            Column(modifier = Modifier.padding(0.dp, 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Upcomig Quests", fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = -1.sp, color = Color(0xFF000000))
 
-            // BLE Scanner Section
-            Text("BLE Scanner", style = MaterialTheme.typography.h3)
-            Spacer(Modifier.height(12.dp))
-
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {
-                        if (state.isScanning) {
-                            screenModel.onEvent(HomeEvent.StopBleScan)
-                        } else {
-                            screenModel.onEvent(HomeEvent.StartBleScan)
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
+                Column (
+                    Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(top = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
-                    Text(if (state.isScanning) "Stop Scan" else "Start Scan")
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        showQrScanner = !showQrScanner
-                        if (!showQrScanner) {
-                            scannedQrValue = null
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (showQrScanner) "Close Scanner" else "Scan QR")
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // QR Scanner Box
-            if (showQrScanner && scannedQrValue == null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(400.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    QrScanner(
-                        modifier = Modifier.fillMaxSize(),
-                        flashlightOn = false,
-                        openImagePicker = false,
-                        onCompletion = { result ->
-                            scannedQrValue = result
-                            showQrScanner = false
-                        },
-                        imagePickerHandler = { },
-                        onFailure = { error ->
-                            // Handle error if needed
-                        },
-                        cameraLens = CameraLens.Back
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // Scanned QR Value Display
-            if (scannedQrValue != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            "Scanned QR Code:",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            scannedQrValue ?: "",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                    questsSample.forEach { it ->
+                        QuestCard(quest = it, onClick = {})
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // Filter input
-            OutlinedTextField(
-                value = state.filterText,
-                onValueChange = { screenModel.onEvent(HomeEvent.UpdateFilter(it)) },
-                label = { Text("Filter by name, address, or UUID") },
-                placeholder = { Text("e.g., iPhone, 1800, or device name") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            if (state.isScanning) {
-                Text(
-                    "Scanning... Found ${state.advertisements.size} devices" +
-                            if (state.filterText.isNotBlank()) " (${state.filteredAdvertisements.size} filtered)" else "",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            val displayedAdvertisements = if (state.filterText.isBlank()) {
-                state.advertisements
-            } else {
-                state.filteredAdvertisements
-            }
-
-            if (displayedAdvertisements.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "BLE Advertisements (${displayedAdvertisements.size}):",
-                    style = MaterialTheme.typography.h3
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-
-            // Display quest cards and BLE advertisements
-            Column (modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // BLE Advertisements
-                displayedAdvertisements.forEach { ad ->
-                    BleAdvertisementCard(ad)
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                if (displayedAdvertisements.isNotEmpty()) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                }
-
-                Text("Available Quests", style = MaterialTheme.typography.h3)
-                Spacer(Modifier.height(12.dp))
-
-                questsSample.forEach { quest ->
-                    QuestCard(
-                        quest = quest,
-                        onClick = { navigator.parent?.push(QuestDetailScreen(quest.id)) }
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun BleAdvertisementCard(ad: BleAdvertisement) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
-            ) {
-            // Device Name
-            Text(
-                text = ad.name ?: "Unknown Device",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(8.dp))
-
-            // Identifier/Address
-            Text(
-                text = "Identifier: ${ad.address}",
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-            )
-
-            // RSSI
-            Text(
-                text = "RSSI: ${ad.rssi} dBm",
-                style = MaterialTheme.typography.bodySmall
-            )
-
-            // Service UUIDs
-            if (!ad.serviceUuids.isNullOrEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Service UUIDs:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                ad.serviceUuids.forEach { uuid ->
-                    Text(
-                        text = "  • $uuid",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    )
-                }
-            }
-
-            // Manufacturer Data
-            if (ad.manufacturerData?.isNotEmpty() == true) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Manufacturer Data:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                ad.manufacturerData.forEach { (companyId, data) ->
-                    Text(
-                        text = "  Company ID: 0x${companyId.toString(16).uppercase().padStart(4, '0')}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    )
-                    Text(
-                        text = "  Data: ${data.joinToString(" ") { byte -> "0x${byte.toString(16).uppercase().padStart(2, '0')}" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    )
-                }
-            }
-
-            // Raw Data
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Raw Packet Data:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary
-            )
-            Text(
-                text = ad.rawData,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-            )
             }
         }
     }
 
     @Composable
     private fun QuestCard(quest: QuestCardDt, onClick: () -> Unit) {
-        Column(
+        Box(
             modifier = Modifier
-                .clickable(onClick = onClick)
-                .padding(16.dp)
+                .fillMaxWidth()
         ) {
-            Text(
-                text = quest.name,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "${quest.numTasks} tasks • ${quest.timeEstimateMin} min • ${quest.points.toInt()} pts",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = quest.questType,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 140.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(onClick = onClick)
+                    .background(Primary50)
+                    .padding(20.dp, 20.dp, 20.dp, 20.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = quest.name,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 22.sp,
+                    color = Color(0xFF000000),
+                    letterSpacing = (-0.8).sp
+                )
+                Spacer(Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AssignmentTurnedIn,
+                                contentDescription = "Tasks",
+                                tint = Color(0xFF5B6ECC),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "${quest.numTasks} tasks",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF5B6ECC)
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Timelapse,
+                                contentDescription = "Time",
+                                tint = Color(0xFF5B6ECC),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "${quest.timeEstimateMin} min",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF5B6ECC)
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Stars,
+                                contentDescription = "Points",
+                                tint = Color(0xFFE5A800),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "${quest.points.toInt()} pts",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE5A800)
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFE2E8FD))
+                            .clickable(onClick = onClick)
+                            .padding(14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Go to quest",
+                            tint = Color(0xFF5B6ECC),
+                            modifier = Modifier
+                                .size(24.dp)
+                                .rotate(45f)
+                        )
+                    }
+                }
+            }
+
+            // Tag positioned absolutely at top-right
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-24).dp, y = (-10).dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFF0F142F))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.QrCodeScanner,
+                    contentDescription = "QR Code",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = quest.questType,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.White
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun GreetingsMessage(name: String){
+        Column(Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xFFE2E8FD)).padding(18.dp, 16.dp).fillMaxWidth().height(120.dp)) {
+            Text("Hey $name!", style = MaterialTheme.typography.h2, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Ready for your next quest?", style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp)
         }
     }
 }

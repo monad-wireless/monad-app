@@ -57,6 +57,7 @@ kotlin {
             implementation(libs.navigation.compose)
             implementation(libs.lifecycle.runtime.compose)
             implementation(libs.material.icons.core)
+            implementation(libs.material.icons.extended)
 
             implementation(libs.voyager.navigator)
             implementation(libs.voyager.screenmodel)

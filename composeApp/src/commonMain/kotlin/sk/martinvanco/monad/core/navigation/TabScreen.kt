@@ -17,7 +17,7 @@ import sk.martinvanco.monad.quests.presentation.QuestsScreen
 /**
  * Sealed class representing bottom navigation tabs
  */
-sealed class TabScreen : Tab, java.io.Serializable {
+sealed class TabScreen : Tab {
 
     abstract val label: String
     abstract val icon: DrawableResource
@@ -26,7 +26,6 @@ sealed class TabScreen : Tab, java.io.Serializable {
 
     data object HomeTab : TabScreen() {
         override val label: String = "Home"
-        @Transient
         override val icon: DrawableResource = Res.drawable.menu_home
 
         override val options: TabOptions
@@ -44,7 +43,6 @@ sealed class TabScreen : Tab, java.io.Serializable {
 
     data object QuestsTab : TabScreen() {
         override val label: String = "Quests"
-        @Transient
         override val icon: DrawableResource = Res.drawable.menu_quests
 
         override val options: TabOptions
@@ -62,7 +60,6 @@ sealed class TabScreen : Tab, java.io.Serializable {
 
     data object NewsTab : TabScreen() {
         override val label: String = "News"
-        @Transient
         override val icon: DrawableResource = Res.drawable.menu_news
 
         override val options: TabOptions
@@ -80,7 +77,6 @@ sealed class TabScreen : Tab, java.io.Serializable {
 
     data object NotificationsTab : TabScreen() {
         override val label: String = "Notifications"
-        @Transient
         override val icon: DrawableResource = Res.drawable.menu_notifications
 
         override val options: TabOptions

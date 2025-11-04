@@ -1,6 +1,10 @@
 package sk.martinvanco.monad.ui.theme
 
+import androidx.compose.material3.Typography
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 
 // Light Theme Colors
 val lightPrimary = Color(0xFF5B6ECC)
@@ -26,3 +30,4 @@ val darkError = Color(0xFFFF5858)
 val MenuActive = Color(0xFF789735)
 val SecondaryText = Color(0xFF888888)
 val LightGrey = Color(0xFFF5F5F5)
+val Primary50 = Color(0xFFEFF1F8)

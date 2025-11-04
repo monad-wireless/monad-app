@@ -15,7 +15,6 @@ class SplashScreenModel(
     fun checkAuthStatus() {
         screenModelScope.launch {
             // Simulate authentication check - replace with real auth logic
-            delay(1000) // Loading simulation
 
             // TODO: Replace with actual authentication check
             // For now, we'll assume user is not authenticated
@@ -27,7 +26,6 @@ class SplashScreenModel(
             )
 
             // Navigate based on authentication status
-            delay(500) // Small delay for UX
             if (isAuthenticated) {
                 navigationManager.replace(MainContainerScreen())
             } else {
