@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
+import sk.martinvanco.monad.quests.presentation.QuestDetailScreen
 
 class SplashScreenModel(
     private val navigationManager: NavigationManager
@@ -26,11 +27,15 @@ class SplashScreenModel(
             )
 
             // Navigate based on authentication status
-            if (isAuthenticated) {
-                navigationManager.replace(MainContainerScreen())
-            } else {
-                navigationManager.replace(LoginScreen())
-            }
+            // TODO: TEMPORARY - Navigate to Quest Detail for testing
+            navigationManager.replace(QuestDetailScreen("test-quest-id-123"))
+
+            // Original navigation logic (commented for testing):
+            // if (isAuthenticated) {
+            //     navigationManager.replace(MainContainerScreen())
+            // } else {
+            //     navigationManager.replace(LoginScreen())
+            // }
         }
     }
 }
