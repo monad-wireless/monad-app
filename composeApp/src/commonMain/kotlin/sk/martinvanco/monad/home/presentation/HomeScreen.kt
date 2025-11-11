@@ -54,7 +54,7 @@ import qrscanner.CameraLens
 import qrscanner.QrScanner
 import sk.martinvanco.monad.ble.domain.BleAdvertisement
 import sk.martinvanco.monad.home.domain.model.QuestCardDt
-import sk.martinvanco.monad.quests.presentation.QuestDetailScreen
+import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 import sk.martinvanco.monad.ui.theme.Primary50
 import sk.martinvanco.monad.ui.theme.h1
 import sk.martinvanco.monad.ui.theme.h2

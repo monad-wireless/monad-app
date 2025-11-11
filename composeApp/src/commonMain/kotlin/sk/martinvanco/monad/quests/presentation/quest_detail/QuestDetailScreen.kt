@@ -1,4 +1,4 @@
-package sk.martinvanco.monad.quests.presentation
+package sk.martinvanco.monad.quests.presentation.quest_detail
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,6 +52,7 @@ import sk.martinvanco.monad.core.components.ScreenWithBackNavigation
 import sk.martinvanco.monad.quests.domain.QuestDetailDto
 import sk.martinvanco.monad.quests.domain.TaskDto
 import sk.martinvanco.monad.quests.domain.TaskType
+import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreen
 
 data class QuestDetailScreen(val questId: String) : Screen {
 
@@ -230,7 +231,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
 
                 // Start Button
                 Button(
-                    onClick = { /* TODO: Start quest */ },
+                    onClick = { navigator.push(ActiveQuestScreen(questId)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),

@@ -7,7 +7,7 @@ import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
-import sk.martinvanco.monad.quests.presentation.QuestDetailScreen
+import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 
 class SplashScreenModel(
     private val navigationManager: NavigationManager
