@@ -5,6 +5,7 @@ import sk.martinvanco.monad.auth.data.api.AuthService
 import sk.martinvanco.monad.auth.presentation.login.LoginScreenModel
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreenModel
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
+import sk.martinvanco.monad.core.data.database.DatabaseClient
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.core.domain.NetworkHandler
 import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
@@ -31,6 +32,7 @@ val appModule = module {
     single { KtorClient }
     single { NetworkHandler(get()) }
     single { AuthService(get()) }
+    single { DatabaseClient(get()) }
 
     // BLE - now with dependencies
     single<BleScanner> { BleScannerImpl(get(), get()) }

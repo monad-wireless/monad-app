@@ -7,10 +7,16 @@ import sk.martinvanco.monad.Database
 
 actual class SqlDelightDriverFactory(private val context: Context) {
     actual fun createDriver(): SqlDriver {
-        return AndroidSqliteDriver(
+        val driver = AndroidSqliteDriver(
             schema = Database.Schema,
             context = context,
-            name = "blarp.db"
+            name = "monad.db"
         )
+
+        // Ensure all tables are created
+        // This is safe to call multiple times because schema uses "CREATE TABLE IF NOT EXISTS"
+        Database.Schema.create(driver)
+
+        return driver
     }
 }

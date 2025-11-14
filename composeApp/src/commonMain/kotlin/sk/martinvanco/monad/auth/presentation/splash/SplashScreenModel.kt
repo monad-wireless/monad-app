@@ -7,7 +7,6 @@ import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
-import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 
 class SplashScreenModel(
     private val navigationManager: NavigationManager
@@ -15,11 +14,12 @@ class SplashScreenModel(
 
     fun checkAuthStatus() {
         screenModelScope.launch {
-            // Simulate authentication check - replace with real auth logic
+            // Add delay for splash screen animation
+            delay(1500)
 
             // TODO: Replace with actual authentication check
             // For now, we'll assume user is not authenticated
-            val isAuthenticated = true // Change to true if user has valid token/session
+            val isAuthenticated = false // Change to true if user has valid token/session
 
             mutableState.value = state.value.copy(
                 isAuthChecked = true,
@@ -27,15 +27,11 @@ class SplashScreenModel(
             )
 
             // Navigate based on authentication status
-            // TODO: TEMPORARY - Navigate to Quest Detail for testing
-            navigationManager.replace(QuestDetailScreen("test-quest-id-123"))
-
-            // Original navigation logic (commented for testing):
-            // if (isAuthenticated) {
-            //     navigationManager.replace(MainContainerScreen())
-            // } else {
-            //     navigationManager.replace(LoginScreen())
-            // }
+            if (isAuthenticated) {
+                navigationManager.replace(MainContainerScreen())
+            } else {
+                navigationManager.replace(LoginScreen())
+            }
         }
     }
 }

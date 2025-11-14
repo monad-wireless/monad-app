@@ -25,10 +25,6 @@ import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Timelapse
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -125,7 +121,7 @@ class HomeScreen : Screen {
                     .padding(top = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text("Upcomig Quests", fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = -1.sp, color = Color(0xFF000000))
+                Text("Upcoming Quests", fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = -1.sp, color = Color(0xFF000000))
 
                 Column (
                     Modifier.padding(top = 20.dp),
