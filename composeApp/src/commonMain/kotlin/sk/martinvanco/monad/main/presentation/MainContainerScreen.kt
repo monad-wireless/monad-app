@@ -34,11 +34,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.TabNavigator
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import sk.martinvanco.monad.core.navigation.CustomTopBar
 import sk.martinvanco.monad.core.navigation.TabScreen
+import sk.martinvanco.monad.my_account.presentation.MyAccountScreen
 
 /**
  * Main container screen that holds the bottom navigation bar
@@ -47,6 +50,8 @@ import sk.martinvanco.monad.core.navigation.TabScreen
 class MainContainerScreen : Screen {
     @Composable
     override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+
         TabNavigator(TabScreen.HomeTab) { tabNavigator ->
             val pagerState = rememberPagerState(
                 initialPage = TabScreen.tabs.indexOf(tabNavigator.current).coerceAtLeast(0),
@@ -128,7 +133,7 @@ class MainContainerScreen : Screen {
                 topBar = {
                     CustomTopBar(
                         onProfileIconClick = {
-                            // TODO: Navigate to profile screen
+                            navigator.push(MyAccountScreen())
                         }
                     )
                 }

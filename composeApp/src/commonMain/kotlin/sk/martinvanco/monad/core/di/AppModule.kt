@@ -52,7 +52,7 @@ val appModule = module {
     factory { QuestsScreenModel() }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
-    factory { MyAccountScreenModel() }
+    factory { MyAccountScreenModel(get(), get()) }
     factory { WifiTestScreenModel(get()) }
     factory { WifiTestV2ScreenModel(get()) }
 }

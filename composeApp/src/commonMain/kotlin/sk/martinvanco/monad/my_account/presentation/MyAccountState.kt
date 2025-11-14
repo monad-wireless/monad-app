@@ -1,5 +1,7 @@
 package sk.martinvanco.monad.my_account.presentation
 
 data class MyAccountState(
-    val placeholder: Unit = Unit // TODO: Add state properties
+    val userName: String? = null,
+    val userEmail: String = "",
+    val isLoading: Boolean = true
 )
