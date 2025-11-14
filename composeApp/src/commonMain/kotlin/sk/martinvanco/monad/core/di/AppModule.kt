@@ -1,9 +1,13 @@
 package sk.martinvanco.monad.core.di
 
 import org.koin.dsl.module
+import sk.martinvanco.monad.auth.data.api.AuthService
 import sk.martinvanco.monad.auth.presentation.login.LoginScreenModel
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreenModel
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
+import sk.martinvanco.monad.core.data.remote.KtorClient
+import sk.martinvanco.monad.core.domain.NetworkHandler
+import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
 import sk.martinvanco.monad.ble.data.BleScannerImpl
 import sk.martinvanco.monad.ble.domain.BleScanner
 import sk.martinvanco.monad.core.navigation.NavigationManager
@@ -24,6 +28,9 @@ val appModule = module {
     // Services
     single { WifiConnectionService() }
     single { WifiConnectionServiceV2() }
+    single { KtorClient }
+    single { NetworkHandler(get()) }
+    single { AuthService(get()) }
 
     // BLE - now with dependencies
     single<BleScanner> { BleScannerImpl(get(), get()) }
