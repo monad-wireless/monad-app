@@ -68,7 +68,18 @@ class RegisterScreen : Screen {
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                state.error?.let { error ->
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 FilledInput(
                     value = state.name,
@@ -86,6 +97,7 @@ class RegisterScreen : Screen {
                     value = state.email,
                     onValueChange = { screenModel.onEvent(RegisterEvent.OnEmailFieldChange(it)) },
                     label = stringResource(Res.string.field_label_email),
+                    errorText = state.emailError ?: "",
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next
@@ -98,6 +110,7 @@ class RegisterScreen : Screen {
                     value = state.password,
                     onValueChange = { screenModel.onEvent(RegisterEvent.OnPasswordFieldChange(it)) },
                     label = stringResource(Res.string.field_label_password),
+                    errorText = state.passwordError ?: "",
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
@@ -111,6 +124,7 @@ class RegisterScreen : Screen {
                     value = state.repeatPassword,
                     onValueChange = { screenModel.onEvent(RegisterEvent.OnRepeatPasswordFieldChange(it)) },
                     label = stringResource(Res.string.field_label_repeat_password),
+                    errorText = state.repeatPasswordError ?: "",
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,

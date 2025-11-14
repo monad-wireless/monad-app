@@ -4,32 +4,40 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import sk.martinvanco.monad.auth.domain.AuthManager
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
 
 class SplashScreenModel(
-    private val navigationManager: NavigationManager
+    private val navigationManager: NavigationManager,
+    private val authManager: AuthManager
 ) : StateScreenModel<SplashState>(SplashState()) {
 
     fun checkAuthStatus() {
         screenModelScope.launch {
-            // Add delay for splash screen animation
             delay(1500)
 
-            // TODO: Replace with actual authentication check
-            // For now, we'll assume user is not authenticated
-            val isAuthenticated = false // Change to true if user has valid token/session
+            val user = authManager.getCurrentUser()
 
-            mutableState.value = state.value.copy(
-                isAuthChecked = true,
-                isAuthenticated = isAuthenticated
-            )
+            if (user == null) {
+                navigationManager.replace(LoginScreen())
+                return@launch
+            }
 
-            // Navigate based on authentication status
-            if (isAuthenticated) {
+            val token = user.token
+            if (token == null) {
+                authManager.clearUser()
+                navigationManager.replace(LoginScreen())
+                return@launch
+            }
+
+            val isValid = authManager.validateToken(token)
+
+            if (isValid) {
                 navigationManager.replace(MainContainerScreen())
             } else {
+                authManager.clearUser()
                 navigationManager.replace(LoginScreen())
             }
         }

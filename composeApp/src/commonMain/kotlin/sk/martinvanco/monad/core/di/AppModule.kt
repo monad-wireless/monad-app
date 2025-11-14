@@ -2,10 +2,12 @@ package sk.martinvanco.monad.core.di
 
 import org.koin.dsl.module
 import sk.martinvanco.monad.auth.data.api.AuthService
+import sk.martinvanco.monad.auth.data.repository.UserRepository
+import sk.martinvanco.monad.auth.domain.AuthManager
 import sk.martinvanco.monad.auth.presentation.login.LoginScreenModel
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreenModel
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
-import sk.martinvanco.monad.core.data.database.DatabaseClient
+// import sk.martinvanco.monad.core.data.database.DatabaseClient
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.core.domain.NetworkHandler
 import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
@@ -32,16 +34,21 @@ val appModule = module {
     single { KtorClient }
     single { NetworkHandler(get()) }
     single { AuthService(get()) }
-    single { DatabaseClient(get()) }
+
+    // Repositories
+    single { UserRepository(get()) }
+
+    // Domain
+    single { AuthManager(get(), get()) }
 
     // BLE - now with dependencies
     single<BleScanner> { BleScannerImpl(get(), get()) }
 
     // New screen models
-    factory { SplashScreenModel(get()) }
-    factory { LoginScreenModel(get()) }
-    factory { RegisterScreenModel(get()) }
-    factory { HomeScreenModel(get()) }
+    factory { SplashScreenModel(get(), get()) }
+    factory { LoginScreenModel(get(), get(), get()) }
+    factory { RegisterScreenModel(get(), get(), get()) }
+    factory { HomeScreenModel(get(), get(), get()) }
     factory { QuestsScreenModel() }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }

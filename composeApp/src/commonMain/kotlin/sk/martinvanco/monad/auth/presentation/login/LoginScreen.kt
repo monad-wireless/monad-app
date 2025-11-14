@@ -67,12 +67,24 @@ class LoginScreen : Screen {
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                state.error?.let { error ->
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 FilledInput(
                     value = state.email,
                     onValueChange = { screenModel.onEvent(LoginEvent.OnEmailFieldChange(it)) },
                     label = stringResource(Res.string.field_label_email),
+                    errorText = state.emailError ?: "",
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next
@@ -85,6 +97,7 @@ class LoginScreen : Screen {
                     value = state.password,
                     onValueChange = { screenModel.onEvent(LoginEvent.OnPasswordFieldChange(it)) },
                     label = stringResource(Res.string.field_label_password),
+                    errorText = state.passwordError ?: "",
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
@@ -112,7 +125,7 @@ class LoginScreen : Screen {
                 ButtonPrimary(
                     text = stringResource(Res.string.login_screen_login),
                     onClick = { screenModel.onEvent(LoginEvent.LoginButtonClick) },
-                    isLoading = false
+                    isLoading = state.isLoading
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

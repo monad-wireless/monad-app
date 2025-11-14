@@ -1,0 +1,52 @@
+-- User table for authentication and user data
+CREATE TABLE IF NOT EXISTS User (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    backendId TEXT UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    token TEXT
+);
+
+-- Queries
+selectAll:
+SELECT * FROM User;
+
+selectById:
+SELECT * FROM User
+WHERE id = ?;
+
+selectByEmail:
+SELECT * FROM User
+WHERE email = ?;
+
+getCurrentUser:
+SELECT * FROM User
+WHERE token IS NOT NULL
+ORDER BY id DESC
+LIMIT 1;
+
+insert:
+INSERT INTO User(backendId, email, name, token)
+VALUES (?, ?, ?, ?);
+
+updateToken:
+UPDATE User
+SET token = ?
+WHERE id = ?;
+
+updateUser:
+UPDATE User
+SET backendId = ?, email = ?, name = ?
+WHERE id = ?;
+
+deleteById:
+DELETE FROM User
+WHERE id = ?;
+
+deleteAll:
+DELETE FROM User;
+
+clearToken:
+UPDATE User
+SET token = NULL
+WHERE id = ?;
