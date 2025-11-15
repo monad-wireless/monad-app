@@ -52,8 +52,6 @@ class SplashScreen : Screen {
                 targetValue = 1f,
                 animationSpec = tween(durationMillis = 800)
             )
-
-            // Start authentication check - navigation handled in ScreenModel
             screenModel.checkAuthStatus()
         }
 

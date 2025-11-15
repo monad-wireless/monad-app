@@ -16,10 +16,7 @@ class SplashScreenModel(
 
     fun checkAuthStatus() {
         screenModelScope.launch {
-            delay(1500)
-
             val user = authManager.getCurrentUser()
-
             if (user == null) {
                 navigationManager.replace(LoginScreen())
                 return@launch
@@ -33,7 +30,6 @@ class SplashScreenModel(
             }
 
             val isValid = authManager.validateToken(token)
-
             if (isValid) {
                 navigationManager.replace(MainContainerScreen())
             } else {

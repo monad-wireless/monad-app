@@ -10,7 +10,6 @@ import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
 // import sk.martinvanco.monad.core.data.database.DatabaseClient
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.core.domain.NetworkHandler
-import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
 import sk.martinvanco.monad.ble.data.BleScannerImpl
 import sk.martinvanco.monad.ble.domain.BleScanner
 import sk.martinvanco.monad.core.navigation.NavigationManager
@@ -20,7 +19,6 @@ import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
 import sk.martinvanco.monad.news.presentation.NewsScreenModel
 import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
 import sk.martinvanco.monad.quests.presentation.QuestsScreenModel
-import sk.martinvanco.monad.wifi_test.presentation.WifiTestScreenModel
 import sk.martinvanco.monad.wifi_test_v2.presentation.WifiTestV2ScreenModel
 import sk.martinvanco.monad.core.domain.wifi_v2.WifiConnectionServiceV2
 
@@ -29,7 +27,6 @@ val appModule = module {
     single<NavigationManager> { NavigationManagerImpl() }
 
     // Services
-    single { WifiConnectionService() }
     single { WifiConnectionServiceV2() }
     single { KtorClient }
     single { NetworkHandler(get()) }
@@ -53,6 +50,5 @@ val appModule = module {
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }
-    factory { WifiTestScreenModel(get()) }
     factory { WifiTestV2ScreenModel(get()) }
 }

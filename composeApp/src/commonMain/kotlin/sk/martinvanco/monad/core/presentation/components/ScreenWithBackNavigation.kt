@@ -1,4 +1,4 @@
-package sk.martinvanco.monad.core.components
+package sk.martinvanco.monad.core.presentation.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

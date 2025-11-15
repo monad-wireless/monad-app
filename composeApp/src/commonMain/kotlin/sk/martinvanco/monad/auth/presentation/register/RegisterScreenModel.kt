@@ -77,9 +77,8 @@ class RegisterScreenModel(
             try {
                 val response = authService.register(email, password, name)
                 authManager.saveUserFromRegister(
-                    backendId = response.user.id,
-                    email = response.user.email,
-                    name = response.user.name,
+                    email = response.email,
+                    name = response.name,
                     token = response.token
                 )
                 mutableState.value = state.value.copy(isLoading = false)

@@ -55,8 +55,6 @@ import sk.martinvanco.monad.ui.theme.Primary50
 import sk.martinvanco.monad.ui.theme.h1
 import sk.martinvanco.monad.ui.theme.h2
 import sk.martinvanco.monad.ui.theme.h3
-import sk.martinvanco.monad.wifi_test.presentation.WifiTestScreen
-
 class HomeScreen : Screen {
     private val questsSample = listOf(
         QuestCardDt(

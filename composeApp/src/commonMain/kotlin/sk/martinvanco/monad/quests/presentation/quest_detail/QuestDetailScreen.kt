@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import sk.martinvanco.monad.core.components.ScreenWithBackNavigation
+import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
 import sk.martinvanco.monad.quests.domain.QuestDetailDto
 import sk.martinvanco.monad.quests.domain.TaskDto
 import sk.martinvanco.monad.quests.domain.TaskType

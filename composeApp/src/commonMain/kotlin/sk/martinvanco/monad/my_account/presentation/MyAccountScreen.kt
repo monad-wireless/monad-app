@@ -36,7 +36,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import sk.martinvanco.monad.core.components.ScreenWithBackNavigation
+import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
 
 class MyAccountScreen : Screen {
     @Composable

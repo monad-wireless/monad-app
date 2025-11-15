@@ -1,4 +1,4 @@
-package sk.martinvanco.monad.auth.data.dto
+package sk.martinvanco.monad.core.data.dto
 
 import kotlinx.serialization.Serializable
 

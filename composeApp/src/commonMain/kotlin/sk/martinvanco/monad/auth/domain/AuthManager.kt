@@ -21,18 +21,18 @@ class AuthManager(
         }
     }
 
-    suspend fun saveUserFromLogin(email: String, token: String) {
+    suspend fun saveUserFromLogin(email: String, name: String, token: String) {
         userRepository.insertUser(
             backendId = null,
             email = email,
-            name = null,
+            name = name,
             token = token
         )
     }
 
-    suspend fun saveUserFromRegister(backendId: String, email: String, name: String?, token: String) {
+    suspend fun saveUserFromRegister(email: String, name: String, token: String) {
         userRepository.insertUser(
-            backendId = backendId,
+            backendId = null,
             email = email,
             name = name,
             token = token
