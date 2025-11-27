@@ -56,37 +56,59 @@ import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreen
 
 data class QuestDetailScreen(val questId: String) : Screen {
 
-    // Sample quest data
+    // Sample quest data - matches ActiveQuestScreen demo
     private val sampleQuest = QuestDetailDto(
         id = "test-quest-id-123",
-        name = "Network fingerprinting task to better track positioning",
-        description = "Initial state description, where the user will start, how should it start, make sure to have clean sight, test details, Lorem ipsum dolrem sit amet and more is here to say...",
-        duration = 15,
-        questType = "Scan & Walk",
-        points = 31f,
+        name = "Indoor Navigation Research",
+        description = "Help us improve indoor positioning by walking through designated checkpoints while we collect BLE signal data. You'll scan QR codes, find BLE beacons, and wait at specific locations.",
+        duration = 25,
+        questType = "Research",
+        points = 50f,
         tasks = listOf(
             TaskDto(
-                name = "Scan QR code XY",
-                instruction = "Do this, wait for XY, ... Make sure no one is blocking the view, ....",
-                type = TaskType.SCAN_QR
-            ),TaskDto(
-                name = "Scan QR code XY",
-                instruction = "Do this, wait for XY, ... Make sure no one is blocking the view, ....",
-                type = TaskType.SCAN_QR
-            ),TaskDto(
-                name = "Scan QR code XY",
-                instruction = "Do this, wait for XY, ... Make sure no one is blocking the view, ....",
-                type = TaskType.SCAN_QR
+                name = "Welcome to the Experiment",
+                description = "Read the quest instructions and safety guidelines before starting",
+                type = TaskType.TEXT_BOX
             ),
             TaskDto(
-                name = "Walk to QR code XY & Scan it",
-                instruction = "Do this, wait for XY, ... Make sure no one is blocking the view, ....",
-                type = TaskType.SCAN_QR
+                name = "Scan QR Code at Entrance",
+                description = "Locate and scan the QR code at the main entrance to verify your starting position",
+                type = TaskType.QR_CODE
             ),
             TaskDto(
-                name = "Walk back to QR XY",
-                instruction = "Do this, wait for XY, ... Make sure no one is blocking the view, ....",
-                type = TaskType.SCAN_QR
+                name = "Find BLE Beacon in Corridor A",
+                description = "Walk down Corridor A until your device detects the BLE beacon",
+                type = TaskType.FIND_BLE_DEVICE
+            ),
+            TaskDto(
+                name = "Wait at Checkpoint 1",
+                description = "Stand still for 30 seconds while we collect positioning data",
+                type = TaskType.WAIT
+            ),
+            TaskDto(
+                name = "Scan QR Code at Lab A",
+                description = "Navigate to Lab A and scan the QR code on the door",
+                type = TaskType.QR_CODE
+            ),
+            TaskDto(
+                name = "Find BLE Beacon in Lab A",
+                description = "Enter Lab A and locate the BLE beacon inside",
+                type = TaskType.FIND_BLE_DEVICE
+            ),
+            TaskDto(
+                name = "Wait at Checkpoint 2",
+                description = "Remain stationary for 45 seconds for detailed signal measurements",
+                type = TaskType.WAIT
+            ),
+            TaskDto(
+                name = "Scan Return Checkpoint QR",
+                description = "Walk back to the main corridor and scan the return checkpoint QR code",
+                type = TaskType.QR_CODE
+            ),
+            TaskDto(
+                name = "Quest Complete!",
+                description = "Review your completion summary and submit results",
+                type = TaskType.TEXT_BOX
             )
         )
     )
@@ -288,7 +310,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
                     color = Color(0xFF0F142F)
                 )
                 Text(
-                    text = task.instruction,
+                    text = task.description,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Normal,
                     color = Color.Black,

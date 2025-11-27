@@ -10,10 +10,13 @@ import sk.martinvanco.monad.ble.domain.BleAdvertisement
 import sk.martinvanco.monad.ble.domain.BleScanner
 import kotlin.uuid.ExperimentalUuidApi
 
+// Platform-specific scanner creation (configured for LOW_LATENCY on Android)
+internal expect fun createPlatformScanner(): Scanner<Advertisement>
+
 @OptIn(ExperimentalUuidApi::class)
 class BleScannerImpl : BleScanner {
 
-    private val scanner = Scanner()
+    private val scanner = createPlatformScanner()
     private val _isScanning = MutableStateFlow(false)
 
     override val isScanning: Flow<Boolean> = _isScanning.asStateFlow()

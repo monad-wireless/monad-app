@@ -1,10 +1,5 @@
 package sk.martinvanco.monad.quests.presentation.active_quest
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,14 +15,16 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import sk.martinvanco.monad.quests.domain.ActiveQuestDto
 import sk.martinvanco.monad.quests.domain.ActiveTaskDto
 import sk.martinvanco.monad.quests.domain.TaskStatus
 import sk.martinvanco.monad.quests.domain.TaskType
+import sk.martinvanco.monad.quests.presentation.components.StepRouter
 
 data class ActiveQuestScreen(
     val questId: String
@@ -40,45 +37,114 @@ data class ActiveQuestScreen(
 
 @Composable
 private fun ActiveQuestScreenContent(questId: String) {
-    // Sample active quest data
+    // Sample active quest data - comprehensive demo of all step types
     val sampleQuest = remember {
         ActiveQuestDto(
             id = questId,
-            name = "Task Started",
+            name = "Indoor Navigation Research",
             description = "Complete all steps to finish the quest",
             tasks = listOf(
+                // Step 1: TEXT_BOX - Welcome instructions
                 ActiveTaskDto(
-                    name = "Scan QR code XY",
-                    instruction = "Scan QR code XY located at the entrance in the room",
-                    type = TaskType.SCAN_QR,
-                    status = TaskStatus.ACTIVE
+                    name = "Welcome to the Experiment",
+                    description = "# Welcome!\n\nThank you for participating in our indoor navigation research study.\n\n## What You'll Do\n\nDuring this quest, you will:\n\n1. Read information and instructions\n2. Scan QR codes at specific locations\n3. Find BLE beacons using your device\n4. Wait at designated checkpoints\n\n## Important Guidelines\n\n- Keep Bluetooth enabled throughout the experiment\n- Follow the instructions carefully\n- Do not close the app during tasks\n- Report any issues using the \"Report an issue\" button\n\n## Safety\n\n- Watch your step while walking\n- Be aware of your surroundings\n- Stop if you feel uncomfortable\n\nTap \"Continue\" when you're ready to begin.",
+                    type = TaskType.TEXT_BOX,
+                    status = TaskStatus.ACTIVE,
+                    config = null
                 ),
+
+                // Step 2: QR_CODE - Entrance checkpoint
                 ActiveTaskDto(
-                    name = "Connect to Access Point",
-                    instruction = "We need your device to be connected using WiFi",
-                    type = TaskType.CONNECT_AT,
-                    status = TaskStatus.SCHEDULED
+                    name = "Scan QR Code at Entrance",
+                    description = "Locate and scan the QR code at the main entrance to verify your starting position",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", "MONAD_QR")
+                        put("location", "Main entrance, next to the door handle")
+                    }
                 ),
+
+                // Step 3: FIND_BLE_DEVICE - First beacon
                 ActiveTaskDto(
-                    name = "Use XYZ Equipment",
-                    instruction = "We need your device to be connected using Bluetooth",
+                    name = "Find BLE Beacon in Corridor A",
+                    description = "Walk down Corridor A until your device detects the BLE beacon. The app will show you how close you are.",
+                    type = TaskType.FIND_BLE_DEVICE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("device_name", "MONAD")
+                        /*put("device_id", "A4:C1:38:F2:1D:8E")*/
+                    }
+                ),
+
+                // Step 4: WAIT - Data collection at checkpoint 1
+                ActiveTaskDto(
+                    name = "Wait at Checkpoint 1",
+                    description = "Stand still at this location for 30 seconds while we collect positioning data. Do not move or close the app.",
                     type = TaskType.WAIT,
-                    status = TaskStatus.SCHEDULED
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("timeout_seconds", 30)
+                    }
                 ),
+
+                // Step 5: QR_CODE - Lab A checkpoint
                 ActiveTaskDto(
-                    name = "Take a Photo",
-                    instruction = "Take a photo of the completed setup",
-                    type = TaskType.SUBMIT,
-                    status = TaskStatus.SCHEDULED
+                    name = "Scan QR Code at Lab A",
+                    description = "Navigate to Lab A and scan the QR code on the door",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", "LAB_A_DOOR_2024")
+                        put("location", "Lab A entrance, on the door frame")
+                    }
                 ),
+
+                // Step 6: FIND_BLE_DEVICE - Second beacon
                 ActiveTaskDto(
-                    name = "Submit Results",
-                    instruction = "Submit your results and complete the quest",
-                    type = TaskType.SUBMIT,
-                    status = TaskStatus.SCHEDULED
+                    name = "Find BLE Beacon in Lab A",
+                    description = "Enter Lab A and locate the BLE beacon inside. Walk around slowly until the signal is detected.",
+                    type = TaskType.FIND_BLE_DEVICE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("device_name", "Monad_Beacon_LabA")
+                        put("device_id", "B8:27:EB:A3:9C:F1")
+                    }
+                ),
+
+                // Step 7: WAIT - Data collection at checkpoint 2
+                ActiveTaskDto(
+                    name = "Wait at Checkpoint 2",
+                    description = "Remain stationary for 45 seconds while we perform detailed signal measurements",
+                    type = TaskType.WAIT,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("timeout_seconds", 45)
+                    }
+                ),
+
+                // Step 8: QR_CODE - Return checkpoint
+                ActiveTaskDto(
+                    name = "Scan Return Checkpoint QR",
+                    description = "Walk back to the main corridor and scan the return checkpoint QR code",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", "RETURN_CHECKPOINT_2024")
+                        put("location", "Main corridor, near the water fountain")
+                    }
+                ),
+
+                // Step 9: TEXT_BOX - Completion message
+                ActiveTaskDto(
+                    name = "Quest Complete!",
+                    description = "# Congratulations!\n\nYou have successfully completed the Indoor Navigation Research quest.\n\n## What's Next\n\n- Your data has been collected and will help improve indoor positioning systems\n- You've earned 50 points for your participation\n- The quest will automatically submit when you tap Continue\n\n## Thank You!\n\nYour contribution is valuable to our research. If you experienced any issues during the quest, please use the \"Report an issue\" button.\n\nOtherwise, tap \"Continue\" to submit your results.",
+                    type = TaskType.TEXT_BOX,
+                    status = TaskStatus.SCHEDULED,
+                    config = null
                 )
             ),
-            points = 31.0f
+            points = 50.0f
         )
     }
 
@@ -101,8 +167,8 @@ private fun ActiveQuestScreenContent(questId: String) {
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             tasks.forEachIndexed { index, task ->
-                TaskCard(
-                    taskNumber = index + 1,
+                StepRouter(
+                    stepNumber = index + 1,
                     task = task,
                     onComplete = {
                         tasks = tasks.mapIndexed { idx, t ->
@@ -114,7 +180,7 @@ private fun ActiveQuestScreenContent(questId: String) {
                         }
                     },
                     onReportIssue = {
-                        // Handle report issue
+                        // TODO: Handle report issue
                     }
                 )
             }
@@ -185,187 +251,3 @@ private fun ActiveQuestTopBar(title: String) {
     }
 }
 
-@Composable
-private fun TaskCard(
-    taskNumber: Int,
-    task: ActiveTaskDto,
-    onComplete: () -> Unit,
-    onReportIssue: () -> Unit
-) {
-    // Animated colors based on status
-    val backgroundColor by animateColorAsState(
-        targetValue = when (task.status) {
-            TaskStatus.COMPLETED -> Color(0xFFF5F5F4) // stone-100
-            TaskStatus.ACTIVE -> Color(0xFFF1F5F9) // slate-100
-            TaskStatus.SCHEDULED -> Color(0xFFF1F5F9) // slate-100
-        },
-        animationSpec = tween(durationMillis = 300)
-    )
-
-    val numberBoxColor by animateColorAsState(
-        targetValue = when (task.status) {
-            TaskStatus.COMPLETED -> Color(0xFFEAF3EB) // light green
-            TaskStatus.ACTIVE -> Color(0xFFE2E8FD) // light indigo
-            TaskStatus.SCHEDULED -> Color(0xFFF2F2F2) // light gray
-        },
-        animationSpec = tween(durationMillis = 300)
-    )
-
-    val numberTextColor by animateColorAsState(
-        targetValue = when (task.status) {
-            TaskStatus.COMPLETED -> Color(0xFF4ADE80) // green-400
-            TaskStatus.ACTIVE -> Color(0xFF5B6ECC) // indigo-500
-            TaskStatus.SCHEDULED -> Color(0xFF71717A) // zinc-500
-        },
-        animationSpec = tween(durationMillis = 300)
-    )
-
-    val titleColor by animateColorAsState(
-        targetValue = when (task.status) {
-            TaskStatus.COMPLETED -> Color(0xFF22C55E) // green-500
-            TaskStatus.ACTIVE -> Color(0xFF0F172A) // slate-900
-            TaskStatus.SCHEDULED -> Color(0xFFA1A1AA) // zinc-400
-        },
-        animationSpec = tween(durationMillis = 300)
-    )
-
-    val descriptionColor by animateColorAsState(
-        targetValue = when (task.status) {
-            TaskStatus.COMPLETED -> Color(0xFF22C55E) // green-500
-            TaskStatus.ACTIVE -> Color(0xFF0F172A) // slate-900
-            TaskStatus.SCHEDULED -> Color(0xFFA1A1AA) // zinc-400
-        },
-        animationSpec = tween(durationMillis = 300)
-    )
-
-    val opacity = if (task.status == TaskStatus.COMPLETED) 0.6f else 1f
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(backgroundColor)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(
-                    animationSpec = spring<IntSize>(
-                        dampingRatio = 0.8f,
-                        stiffness = 300f
-                    )
-                ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Task header and description
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Step number box
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(numberBoxColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "$taskNumber",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = numberTextColor.copy(alpha = opacity)
-                        )
-                    }
-
-                    Text(
-                        text = task.name,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = titleColor.copy(alpha = opacity)
-                    )
-                }
-
-                Text(
-                    text = task.instruction,
-                    fontSize = 14.sp,
-                    color = descriptionColor.copy(alpha = opacity)
-                )
-            }
-
-            // Widget area and buttons (only for ACTIVE status)
-            if (task.status == TaskStatus.ACTIVE) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Placeholder for dynamic widget
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFFE2E8F0)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Widget Placeholder\n(QR Scanner, Image, etc.)",
-                            fontSize = 14.sp,
-                            color = Color(0xFF64748B)
-                        )
-                    }
-
-                    // Action buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Help/Issue button
-                        TextButton(onClick = onReportIssue) {
-                            Text(
-                                text = "Report an issue",
-                                fontSize = 14.sp,
-                                color = Color.Black,
-                                textDecoration = TextDecoration.Underline
-                            )
-                        }
-
-                        // Primary action button
-                        Button(
-                            onClick = onComplete,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF5B6ECC)
-                            ),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = getActionButtonText(task.type),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun getActionButtonText(taskType: TaskType): String {
-    return when (taskType) {
-        TaskType.SCAN_QR -> "Scan"
-        TaskType.CONNECT_AT -> "Connect"
-        TaskType.SUBMIT -> "Submit"
-        TaskType.START -> "Start"
-        TaskType.STOP -> "Stop"
-        TaskType.WAIT -> "Continue"
-    }
-}

@@ -16,6 +16,10 @@ class SplashScreenModel(
 
     fun checkAuthStatus() {
         screenModelScope.launch {
+            // BYPASS AUTH: Temporarily skip authentication and go directly to main screen
+            navigationManager.replace(MainContainerScreen())
+
+            /* Original auth flow (commented out for development):
             val user = authManager.getCurrentUser()
             if (user == null) {
                 navigationManager.replace(LoginScreen())
@@ -36,6 +40,7 @@ class SplashScreenModel(
                 authManager.clearUser()
                 navigationManager.replace(LoginScreen())
             }
+            */
         }
     }
 }
