@@ -16,10 +16,14 @@ object TaskConfigParser {
         if (configJson == null) return null
 
         return when (type) {
-            TaskType.QR_CODE -> json.decodeFromJsonElement(QrCodeConfig.serializer(), configJson)
+            TaskType.QR_CODE, TaskType.SCAN_QR -> json.decodeFromJsonElement(QrCodeConfig.serializer(), configJson)
             TaskType.FIND_BLE_DEVICE -> json.decodeFromJsonElement(BleDeviceConfig.serializer(), configJson)
             TaskType.WAIT -> json.decodeFromJsonElement(WaitConfig.serializer(), configJson)
-            TaskType.TEXT_BOX -> null // No config needed for text box
+            TaskType.TEXT_BOX -> null
+            TaskType.START -> null
+            TaskType.FINISH -> null
+            TaskType.CONNECT_TO_AP -> null
+            TaskType.WALK_TO -> null
         }
     }
 

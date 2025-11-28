@@ -5,4 +5,5 @@ sealed interface HomeEvent {
     data object StartBleScan : HomeEvent
     data object StopBleScan : HomeEvent
     data class UpdateFilter(val filterText: String) : HomeEvent
+    data object LoadQuests : HomeEvent
 }

@@ -26,7 +26,7 @@ fun StepRouter(
     modifier: Modifier = Modifier
 ) {
     when (task.type) {
-        TaskType.QR_CODE -> {
+        TaskType.QR_CODE, TaskType.SCAN_QR -> {
             QrCodeStep(
                 stepNumber = stepNumber,
                 task = task,
@@ -56,7 +56,17 @@ fun StepRouter(
             )
         }
 
-        TaskType.TEXT_BOX -> {
+        TaskType.TEXT_BOX, TaskType.START, TaskType.FINISH -> {
+            TextBoxStep(
+                stepNumber = stepNumber,
+                task = task,
+                onComplete = onComplete,
+                onReportIssue = onReportIssue,
+                modifier = modifier
+            )
+        }
+
+        TaskType.CONNECT_TO_AP, TaskType.WALK_TO -> {
             TextBoxStep(
                 stepNumber = stepNumber,
                 task = task,

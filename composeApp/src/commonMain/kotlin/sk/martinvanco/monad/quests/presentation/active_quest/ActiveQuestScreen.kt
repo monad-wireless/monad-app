@@ -18,9 +18,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import sk.martinvanco.monad.quests.domain.ActiveQuestDto
+import sk.martinvanco.monad.quests.presentation.end_quest.EndQuestScreen
 import sk.martinvanco.monad.quests.domain.ActiveTaskDto
 import sk.martinvanco.monad.quests.domain.TaskStatus
 import sk.martinvanco.monad.quests.domain.TaskType
@@ -31,118 +34,143 @@ data class ActiveQuestScreen(
 ) : Screen {
     @Composable
     override fun Content() {
-        ActiveQuestScreenContent(questId = questId)
+        val navigator = LocalNavigator.currentOrThrow
+        ActiveQuestScreenContent(
+            questId = questId,
+            onEndQuest = { questName ->
+                navigator.push(EndQuestScreen(questId = questId, questName = questName))
+            }
+        )
     }
 }
 
 @Composable
-private fun ActiveQuestScreenContent(questId: String) {
-    // Sample active quest data - comprehensive demo of all step types
+private fun ActiveQuestScreenContent(
+    questId: String,
+    onEndQuest: (questName: String) -> Unit
+) {
+    // QR code value for simulation - same for all QR scans
+    val qrCodeValue = "MONAD_QR"
+
     val sampleQuest = remember {
         ActiveQuestDto(
             id = questId,
             name = "Indoor Navigation Research",
             description = "Complete all steps to finish the quest",
             tasks = listOf(
-                // Step 1: TEXT_BOX - Welcome instructions
+                // Step 1: Find MONAD1
                 ActiveTaskDto(
-                    name = "Welcome to the Experiment",
-                    description = "# Welcome!\n\nThank you for participating in our indoor navigation research study.\n\n## What You'll Do\n\nDuring this quest, you will:\n\n1. Read information and instructions\n2. Scan QR codes at specific locations\n3. Find BLE beacons using your device\n4. Wait at designated checkpoints\n\n## Important Guidelines\n\n- Keep Bluetooth enabled throughout the experiment\n- Follow the instructions carefully\n- Do not close the app during tasks\n- Report any issues using the \"Report an issue\" button\n\n## Safety\n\n- Watch your step while walking\n- Be aware of your surroundings\n- Stop if you feel uncomfortable\n\nTap \"Continue\" when you're ready to begin.",
-                    type = TaskType.TEXT_BOX,
+                    name = "Find BLE Beacon MONAD1",
+                    description = "Locate the first BLE beacon.",
+                    type = TaskType.FIND_BLE_DEVICE,
                     status = TaskStatus.ACTIVE,
-                    config = null
-                ),
-
-                // Step 2: QR_CODE - Entrance checkpoint
-                ActiveTaskDto(
-                    name = "Scan QR Code at Entrance",
-                    description = "Locate and scan the QR code at the main entrance to verify your starting position",
-                    type = TaskType.QR_CODE,
-                    status = TaskStatus.SCHEDULED,
                     config = buildJsonObject {
-                        put("expected_value", "MONAD_QR")
-                        put("location", "Main entrance, next to the door handle")
+                        put("device_name", "MONAD1")
                     }
                 ),
-
-                // Step 3: FIND_BLE_DEVICE - First beacon
+                // Step 2: Find MONAD2
                 ActiveTaskDto(
-                    name = "Find BLE Beacon in Corridor A",
-                    description = "Walk down Corridor A until your device detects the BLE beacon. The app will show you how close you are.",
+                    name = "Find BLE Beacon MONAD2",
+                    description = "Locate the second BLE beacon.",
                     type = TaskType.FIND_BLE_DEVICE,
                     status = TaskStatus.SCHEDULED,
                     config = buildJsonObject {
-                        put("device_name", "MONAD")
-                        /*put("device_id", "A4:C1:38:F2:1D:8E")*/
+                        put("device_name", "MONAD2")
                     }
                 ),
-
-                // Step 4: WAIT - Data collection at checkpoint 1
+                // Step 3: Find MONAD3
                 ActiveTaskDto(
-                    name = "Wait at Checkpoint 1",
-                    description = "Stand still at this location for 30 seconds while we collect positioning data. Do not move or close the app.",
-                    type = TaskType.WAIT,
-                    status = TaskStatus.SCHEDULED,
-                    config = buildJsonObject {
-                        put("timeout_seconds", 30)
-                    }
-                ),
-
-                // Step 5: QR_CODE - Lab A checkpoint
-                ActiveTaskDto(
-                    name = "Scan QR Code at Lab A",
-                    description = "Navigate to Lab A and scan the QR code on the door",
-                    type = TaskType.QR_CODE,
-                    status = TaskStatus.SCHEDULED,
-                    config = buildJsonObject {
-                        put("expected_value", "LAB_A_DOOR_2024")
-                        put("location", "Lab A entrance, on the door frame")
-                    }
-                ),
-
-                // Step 6: FIND_BLE_DEVICE - Second beacon
-                ActiveTaskDto(
-                    name = "Find BLE Beacon in Lab A",
-                    description = "Enter Lab A and locate the BLE beacon inside. Walk around slowly until the signal is detected.",
+                    name = "Find BLE Beacon MONAD3",
+                    description = "Locate the third BLE beacon.",
                     type = TaskType.FIND_BLE_DEVICE,
                     status = TaskStatus.SCHEDULED,
                     config = buildJsonObject {
-                        put("device_name", "Monad_Beacon_LabA")
-                        put("device_id", "B8:27:EB:A3:9C:F1")
+                        put("device_name", "MONAD3")
                     }
                 ),
-
-                // Step 7: WAIT - Data collection at checkpoint 2
+                // Step 4: Find MONAD4
                 ActiveTaskDto(
-                    name = "Wait at Checkpoint 2",
-                    description = "Remain stationary for 45 seconds while we perform detailed signal measurements",
-                    type = TaskType.WAIT,
+                    name = "Find BLE Beacon MONAD4",
+                    description = "Locate the fourth BLE beacon.",
+                    type = TaskType.FIND_BLE_DEVICE,
                     status = TaskStatus.SCHEDULED,
                     config = buildJsonObject {
-                        put("timeout_seconds", 45)
+                        put("device_name", "MONAD4")
                     }
                 ),
-
-                // Step 8: QR_CODE - Return checkpoint
+                // Step 5: Find MONAD5
                 ActiveTaskDto(
-                    name = "Scan Return Checkpoint QR",
-                    description = "Walk back to the main corridor and scan the return checkpoint QR code",
-                    type = TaskType.QR_CODE,
+                    name = "Find BLE Beacon MONAD5",
+                    description = "Locate the fifth BLE beacon.",
+                    type = TaskType.FIND_BLE_DEVICE,
                     status = TaskStatus.SCHEDULED,
                     config = buildJsonObject {
-                        put("expected_value", "RETURN_CHECKPOINT_2024")
-                        put("location", "Main corridor, near the water fountain")
+                        put("device_name", "MONAD5")
                     }
                 ),
-
-                // Step 9: TEXT_BOX - Completion message
+                // Step 6: Find MONAD6
                 ActiveTaskDto(
-                    name = "Quest Complete!",
-                    description = "# Congratulations!\n\nYou have successfully completed the Indoor Navigation Research quest.\n\n## What's Next\n\n- Your data has been collected and will help improve indoor positioning systems\n- You've earned 50 points for your participation\n- The quest will automatically submit when you tap Continue\n\n## Thank You!\n\nYour contribution is valuable to our research. If you experienced any issues during the quest, please use the \"Report an issue\" button.\n\nOtherwise, tap \"Continue\" to submit your results.",
-                    type = TaskType.TEXT_BOX,
+                    name = "Find BLE Beacon MONAD6",
+                    description = "Locate the sixth BLE beacon.",
+                    type = TaskType.FIND_BLE_DEVICE,
                     status = TaskStatus.SCHEDULED,
-                    config = null
+                    config = buildJsonObject {
+                        put("device_name", "MONAD6")
+                    }
                 )
+
+                /* QR Code steps - commented out for now
+                ActiveTaskDto(
+                    name = "Scan QR Code",
+                    description = "Scan the QR code at this location.",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", qrCodeValue)
+                        put("location", "Checkpoint 1")
+                    }
+                ),
+                ActiveTaskDto(
+                    name = "Scan QR Code",
+                    description = "Scan the QR code at this location.",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", qrCodeValue)
+                        put("location", "Checkpoint 2")
+                    }
+                ),
+                ActiveTaskDto(
+                    name = "Scan QR Code",
+                    description = "Scan the QR code at this location.",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", qrCodeValue)
+                        put("location", "Checkpoint 3")
+                    }
+                ),
+                ActiveTaskDto(
+                    name = "Scan QR Code",
+                    description = "Scan the QR code at this location.",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", qrCodeValue)
+                        put("location", "Checkpoint 4")
+                    }
+                ),
+                ActiveTaskDto(
+                    name = "Scan QR Code",
+                    description = "Scan the QR code at this location.",
+                    type = TaskType.QR_CODE,
+                    status = TaskStatus.SCHEDULED,
+                    config = buildJsonObject {
+                        put("expected_value", qrCodeValue)
+                        put("location", "Checkpoint 5")
+                    }
+                )
+                */
             ),
             points = 50.0f
         )
@@ -153,10 +181,7 @@ private fun ActiveQuestScreenContent(questId: String) {
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Custom top bar with green dot
         ActiveQuestTopBar(title = sampleQuest.name)
-
-        // Scrollable content
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -194,9 +219,9 @@ private fun ActiveQuestScreenContent(questId: String) {
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
-            TextButton(onClick = { /* TODO: Handle end task */ }) {
+            TextButton(onClick = { onEndQuest(sampleQuest.name) }) {
                 Text(
-                    text = "End Task",
+                    text = "End Quest",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.error,
                     textDecoration = TextDecoration.Underline

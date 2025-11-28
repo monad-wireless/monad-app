@@ -1,19 +1,25 @@
 package sk.martinvanco.monad.home.domain.model
-import kotlinx.serialization.*
 
+import sk.martinvanco.monad.home.data.dto.QuestDto
 
-@Serializable
-data class QuestCardDt (
+data class QuestCardDt(
     val id: String,
     val name: String,
+    val description: String,
     val numTasks: Int,
-    val timeEstimateMin: Int,
+    val timeEstimateMin: Int?,
     val points: Float,
-    val questType: String,
-)
-
-data class QuestTypeDt (
-    val id: String,
-    val name: String,
-    val icon: String,
-)
+) {
+    companion object {
+        fun fromDto(dto: QuestDto): QuestCardDt {
+            return QuestCardDt(
+                id = dto.id,
+                name = dto.name,
+                description = dto.description,
+                numTasks = dto.numberOfSteps,
+                timeEstimateMin = dto.estimatedDuration,
+                points = dto.points
+            )
+        }
+    }
+}

@@ -12,7 +12,7 @@ object AppConfig {
      * Development: http://192.168.100.240
      * Production: https://api.monad.sk
      */
-    const val BASE_URL = "http://192.168.100.240"
+    const val BASE_URL = "http://172.20.10.8"
 
     /**
      * Request timeout in milliseconds
