@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
 import sk.martinvanco.monad.ble.data.repository.BleAdvertisementRepository
+import sk.martinvanco.monad.core.util.currentTimeMillis
 
 class BleSensingService(
     private val bleScanner: BleScanner,
@@ -73,11 +73,11 @@ class BleSensingService(
     }
 
     private suspend fun saveAdvertisement(questId: String, advertisement: BleAdvertisement) {
-        val timestamp = Clock.System.now().toEpochMilliseconds()
+        val timestamp = currentTimeMillis()
 
         val manufacturerDataCompanyId = advertisement.manufacturerData?.keys?.firstOrNull()
         val manufacturerDataBytes = advertisement.manufacturerData?.values?.firstOrNull()
-            ?.joinToString(",") { it.toString() }
+            ?.joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0').uppercase() }
         val serviceUuidsString = advertisement.serviceUuids?.joinToString(",")
 
         bleAdvertisementRepository.insert(

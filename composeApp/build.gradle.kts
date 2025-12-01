@@ -78,6 +78,8 @@ kotlin {
             implementation(libs.napier)
             implementation(libs.kable.core)
             implementation(libs.qrkit.compose)
+            implementation(libs.kmm.wifi.connect)
+            implementation(libs.kotlinx.datetime)
         }
     }
 }

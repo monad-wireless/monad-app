@@ -199,13 +199,6 @@ private fun BleDeviceContent(
                         fontSize = 12.sp,
                         color = Color(0xFF64748B)
                     )
-                } else {
-                    Text(
-                        text = "Filtering by device name",
-                        fontSize = 12.sp,
-                        color = Color(0xFF64748B),
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                    )
                 }
             }
         }

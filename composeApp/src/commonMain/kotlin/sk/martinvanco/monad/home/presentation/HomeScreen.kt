@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Timelapse
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,7 +71,9 @@ class HomeScreen : Screen {
             GreetingsMessage(
                 name = "Martin",
                 bleRecordCount = state.bleRecordCount,
-                isBleCollecting = state.isBleCollecting
+                isBleCollecting = state.isBleCollecting,
+                isUploading = state.isUploading,
+                onUploadClick = { screenModel.onEvent(HomeEvent.UploadBleData) }
             )
 
             Column(
@@ -284,7 +287,9 @@ class HomeScreen : Screen {
     private fun GreetingsMessage(
         name: String,
         bleRecordCount: Long = 0,
-        isBleCollecting: Boolean = false
+        isBleCollecting: Boolean = false,
+        isUploading: Boolean = false,
+        onUploadClick: () -> Unit = {}
     ) {
         Column(
             Modifier
@@ -334,6 +339,50 @@ class HomeScreen : Screen {
                         fontWeight = FontWeight.SemiBold,
                         color = if (isBleCollecting) Color(0xFF166534) else Color(0xFF5B6ECC)
                     )
+                }
+            }
+
+            // Upload Button
+            if (bleRecordCount > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isUploading) Color(0xFF9CA3AF) else Color(0xFF5B6ECC))
+                        .clickable(enabled = !isUploading) { onUploadClick() }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isUploading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Uploading...",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.CloudUpload,
+                            contentDescription = "Upload",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Upload BLE Data",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
         }

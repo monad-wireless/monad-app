@@ -8,13 +8,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import sk.martinvanco.monad.ble.domain.BleAdvertisement
 import sk.martinvanco.monad.ble.domain.BleScanner
-import kotlin.uuid.ExperimentalUuidApi
+import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
+import sk.martinvanco.monad.core.domain.permissions.Permission
+import sk.martinvanco.monad.core.domain.permissions.PermissionHandler
+import sk.martinvanco.monad.core.domain.permissions.PermissionStatus
 
 // Platform-specific scanner creation (configured for LOW_LATENCY on Android)
 internal expect fun createPlatformScanner(): Scanner<Advertisement>
 
-@OptIn(ExperimentalUuidApi::class)
-class BleScannerImpl : BleScanner {
+class BleScannerImpl(
+    private val bluetoothStateChecker: BluetoothStateChecker,
+    private val permissionHandler: PermissionHandler
+) : BleScanner {
 
     private val scanner = createPlatformScanner()
     private val _isScanning = MutableStateFlow(false)

@@ -17,6 +17,8 @@ import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.presentation.HomeScreenModel
+import sk.martinvanco.monad.storage.data.api.StorageService
+import sk.martinvanco.monad.storage.domain.BleDataExportService
 import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
 import sk.martinvanco.monad.news.presentation.NewsScreenModel
 import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
@@ -36,6 +38,7 @@ val appModule = module {
     single { NetworkHandler(get()) }
     single { AuthService(get()) }
     single { QuestsService(get()) }
+    single { StorageService(get()) }
 
     // Repositories
     single { UserRepository(get()) }
@@ -43,6 +46,7 @@ val appModule = module {
 
     // Domain
     single { AuthManager(get(), get()) }
+    single { BleDataExportService(get(), get(), get()) }
 
     // BLE - now with dependencies
     single<BleScanner> { BleScannerImpl(get(), get()) }
@@ -52,7 +56,7 @@ val appModule = module {
     factory { SplashScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
-    factory { HomeScreenModel(get(), get(), get(), get(), get()) }
+    factory { HomeScreenModel(get(), get(), get(), get(), get(), get()) }
     factory { QuestsScreenModel() }
     factory { (questId: String) -> QuestDetailScreenModel(get(), questId) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), questId) }

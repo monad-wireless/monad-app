@@ -12,5 +12,8 @@ data class HomeState(
     val isLoadingQuests: Boolean = false,
     val questsError: String? = null,
     val bleRecordCount: Long = 0,
-    val isBleCollecting: Boolean = false
+    val isBleCollecting: Boolean = false,
+    val isUploading: Boolean = false,
+    val uploadSuccess: Boolean? = null,
+    val uploadError: String? = null
 )

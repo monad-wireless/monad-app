@@ -15,13 +15,15 @@ import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
 import sk.martinvanco.monad.core.domain.toast.ToastManager
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.domain.model.QuestCardDt
+import sk.martinvanco.monad.storage.domain.BleDataExportService
 
 class HomeScreenModel(
     private val bleScanner: BleScanner,
     private val bluetoothStateChecker: BluetoothStateChecker,
     private val toastManager: ToastManager,
     private val questsService: QuestsService,
-    private val bleSensingService: BleSensingService
+    private val bleSensingService: BleSensingService,
+    private val bleDataExportService: BleDataExportService
 ) : StateScreenModel<HomeState>(HomeState()) {
 
     private var scanJob: Job? = null
@@ -58,6 +60,7 @@ class HomeScreenModel(
                 // Navigation handled in UI
             }
             is HomeEvent.LoadQuests -> loadQuests()
+            is HomeEvent.UploadBleData -> uploadBleData()
         }
     }
 
@@ -180,5 +183,41 @@ class HomeScreenModel(
     override fun onDispose() {
         super.onDispose()
         stopScanning()
+    }
+
+    private fun uploadBleData() {
+        if (mutableState.value.isUploading) return
+        if (mutableState.value.bleRecordCount == 0L) {
+            toastManager.showToast("No BLE data to upload")
+            return
+        }
+
+        screenModelScope.launch {
+            mutableState.value = mutableState.value.copy(
+                isUploading = true,
+                uploadSuccess = null,
+                uploadError = null
+            )
+
+            val result = bleDataExportService.exportAndUploadThenClear()
+
+            result.onSuccess { response ->
+                mutableState.value = mutableState.value.copy(
+                    isUploading = false,
+                    uploadSuccess = true,
+                    uploadError = null
+                )
+                toastManager.showToast("Data uploaded successfully!")
+                bleSensingService.refreshRecordCount()
+            }.onFailure { error ->
+                val errorMessage = error.message ?: "Upload failed"
+                mutableState.value = mutableState.value.copy(
+                    isUploading = false,
+                    uploadSuccess = false,
+                    uploadError = errorMessage
+                )
+                toastManager.showToast("Upload failed: $errorMessage")
+            }
+        }
     }
 }
