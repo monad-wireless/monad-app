@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Timelapse
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,7 +67,11 @@ class HomeScreen : Screen {
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            GreetingsMessage("Martin")
+            GreetingsMessage(
+                name = "Martin",
+                bleRecordCount = state.bleRecordCount,
+                isBleCollecting = state.isBleCollecting
+            )
 
             Column(
                 modifier = Modifier
@@ -276,11 +281,61 @@ class HomeScreen : Screen {
     }
 
     @Composable
-    private fun GreetingsMessage(name: String){
-        Column(Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xFFE2E8FD)).padding(18.dp, 16.dp).fillMaxWidth().height(120.dp)) {
-            Text("Hey $name!", style = MaterialTheme.typography.h2, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Ready for your next quest?", style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp)
+    private fun GreetingsMessage(
+        name: String,
+        bleRecordCount: Long = 0,
+        isBleCollecting: Boolean = false
+    ) {
+        Column(
+            Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFFE2E8FD))
+                .padding(18.dp, 16.dp)
+                .fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Hey $name!",
+                        style = MaterialTheme.typography.h2,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Ready for your next quest?",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontSize = 18.sp
+                    )
+                }
+
+                // BLE Record Count Badge
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isBleCollecting) Color(0xFFDCFCE7) else Color.White)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Sensors,
+                        contentDescription = "BLE Records",
+                        tint = if (isBleCollecting) Color(0xFF22C55E) else Color(0xFF5B6ECC),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "$bleRecordCount",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isBleCollecting) Color(0xFF166534) else Color(0xFF5B6ECC)
+                    )
+                }
+            }
         }
     }
 }

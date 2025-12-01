@@ -10,5 +10,7 @@ data class HomeState(
     val filteredAdvertisements: List<BleAdvertisement> = emptyList(),
     val quests: List<QuestCardDt> = emptyList(),
     val isLoadingQuests: Boolean = false,
-    val questsError: String? = null
+    val questsError: String? = null,
+    val bleRecordCount: Long = 0,
+    val isBleCollecting: Boolean = false
 )

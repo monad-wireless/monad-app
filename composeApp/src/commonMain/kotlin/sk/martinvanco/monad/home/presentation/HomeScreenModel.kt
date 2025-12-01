@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import sk.martinvanco.monad.ble.domain.BleAdvertisement
 import sk.martinvanco.monad.ble.domain.BleScanner
+import sk.martinvanco.monad.ble.domain.BleSensingService
 import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
 import sk.martinvanco.monad.core.domain.toast.ToastManager
 import sk.martinvanco.monad.home.data.api.QuestsService
@@ -19,13 +20,33 @@ class HomeScreenModel(
     private val bleScanner: BleScanner,
     private val bluetoothStateChecker: BluetoothStateChecker,
     private val toastManager: ToastManager,
-    private val questsService: QuestsService
+    private val questsService: QuestsService,
+    private val bleSensingService: BleSensingService
 ) : StateScreenModel<HomeState>(HomeState()) {
 
     private var scanJob: Job? = null
 
     init {
         loadQuests()
+        observeBleRecordCount()
+    }
+
+    private fun observeBleRecordCount() {
+        bleSensingService.recordCount
+            .onEach { count ->
+                mutableState.value = mutableState.value.copy(bleRecordCount = count)
+            }
+            .launchIn(screenModelScope)
+
+        bleSensingService.isCollecting
+            .onEach { isCollecting ->
+                mutableState.value = mutableState.value.copy(isBleCollecting = isCollecting)
+            }
+            .launchIn(screenModelScope)
+
+        screenModelScope.launch {
+            bleSensingService.refreshRecordCount()
+        }
     }
 
     fun onEvent(event: HomeEvent) {

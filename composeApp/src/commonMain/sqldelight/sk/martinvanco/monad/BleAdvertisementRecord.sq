@@ -1,0 +1,59 @@
+-- BLE Advertisement Record table for storing scanned BLE packets during quests
+CREATE TABLE IF NOT EXISTS BleAdvertisementRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    questId TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    deviceAddress TEXT NOT NULL,
+    deviceName TEXT,
+    rssi INTEGER NOT NULL,
+    manufacturerDataCompanyId INTEGER,
+    manufacturerDataBytes TEXT,
+    serviceUuids TEXT
+);
+
+-- Queries
+selectAll:
+SELECT * FROM BleAdvertisementRecord
+ORDER BY timestamp DESC;
+
+selectByQuestId:
+SELECT * FROM BleAdvertisementRecord
+WHERE questId = ?
+ORDER BY timestamp ASC;
+
+selectByQuestIdAndDevice:
+SELECT * FROM BleAdvertisementRecord
+WHERE questId = ? AND deviceAddress = ?
+ORDER BY timestamp ASC;
+
+countAll:
+SELECT COUNT(*) FROM BleAdvertisementRecord;
+
+countByQuestId:
+SELECT COUNT(*) FROM BleAdvertisementRecord
+WHERE questId = ?;
+
+insert:
+INSERT INTO BleAdvertisementRecord(
+    questId,
+    timestamp,
+    deviceAddress,
+    deviceName,
+    rssi,
+    manufacturerDataCompanyId,
+    manufacturerDataBytes,
+    serviceUuids
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteByQuestId:
+DELETE FROM BleAdvertisementRecord
+WHERE questId = ?;
+
+deleteAll:
+DELETE FROM BleAdvertisementRecord;
+
+getLatestByQuestId:
+SELECT * FROM BleAdvertisementRecord
+WHERE questId = ?
+ORDER BY timestamp DESC
+LIMIT 1;

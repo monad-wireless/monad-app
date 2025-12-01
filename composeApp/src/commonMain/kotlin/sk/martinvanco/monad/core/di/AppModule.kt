@@ -10,7 +10,9 @@ import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.core.domain.NetworkHandler
 import sk.martinvanco.monad.ble.data.BleScannerImpl
+import sk.martinvanco.monad.ble.data.repository.BleAdvertisementRepository
 import sk.martinvanco.monad.ble.domain.BleScanner
+import sk.martinvanco.monad.ble.domain.BleSensingService
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.home.data.api.QuestsService
@@ -19,6 +21,7 @@ import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
 import sk.martinvanco.monad.news.presentation.NewsScreenModel
 import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
 import sk.martinvanco.monad.quests.presentation.QuestsScreenModel
+import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreenModel
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreenModel
 import sk.martinvanco.monad.wifi_test_v2.presentation.WifiTestV2ScreenModel
 import sk.martinvanco.monad.core.domain.wifi_v2.WifiConnectionServiceV2
@@ -36,20 +39,23 @@ val appModule = module {
 
     // Repositories
     single { UserRepository(get()) }
+    single { BleAdvertisementRepository(get()) }
 
     // Domain
     single { AuthManager(get(), get()) }
 
     // BLE - now with dependencies
     single<BleScanner> { BleScannerImpl(get(), get()) }
+    single { BleSensingService(get(), get()) }
 
     // New screen models
     factory { SplashScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
-    factory { HomeScreenModel(get(), get(), get(), get()) }
+    factory { HomeScreenModel(get(), get(), get(), get(), get()) }
     factory { QuestsScreenModel() }
     factory { (questId: String) -> QuestDetailScreenModel(get(), questId) }
+    factory { (questId: String) -> ActiveQuestScreenModel(get(), questId) }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }
