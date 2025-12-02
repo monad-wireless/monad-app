@@ -7,7 +7,7 @@ import sk.martinvanco.monad.ble.data.repository.BleAdvertisementRepository
 import sk.martinvanco.monad.core.util.currentTimeMillis
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.storage.data.api.StorageService
-import sk.martinvanco.monad.storage.data.api.UploadResponseDto
+import sk.martinvanco.monad.storage.data.dto.UploadResponseDto
 
 class BleDataExportService(
     private val bleAdvertisementRepository: BleAdvertisementRepository,

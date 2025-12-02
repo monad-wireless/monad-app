@@ -1,0 +1,62 @@
+-- QuestStepCompletion table for tracking quest step progress
+CREATE TABLE IF NOT EXISTS QuestStepCompletion (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    backendId TEXT NOT NULL UNIQUE,
+    enrollmentId TEXT NOT NULL,
+    questStepId TEXT NOT NULL,
+    stepOrder INTEGER NOT NULL,
+    stepType TEXT NOT NULL,
+    stepName TEXT NOT NULL,
+    stepConfig TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    startedAt INTEGER,
+    completedAt INTEGER,
+    stepData TEXT,
+    skipMessage TEXT,
+    skipErrorCode TEXT,
+    createdAt INTEGER NOT NULL
+);
+
+-- Queries
+insertStepCompletion:
+INSERT INTO QuestStepCompletion(backendId, enrollmentId, questStepId, stepOrder, stepType, stepName, stepConfig, status, createdAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateStepStatus:
+UPDATE QuestStepCompletion SET status = ?, startedAt = ? WHERE backendId = ?;
+
+markStepCompleted:
+UPDATE QuestStepCompletion SET status = 'completed', completedAt = ? WHERE backendId = ?;
+
+markStepFailed:
+UPDATE QuestStepCompletion SET status = 'failed', completedAt = ?, skipMessage = ?, skipErrorCode = ? WHERE backendId = ?;
+
+updateStepData:
+UPDATE QuestStepCompletion SET stepData = ? WHERE backendId = ?;
+
+selectByEnrollmentId:
+SELECT * FROM QuestStepCompletion WHERE enrollmentId = ? ORDER BY stepOrder ASC;
+
+selectByBackendId:
+SELECT * FROM QuestStepCompletion WHERE backendId = ?;
+
+selectActiveStep:
+SELECT * FROM QuestStepCompletion WHERE enrollmentId = ? AND status = 'in_progress' LIMIT 1;
+
+selectCompletedSteps:
+SELECT * FROM QuestStepCompletion WHERE enrollmentId = ? AND status = 'completed' ORDER BY stepOrder ASC;
+
+selectPendingSteps:
+SELECT * FROM QuestStepCompletion WHERE enrollmentId = ? AND status = 'pending' ORDER BY stepOrder ASC;
+
+countByEnrollmentId:
+SELECT COUNT(*) FROM QuestStepCompletion WHERE enrollmentId = ?;
+
+countCompletedByEnrollmentId:
+SELECT COUNT(*) FROM QuestStepCompletion WHERE enrollmentId = ? AND status = 'completed';
+
+deleteByEnrollmentId:
+DELETE FROM QuestStepCompletion WHERE enrollmentId = ?;
+
+deleteAll:
+DELETE FROM QuestStepCompletion;

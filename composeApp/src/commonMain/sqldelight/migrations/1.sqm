@@ -1,0 +1,22 @@
+-- Migration 1: Add activeQuestId and activeEnrollmentId to User table
+ALTER TABLE User ADD COLUMN activeQuestId TEXT;
+ALTER TABLE User ADD COLUMN activeEnrollmentId TEXT;
+
+-- Create QuestStepCompletion table
+CREATE TABLE IF NOT EXISTS QuestStepCompletion (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    backendId TEXT NOT NULL UNIQUE,
+    enrollmentId TEXT NOT NULL,
+    questStepId TEXT NOT NULL,
+    stepOrder INTEGER NOT NULL,
+    stepType TEXT NOT NULL,
+    stepName TEXT NOT NULL,
+    stepConfig TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    startedAt INTEGER,
+    completedAt INTEGER,
+    stepData TEXT,
+    skipMessage TEXT,
+    skipErrorCode TEXT,
+    createdAt INTEGER NOT NULL
+);

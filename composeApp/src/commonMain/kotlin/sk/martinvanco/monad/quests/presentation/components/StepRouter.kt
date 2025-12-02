@@ -66,7 +66,7 @@ fun StepRouter(
             )
         }
 
-        TaskType.CONNECT_TO_AP, TaskType.WALK_TO -> {
+        TaskType.CONNECT_TO_AP, TaskType.WALK_TO, TaskType.INFO -> {
             TextBoxStep(
                 stepNumber = stepNumber,
                 task = task,

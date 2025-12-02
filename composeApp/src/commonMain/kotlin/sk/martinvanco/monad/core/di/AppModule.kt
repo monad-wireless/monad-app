@@ -22,6 +22,9 @@ import sk.martinvanco.monad.storage.domain.BleDataExportService
 import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
 import sk.martinvanco.monad.news.presentation.NewsScreenModel
 import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
+import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
+import sk.martinvanco.monad.quests.domain.QuestDataExportService
+import sk.martinvanco.monad.quests.domain.QuestDataFlushService
 import sk.martinvanco.monad.quests.presentation.QuestsScreenModel
 import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreenModel
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreenModel
@@ -35,6 +38,7 @@ val appModule = module {
     // Services
     single { WifiConnectionServiceV2() }
     single { KtorClient }
+    single { KtorClient.client }
     single { NetworkHandler(get()) }
     single { AuthService(get()) }
     single { QuestsService(get()) }
@@ -43,23 +47,26 @@ val appModule = module {
     // Repositories
     single { UserRepository(get()) }
     single { BleAdvertisementRepository(get()) }
+    single { QuestStepCompletionRepository(get()) }
 
     // Domain
     single { AuthManager(get(), get()) }
     single { BleDataExportService(get(), get(), get()) }
+    single { QuestDataExportService(get()) }
+    single { QuestDataFlushService(get(), get(), get()) }
 
     // BLE - now with dependencies
     single<BleScanner> { BleScannerImpl(get(), get()) }
     single { BleSensingService(get(), get()) }
 
     // New screen models
-    factory { SplashScreenModel(get(), get()) }
+    factory { SplashScreenModel(get(), get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
     factory { HomeScreenModel(get(), get(), get(), get(), get(), get()) }
     factory { QuestsScreenModel() }
-    factory { (questId: String) -> QuestDetailScreenModel(get(), questId) }
-    factory { (questId: String) -> ActiveQuestScreenModel(get(), questId) }
+    factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), questId) }
+    factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), get(), get(), questId) }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }

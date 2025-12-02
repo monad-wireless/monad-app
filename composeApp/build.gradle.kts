@@ -28,9 +28,10 @@ kotlin {
         }
     }
 
-    // Enable experimental UUID API
+    // Enable experimental APIs
     sourceSets.all {
         languageSettings.optIn("kotlin.uuid.ExperimentalUuidApi")
+        languageSettings.optIn("kotlin.time.ExperimentalTime")
     }
 
     sourceSets {
@@ -119,6 +120,8 @@ sqldelight {
     databases {
         create("Database") {
             packageName.set("sk.martinvanco.monad")
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
+            version = 2
         }
     }
 }

@@ -24,6 +24,7 @@ object TaskConfigParser {
             TaskType.FINISH -> null
             TaskType.CONNECT_TO_AP -> null
             TaskType.WALK_TO -> null
+            TaskType.INFO -> null
         }
     }
 

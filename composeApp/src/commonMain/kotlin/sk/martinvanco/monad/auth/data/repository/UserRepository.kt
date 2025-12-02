@@ -30,7 +30,9 @@ class UserRepository(
                 backendId = result.backendId,
                 email = result.email,
                 name = result.name,
-                token = result.token
+                token = result.token,
+                activeQuestId = result.activeQuestId,
+                activeEnrollmentId = result.activeEnrollmentId
             )
         }
     }
@@ -62,5 +64,33 @@ class UserRepository(
 
     suspend fun clearToken(id: Long) = withContext(Dispatchers.IO) {
         queries.clearToken(id)
+    }
+
+    suspend fun setActiveQuestId(userId: Long, questId: String, enrollmentId: String) = withContext(Dispatchers.IO) {
+        queries.setActiveQuestId(questId, enrollmentId, userId)
+    }
+
+    suspend fun clearActiveQuestId(userId: Long) = withContext(Dispatchers.IO) {
+        queries.clearActiveQuestId(userId)
+    }
+
+    suspend fun getActiveQuestId(userId: Long): String? = withContext(Dispatchers.IO) {
+        queries.getActiveQuestId(userId).executeAsOneOrNull()?.activeQuestId
+    }
+
+    suspend fun getActiveEnrollmentId(userId: Long): String? = withContext(Dispatchers.IO) {
+        queries.getActiveEnrollmentId(userId).executeAsOneOrNull()?.activeEnrollmentId
+    }
+
+    suspend fun getCurrentUserActiveQuestId(): String? = withContext(Dispatchers.IO) {
+        getCurrentUser()?.let { user ->
+            getActiveQuestId(user.id)
+        }
+    }
+
+    suspend fun getCurrentUserActiveEnrollmentId(): String? = withContext(Dispatchers.IO) {
+        getCurrentUser()?.let { user ->
+            getActiveEnrollmentId(user.id)
+        }
     }
 }

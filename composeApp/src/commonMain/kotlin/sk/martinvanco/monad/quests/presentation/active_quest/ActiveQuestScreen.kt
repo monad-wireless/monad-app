@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.*
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,13 @@ data class ActiveQuestScreen(
         }
         val state by screenModel.state.collectAsState()
 
+        // Navigate home when enrollment not found (404)
+        LaunchedEffect(state.shouldNavigateHome) {
+            if (state.shouldNavigateHome) {
+                navigator.popUntilRoot()
+            }
+        }
+
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -46,26 +54,63 @@ data class ActiveQuestScreen(
                 isBleCollecting = state.isBleCollecting,
                 bleRecordCount = state.bleRecordCount
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                state.tasks.forEachIndexed { index, task ->
-                    StepRouter(
-                        stepNumber = index + 1,
-                        task = task,
-                        onComplete = {
-                            screenModel.onEvent(ActiveQuestEvent.CompleteTask(index))
-                        },
-                        onReportIssue = {
-                            screenModel.onEvent(ActiveQuestEvent.ReportIssue(index))
+            when {
+                state.isLoading -> {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF5B6ECC))
+                    }
+                }
+                state.error != null -> {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = state.error ?: "Unknown error",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 16.sp
+                            )
+                            TextButton(onClick = { navigator.pop() }) {
+                                Text("Go Back", color = Color(0xFF5B6ECC))
+                            }
                         }
-                    )
+                    }
+                }
+                else -> {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.background)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp, vertical = 32.dp),
+                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        state.tasks.forEachIndexed { index, task ->
+                            StepRouter(
+                                stepNumber = index + 1,
+                                task = task,
+                                onComplete = {
+                                    screenModel.onEvent(ActiveQuestEvent.CompleteTask(index))
+                                },
+                                onReportIssue = {
+                                    screenModel.onEvent(ActiveQuestEvent.FailTask(index, "Issue reported by user"))
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -77,7 +122,7 @@ data class ActiveQuestScreen(
                 contentAlignment = Alignment.Center
             ) {
                 TextButton(onClick = {
-                    screenModel.onEvent(ActiveQuestEvent.EndQuest)
+                    screenModel.onEvent(ActiveQuestEvent.EndQuestEarly)
                     navigator.push(EndQuestScreen(questId = questId, questName = state.questName))
                 }) {
                     Text(

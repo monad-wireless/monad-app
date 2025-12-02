@@ -6,5 +6,8 @@ data class QuestDetailState(
     val questId: String = "",
     val quest: QuestDetailDto? = null,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isStartingQuest: Boolean = false,
+    val startQuestError: String? = null,
+    val enrollmentId: String? = null
 )

@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,40 @@ data class QuestDetailScreen(val questId: String) : Screen {
         val state by screenModel.state.collectAsState()
         val density = LocalDensity.current
         var tasksHeight by remember { mutableStateOf(0.dp) }
+
+        // Navigate to ActiveQuestScreen when enrollment is created
+        LaunchedEffect(state.enrollmentId) {
+            if (state.enrollmentId != null) {
+                navigator.replace(ActiveQuestScreen(questId))
+            }
+        }
+
+        // Error dialog for start quest failures
+        if (state.startQuestError != null) {
+            AlertDialog(
+                onDismissRequest = { screenModel.onEvent(QuestDetailEvent.DismissStartQuestError) },
+                title = {
+                    Text(
+                        text = "Cannot Start Quest",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                text = {
+                    Text(text = state.startQuestError ?: "An error occurred")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { screenModel.onEvent(QuestDetailEvent.DismissStartQuestError) }
+                    ) {
+                        Text(
+                            text = "OK",
+                            color = Color(0xFF5B6ECC),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            )
+        }
 
         ScreenWithBackNavigation(
             title = "Quest Detail",
@@ -115,7 +151,8 @@ data class QuestDetailScreen(val questId: String) : Screen {
                         tasksHeight = tasksHeight,
                         onTasksHeightChange = { tasksHeight = it },
                         density = density,
-                        onStartClick = { navigator.push(ActiveQuestScreen(questId)) }
+                        isStartingQuest = state.isStartingQuest,
+                        onStartClick = { screenModel.onEvent(QuestDetailEvent.StartQuest) }
                     )
                 }
             }
@@ -128,6 +165,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
         tasksHeight: androidx.compose.ui.unit.Dp,
         onTasksHeightChange: (androidx.compose.ui.unit.Dp) -> Unit,
         density: androidx.compose.ui.unit.Density,
+        isStartingQuest: Boolean,
         onStartClick: () -> Unit
     ) {
         Column(
@@ -257,20 +295,37 @@ data class QuestDetailScreen(val questId: String) : Screen {
 
             Button(
                 onClick = onStartClick,
+                enabled = !isStartingQuest,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF5B6ECC)
+                    containerColor = Color(0xFF5B6ECC),
+                    disabledContainerColor = Color(0xFF5B6ECC).copy(alpha = 0.6f)
                 ),
                 shape = RoundedCornerShape(6.dp)
             ) {
-                Text(
-                    text = "Start the experiment",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
+                if (isStartingQuest) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Starting...",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                } else {
+                    Text(
+                        text = "Start the experiment",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                }
             }
         }
     }

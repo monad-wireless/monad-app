@@ -28,7 +28,13 @@ enum class TaskStatus {
     ACTIVE,
 
     @SerialName("completed")
-    COMPLETED
+    COMPLETED,
+
+    @SerialName("failed")
+    FAILED,
+
+    @SerialName("skipped")
+    SKIPPED
 }
 
 /**

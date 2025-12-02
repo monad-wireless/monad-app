@@ -63,7 +63,10 @@ enum class TaskType {
     WALK_TO,
 
     @SerialName("finish")
-    FINISH;
+    FINISH,
+
+    @SerialName("info")
+    INFO;
 
     companion object {
         fun fromStepType(stepType: StepType): TaskType {

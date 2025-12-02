@@ -50,6 +50,8 @@ fun QuestStepCard(
             TaskStatus.COMPLETED -> Color(0xFFF5F5F4) // stone-100
             TaskStatus.ACTIVE -> Color(0xFFF1F5F9) // slate-100
             TaskStatus.SCHEDULED -> Color(0xFFF1F5F9) // slate-100
+            TaskStatus.FAILED -> Color(0xFFFEF2F2) // red-50
+            TaskStatus.SKIPPED -> Color(0xFFFEF9C3) // yellow-100
         },
         animationSpec = tween(durationMillis = 300)
     )
@@ -59,6 +61,8 @@ fun QuestStepCard(
             TaskStatus.COMPLETED -> Color(0xFFEAF3EB) // light green
             TaskStatus.ACTIVE -> Color(0xFFE2E8FD) // light indigo
             TaskStatus.SCHEDULED -> Color(0xFFF2F2F2) // light gray
+            TaskStatus.FAILED -> Color(0xFFFECACA) // red-200
+            TaskStatus.SKIPPED -> Color(0xFFFEF08A) // yellow-200
         },
         animationSpec = tween(durationMillis = 300)
     )
@@ -68,6 +72,8 @@ fun QuestStepCard(
             TaskStatus.COMPLETED -> Color(0xFF4ADE80) // green-400
             TaskStatus.ACTIVE -> Color(0xFF5B6ECC) // indigo-500
             TaskStatus.SCHEDULED -> Color(0xFF71717A) // zinc-500
+            TaskStatus.FAILED -> Color(0xFFEF4444) // red-500
+            TaskStatus.SKIPPED -> Color(0xFFCA8A04) // yellow-600
         },
         animationSpec = tween(durationMillis = 300)
     )
@@ -77,6 +83,8 @@ fun QuestStepCard(
             TaskStatus.COMPLETED -> Color(0xFF22C55E) // green-500
             TaskStatus.ACTIVE -> Color(0xFF0F172A) // slate-900
             TaskStatus.SCHEDULED -> Color(0xFFA1A1AA) // zinc-400
+            TaskStatus.FAILED -> Color(0xFFDC2626) // red-600
+            TaskStatus.SKIPPED -> Color(0xFFA16207) // yellow-700
         },
         animationSpec = tween(durationMillis = 300)
     )
@@ -86,6 +94,8 @@ fun QuestStepCard(
             TaskStatus.COMPLETED -> Color(0xFF22C55E) // green-500
             TaskStatus.ACTIVE -> Color(0xFF0F172A) // slate-900
             TaskStatus.SCHEDULED -> Color(0xFFA1A1AA) // zinc-400
+            TaskStatus.FAILED -> Color(0xFFDC2626) // red-600
+            TaskStatus.SKIPPED -> Color(0xFFA16207) // yellow-700
         },
         animationSpec = tween(durationMillis = 300)
     )

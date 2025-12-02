@@ -4,7 +4,9 @@ CREATE TABLE IF NOT EXISTS User (
     backendId TEXT UNIQUE,
     email TEXT NOT NULL UNIQUE,
     name TEXT,
-    token TEXT
+    token TEXT,
+    activeQuestId TEXT,
+    activeEnrollmentId TEXT
 );
 
 -- Queries
@@ -49,4 +51,22 @@ DELETE FROM User;
 clearToken:
 UPDATE User
 SET token = NULL
+WHERE id = ?;
+
+setActiveQuestId:
+UPDATE User
+SET activeQuestId = ?, activeEnrollmentId = ?
+WHERE id = ?;
+
+clearActiveQuestId:
+UPDATE User
+SET activeQuestId = NULL, activeEnrollmentId = NULL
+WHERE id = ?;
+
+getActiveQuestId:
+SELECT activeQuestId FROM User
+WHERE id = ?;
+
+getActiveEnrollmentId:
+SELECT activeEnrollmentId FROM User
 WHERE id = ?;
