@@ -74,6 +74,7 @@ class QuestDataExportService(
             appendLine("total_ble_records\t$totalBleRecords")
             appendLine("app_version\t0.1.0")
             appendLine("export_time\t${now}")
+            appendLine("timezone\t${getDeviceTimezone()}")
             // Platform-specific device info would go here
             // For now, we add placeholders that can be filled by platform code
             appendLine("platform\t${getPlatformName()}")
@@ -92,3 +93,6 @@ class QuestDataExportService(
 
 // Platform-specific function to get platform name
 expect fun getPlatformName(): String
+
+// Platform-specific function to get device timezone
+expect fun getDeviceTimezone(): String

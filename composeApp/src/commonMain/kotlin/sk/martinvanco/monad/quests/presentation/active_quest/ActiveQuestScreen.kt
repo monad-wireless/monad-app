@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.*
 import androidx.compose.ui.text.style.TextAlign
@@ -20,6 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -34,7 +39,7 @@ data class ActiveQuestScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val screenModel = remember {
+        val screenModel = rememberScreenModel {
             getKoin().get<ActiveQuestScreenModel> { parametersOf(questId) }
         }
         val state by screenModel.state.collectAsState()
@@ -44,6 +49,114 @@ data class ActiveQuestScreen(
             if (state.shouldNavigateHome) {
                 navigator.popUntilRoot()
             }
+        }
+
+        // Upload progress dialog
+        if (state.isUploading) {
+            Dialog(
+                onDismissRequest = { },
+                properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF22C55E),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Text(
+                            text = "Uploading Data",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0F142F)
+                        )
+                        Text(
+                            text = state.uploadProgress,
+                            fontSize = 14.sp,
+                            color = Color(0xFF6B7280),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        // Success dialog
+        if (state.isCompleted) {
+            AlertDialog(
+                onDismissRequest = { screenModel.onEvent(ActiveQuestEvent.DismissSuccessAndNavigateHome) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = "Success",
+                        tint = Color(0xFF22C55E),
+                        modifier = Modifier.size(48.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Quest Completed!",
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Your data has been uploaded successfully. Thank you for participating!",
+                        textAlign = TextAlign.Center
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { screenModel.onEvent(ActiveQuestEvent.DismissSuccessAndNavigateHome) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
+                    ) {
+                        Text("Return Home", color = Color.White)
+                    }
+                }
+            )
+        }
+
+        // Error dialog
+        if (state.completionError != null) {
+            AlertDialog(
+                onDismissRequest = { screenModel.onEvent(ActiveQuestEvent.DismissCompletionError) },
+                title = {
+                    Text(
+                        text = "Upload Failed",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                text = {
+                    Text(text = state.completionError ?: "An error occurred")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { screenModel.onEvent(ActiveQuestEvent.RetryUpload) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC))
+                    ) {
+                        Text("Retry", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { screenModel.onEvent(ActiveQuestEvent.DismissCompletionError) }
+                    ) {
+                        Text("Cancel", color = Color(0xFF6B7280))
+                    }
+                }
+            )
         }
 
         Column(
@@ -75,15 +188,26 @@ data class ActiveQuestScreen(
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Text(
                                 text = state.error ?: "Unknown error",
                                 color = MaterialTheme.colorScheme.error,
-                                fontSize = 16.sp
+                                fontSize = 16.sp,
+                                textAlign = TextAlign.Center
                             )
-                            TextButton(onClick = { navigator.pop() }) {
-                                Text("Go Back", color = Color(0xFF5B6ECC))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                TextButton(onClick = { navigator.pop() }) {
+                                    Text("Go Back", color = Color(0xFF6B7280))
+                                }
+                                Button(
+                                    onClick = { screenModel.onEvent(ActiveQuestEvent.RetryLoad) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC))
+                                ) {
+                                    Text("Retry", color = Color.White)
+                                }
                             }
                         }
                     }
@@ -121,16 +245,41 @@ data class ActiveQuestScreen(
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                TextButton(onClick = {
-                    screenModel.onEvent(ActiveQuestEvent.EndQuestEarly)
-                    navigator.push(EndQuestScreen(questId = questId, questName = state.questName))
-                }) {
-                    Text(
-                        text = "End Quest",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.error,
-                        textDecoration = TextDecoration.Underline
-                    )
+                if (state.allTasksCompleted) {
+                    Button(
+                        onClick = { screenModel.onEvent(ActiveQuestEvent.SubmitQuest) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CloudUpload,
+                            contentDescription = "Upload",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Upload Data & Complete Quest",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                } else {
+                    TextButton(onClick = {
+                        screenModel.onEvent(ActiveQuestEvent.EndQuestEarly)
+                        navigator.push(EndQuestScreen(questId = questId, questName = state.questName))
+                    }) {
+                        Text(
+                            text = "End Quest",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    }
                 }
             }
         }

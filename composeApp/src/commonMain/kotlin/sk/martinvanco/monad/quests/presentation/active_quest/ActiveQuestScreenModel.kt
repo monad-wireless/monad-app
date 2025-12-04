@@ -3,6 +3,7 @@ package sk.martinvanco.monad.quests.presentation.active_quest
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.ktor.client.plugins.ClientRequestException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -34,24 +35,27 @@ class ActiveQuestScreenModel(
 ) : StateScreenModel<ActiveQuestState>(ActiveQuestState(questId = questId)) {
 
     init {
-        initializeQuest()
-        startBleSensing()
         observeBleRecordCount()
+        initializeQuest()
     }
 
     private fun initializeQuest() {
         screenModelScope.launch {
+            mutableState.value = mutableState.value.copy(isLoading = true, error = null)
+
             try {
                 // Get enrollment ID from user record
                 val user = userRepository.getCurrentUser()
                 if (user == null) {
-                    cleanupAndNavigateHome("User not logged in")
+                    showErrorWithoutCleanup("User not logged in")
                     return@launch
                 }
 
                 val enrollmentId = user.activeEnrollmentId
                 if (enrollmentId.isNullOrEmpty()) {
-                    cleanupAndNavigateHome("No active enrollment found")
+                    // No enrollment - this shouldn't happen if activeQuestId is set
+                    // Don't cleanup, let user retry or manually fix
+                    showErrorWithoutCleanup("No active enrollment found. Please restart the quest.")
                     return@launch
                 }
 
@@ -59,6 +63,7 @@ class ActiveQuestScreenModel(
                 val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
 
                 if (steps.isEmpty()) {
+                    // Steps not found - data might be corrupted, cleanup and navigate home
                     cleanupAndNavigateHome("No quest data found", enrollmentId, user.id)
                     return@launch
                 }
@@ -80,22 +85,44 @@ class ActiveQuestScreenModel(
                             else -> TaskStatus.SCHEDULED
                         },
                         config = step.stepConfig?.let {
-                            kotlinx.serialization.json.Json.parseToJsonElement(it)
+                            try {
+                                kotlinx.serialization.json.Json.parseToJsonElement(it)
+                            } catch (e: Exception) {
+                                null // Ignore invalid JSON config
+                            }
                         }
                     )
                 }
+
+                // Check if all tasks completed
+                val allCompleted = steps.isNotEmpty() && steps.all { it.status == "completed" }
 
                 mutableState.value = mutableState.value.copy(
                     enrollmentId = enrollmentId,
                     questName = "Quest in Progress",
                     tasks = tasks,
                     isLoading = false,
-                    startTime = currentTimeMillis()
+                    startTime = currentTimeMillis(),
+                    allTasksCompleted = allCompleted
                 )
+
+                // Start BLE sensing only after successful initialization
+                startBleSensing()
+            } catch (e: CancellationException) {
+                // Coroutine was cancelled - show error so user can retry
+                showErrorWithoutCleanup("Quest loading was interrupted. Please try again.")
             } catch (e: Exception) {
-                cleanupAndNavigateHome("Failed to load quest: ${e.message}")
+                // Don't cleanup on general errors - might be temporary issue
+                showErrorWithoutCleanup("Failed to load quest: ${e.message}")
             }
         }
+    }
+
+    private fun showErrorWithoutCleanup(errorMessage: String) {
+        mutableState.value = mutableState.value.copy(
+            isLoading = false,
+            error = errorMessage
+        )
     }
 
     private suspend fun cleanupAndNavigateHome(
@@ -123,7 +150,13 @@ class ActiveQuestScreenModel(
 
     private fun startBleSensing() {
         screenModelScope.launch {
-            val result = bleSensingService.startSensing(questId)
+            // Try to start BLE sensing, retry once if it fails due to "already collecting"
+            var result = bleSensingService.startSensing(questId)
+            if (result.isFailure) {
+                // If already collecting (stale state), stop and retry
+                bleSensingService.stopSensing()
+                result = bleSensingService.startSensing(questId)
+            }
             if (result.isSuccess) {
                 mutableState.value = mutableState.value.copy(isBleCollecting = true)
             }
@@ -151,7 +184,18 @@ class ActiveQuestScreenModel(
             is ActiveQuestEvent.EndQuestEarly -> endQuestEarly()
             is ActiveQuestEvent.SubmitQuest -> submitQuest(success = true)
             is ActiveQuestEvent.RetryUpload -> submitQuest(success = true)
+            is ActiveQuestEvent.RetryLoad -> initializeQuest()
+            is ActiveQuestEvent.DismissCompletionError -> dismissCompletionError()
+            is ActiveQuestEvent.DismissSuccessAndNavigateHome -> navigateHomeAfterSuccess()
         }
+    }
+
+    private fun dismissCompletionError() {
+        mutableState.value = mutableState.value.copy(completionError = null)
+    }
+
+    private fun navigateHomeAfterSuccess() {
+        mutableState.value = mutableState.value.copy(shouldNavigateHome = true)
     }
 
     private fun completeTask(taskIndex: Int) {
@@ -170,17 +214,8 @@ class ActiveQuestScreenModel(
                 questStepCompletionRepository.updateStepStatus(nextStep.backendId, "in_progress", currentTime)
             }
 
-            // Reload tasks from DB to update UI
+            // Reload tasks from DB to update UI (this also computes allTasksCompleted)
             reloadTasks()
-
-            // Check if this was the last step
-            val updatedSteps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
-            val allCompleted = updatedSteps.all { it.status == "completed" } ||
-                              (taskIndex == steps.size - 1)
-            if (allCompleted) {
-                // Quest is complete, trigger upload
-                submitQuest(success = true)
-            }
         }
     }
 
@@ -208,12 +243,19 @@ class ActiveQuestScreenModel(
                     }
                 )
             }
-            mutableState.value = mutableState.value.copy(tasks = tasks)
+            val allCompleted = steps.isNotEmpty() && steps.all { it.status == "completed" }
+            mutableState.value = mutableState.value.copy(
+                tasks = tasks,
+                allTasksCompleted = allCompleted
+            )
         }
     }
 
     private fun submitQuest(success: Boolean, failReason: String? = null) {
         screenModelScope.launch {
+            // Stop BLE sensing immediately to ensure clean data cutoff
+            stopBleSensing()
+
             mutableState.value = mutableState.value.copy(
                 isUploading = true,
                 uploadProgress = "Preparing data..."
@@ -378,6 +420,9 @@ class ActiveQuestScreenModel(
 
     private fun endQuestEarly() {
         screenModelScope.launch {
+            // Stop BLE sensing immediately
+            stopBleSensing()
+
             // Mark current active step as failed
             val enrollmentId = mutableState.value.enrollmentId
             val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)

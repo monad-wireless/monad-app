@@ -12,9 +12,10 @@ data class ActiveQuestState(
     val bleRecordCount: Long = 0L,
     val isLoading: Boolean = true,
     val error: String? = null,
-    // New fields for quest completion
+    // Quest completion fields
+    val allTasksCompleted: Boolean = false,
     val isUploading: Boolean = false,
-    val uploadProgress: String = "",  // "Uploading BLE data...", "Uploading metadata...", etc.
+    val uploadProgress: String = "",
     val isCompleted: Boolean = false,
     val completionError: String? = null,
     val startTime: Long = 0L,

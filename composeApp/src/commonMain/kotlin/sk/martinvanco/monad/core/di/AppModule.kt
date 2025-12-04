@@ -60,7 +60,7 @@ val appModule = module {
     single { BleSensingService(get(), get()) }
 
     // New screen models
-    factory { SplashScreenModel(get(), get(), get()) }
+    factory { SplashScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
     factory { HomeScreenModel(get(), get(), get(), get(), get(), get()) }
