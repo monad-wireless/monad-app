@@ -5,16 +5,26 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.domain.AuthManager
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
+import sk.martinvanco.monad.core.data.repository.SettingsRepository
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
+import sk.martinvanco.monad.onboarding.presentation.OnboardingScreen
 
 class SplashScreenModel(
     private val navigationManager: NavigationManager,
-    private val authManager: AuthManager
+    private val authManager: AuthManager,
+    private val settingsRepository: SettingsRepository
 ) : StateScreenModel<SplashState>(SplashState()) {
 
     fun checkAuthStatus() {
         screenModelScope.launch {
+            // First check if onboarding has been completed
+            val onboardingCompleted = settingsRepository.isOnboardingCompleted()
+            if (!onboardingCompleted) {
+                navigationManager.replace(OnboardingScreen())
+                return@launch
+            }
+
             val user = authManager.getCurrentUser()
             if (user == null) {
                 navigationManager.replace(LoginScreen())

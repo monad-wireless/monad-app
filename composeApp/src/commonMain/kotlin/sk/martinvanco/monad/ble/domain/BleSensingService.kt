@@ -32,7 +32,9 @@ class BleSensingService(
     val recordCount: Flow<Long> = bleAdvertisementRepository.recordCount
 
     companion object {
-        private const val DEVICE_NAME_FILTER = "MONAD"
+        private val ALLOWED_DEVICE_NAMES = setOf(
+            "MONAD1", "MONAD2", "MONAD3", "MONAD4", "MONAD5", "MONAD6", "MONAD7"
+        )
     }
 
     suspend fun startSensing(questId: String): Result<Unit> {
@@ -52,7 +54,7 @@ class BleSensingService(
 
         sensingJob = bleScanner.advertisements
             .filter { advertisement ->
-                advertisement.name?.contains(DEVICE_NAME_FILTER, ignoreCase = true) == true
+                advertisement.name?.uppercase() in ALLOWED_DEVICE_NAMES
             }
             .onEach { advertisement ->
                 saveAdvertisement(questId, advertisement)

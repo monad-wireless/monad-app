@@ -17,6 +17,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreen
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreen
+import sk.martinvanco.monad.onboarding.presentation.OnboardingScreen
 
 /**
  * Custom screen transition that provides different animations based on the screens involved
@@ -65,6 +66,16 @@ fun defaultScreenTransitionSpec(): ScreenTransitionSpec = object : ScreenTransit
     ): ContentTransform {
         // Splash -> Login: Fade transition
         if (initialScreen is SplashScreen && targetScreen is LoginScreen) {
+            return fadeTransition()
+        }
+
+        // Splash -> Onboarding: Fade transition
+        if (initialScreen is SplashScreen && targetScreen is OnboardingScreen) {
+            return fadeTransition()
+        }
+
+        // Onboarding -> Login: Fade transition
+        if (initialScreen is OnboardingScreen && targetScreen is LoginScreen) {
             return fadeTransition()
         }
 

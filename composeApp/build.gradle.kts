@@ -121,7 +121,7 @@ sqldelight {
         create("Database") {
             packageName.set("sk.martinvanco.monad")
             schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
-            version = 2
+            version = 3
         }
     }
 }

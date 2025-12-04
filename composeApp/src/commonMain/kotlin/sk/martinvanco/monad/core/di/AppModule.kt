@@ -8,7 +8,9 @@ import sk.martinvanco.monad.auth.presentation.login.LoginScreenModel
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreenModel
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
 import sk.martinvanco.monad.core.data.remote.KtorClient
+import sk.martinvanco.monad.core.data.repository.SettingsRepository
 import sk.martinvanco.monad.core.domain.NetworkHandler
+import sk.martinvanco.monad.onboarding.presentation.OnboardingScreenModel
 import sk.martinvanco.monad.ble.data.BleScannerImpl
 import sk.martinvanco.monad.ble.data.repository.BleAdvertisementRepository
 import sk.martinvanco.monad.ble.domain.BleScanner
@@ -48,6 +50,7 @@ val appModule = module {
     single { UserRepository(get()) }
     single { BleAdvertisementRepository(get()) }
     single { QuestStepCompletionRepository(get()) }
+    single { SettingsRepository(get()) }
 
     // Domain
     single { AuthManager(get(), get()) }
@@ -60,7 +63,8 @@ val appModule = module {
     single { BleSensingService(get(), get()) }
 
     // New screen models
-    factory { SplashScreenModel(get(), get()) }
+    factory { SplashScreenModel(get(), get(), get()) }
+    factory { OnboardingScreenModel(get(), get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
     factory { HomeScreenModel(get(), get(), get(), get(), get(), get()) }

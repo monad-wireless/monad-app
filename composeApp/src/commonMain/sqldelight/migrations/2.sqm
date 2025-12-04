@@ -1,0 +1,5 @@
+-- Migration 2: Add AppSettings table for key-value storage
+CREATE TABLE IF NOT EXISTS AppSettings (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL
+);
