@@ -15,14 +15,12 @@ import sk.martinvanco.monad.quests.presentation.components.steps.*
  * @param stepNumber Sequential number of this step in the quest
  * @param task The active task to render
  * @param onComplete Callback when step is completed
- * @param onReportIssue Callback when user reports a problem
  */
 @Composable
 fun StepRouter(
     stepNumber: Int,
     task: ActiveTaskDto,
     onComplete: () -> Unit,
-    onReportIssue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     when (task.type) {
@@ -31,7 +29,6 @@ fun StepRouter(
                 stepNumber = stepNumber,
                 task = task,
                 onComplete = onComplete,
-                onReportIssue = onReportIssue,
                 modifier = modifier
             )
         }
@@ -41,7 +38,6 @@ fun StepRouter(
                 stepNumber = stepNumber,
                 task = task,
                 onComplete = onComplete,
-                onReportIssue = onReportIssue,
                 modifier = modifier
             )
         }
@@ -51,7 +47,6 @@ fun StepRouter(
                 stepNumber = stepNumber,
                 task = task,
                 onComplete = onComplete,
-                onReportIssue = onReportIssue,
                 modifier = modifier
             )
         }
@@ -61,7 +56,6 @@ fun StepRouter(
                 stepNumber = stepNumber,
                 task = task,
                 onComplete = onComplete,
-                onReportIssue = onReportIssue,
                 modifier = modifier
             )
         }
@@ -71,7 +65,6 @@ fun StepRouter(
                 stepNumber = stepNumber,
                 task = task,
                 onComplete = onComplete,
-                onReportIssue = onReportIssue,
                 modifier = modifier
             )
         }

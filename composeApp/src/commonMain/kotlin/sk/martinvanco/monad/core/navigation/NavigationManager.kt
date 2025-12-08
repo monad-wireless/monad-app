@@ -24,6 +24,11 @@ interface NavigationManager {
      * Replace current screen with a new one
      */
     fun replace(screen: Screen)
+
+    /**
+     * Replace entire navigation stack with a new screen (clears back stack)
+     */
+    fun replaceAll(screen: Screen)
 }
 
 /**
@@ -47,6 +52,10 @@ class NavigationManagerImpl : NavigationManager {
     override fun replace(screen: Screen) {
         _navigationCommands.tryEmit(NavigationCommand.Replace(screen))
     }
+
+    override fun replaceAll(screen: Screen) {
+        _navigationCommands.tryEmit(NavigationCommand.ReplaceAll(screen))
+    }
 }
 
 /**
@@ -56,4 +65,5 @@ sealed interface NavigationCommand {
     data class Navigate(val screen: Screen) : NavigationCommand
     data object Back : NavigationCommand
     data class Replace(val screen: Screen) : NavigationCommand
+    data class ReplaceAll(val screen: Screen) : NavigationCommand
 }

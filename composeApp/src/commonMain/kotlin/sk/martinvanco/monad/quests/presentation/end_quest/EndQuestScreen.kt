@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import sk.martinvanco.monad.home.presentation.HomeScreen
 
 data class EndQuestScreen(
     val questId: String,
@@ -47,7 +46,7 @@ data class EndQuestScreen(
             questName = questName,
             onConfirmEndQuest = {
                 // TODO: Call API to end quest
-                navigator.popUntil { it is HomeScreen }
+                navigator.popUntilRoot()
             },
             onCancel = { navigator.pop() }
         )

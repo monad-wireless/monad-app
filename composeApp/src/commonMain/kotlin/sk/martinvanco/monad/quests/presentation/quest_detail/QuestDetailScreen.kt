@@ -71,7 +71,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
         // Navigate to ActiveQuestScreen when enrollment is created
         LaunchedEffect(state.enrollmentId) {
             if (state.enrollmentId != null) {
-                navigator.replace(ActiveQuestScreen(questId))
+                navigator.replaceAll(ActiveQuestScreen(questId))
             }
         }
 

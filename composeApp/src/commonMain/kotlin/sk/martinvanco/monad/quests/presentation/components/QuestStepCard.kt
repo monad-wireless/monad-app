@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +30,6 @@ import sk.martinvanco.monad.quests.domain.TaskStatus
  * @param status Current execution status of the step
  * @param content Composable slot for step-specific UI (camera, timer, etc.)
  * @param actions Composable slot for step-specific action buttons
- * @param onReportIssue Callback when user reports a problem
  */
 @Composable
 fun QuestStepCard(
@@ -41,8 +39,7 @@ fun QuestStepCard(
     status: TaskStatus,
     modifier: Modifier = Modifier,
     content: (@Composable () -> Unit)? = null,
-    actions: (@Composable () -> Unit)? = null,
-    onReportIssue: () -> Unit = {}
+    actions: (@Composable () -> Unit)? = null
 ) {
     // Animated colors based on status
     val backgroundColor by animateColorAsState(
@@ -144,8 +141,7 @@ fun QuestStepCard(
 
                     // Action buttons section
                     StepActions(
-                        actions = actions,
-                        onReportIssue = onReportIssue
+                        actions = actions
                     )
                 }
             }
@@ -213,28 +209,17 @@ private fun StepHeader(
 }
 
 /**
- * Actions section with report issue button and step-specific actions
+ * Actions section with step-specific actions
  */
 @Composable
 private fun StepActions(
-    actions: (@Composable () -> Unit)?,
-    onReportIssue: () -> Unit
+    actions: (@Composable () -> Unit)?
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Report issue button
-        TextButton(onClick = onReportIssue) {
-            Text(
-                text = "Report an issue",
-                fontSize = 14.sp,
-                color = Color.Black,
-                textDecoration = TextDecoration.Underline
-            )
-        }
-
         // Step-specific action buttons
         actions?.invoke()
     }

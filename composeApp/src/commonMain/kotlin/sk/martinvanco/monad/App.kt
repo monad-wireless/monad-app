@@ -60,6 +60,7 @@ fun App() {
                             is NavigationCommand.Navigate -> navigator.push(command.screen)
                             is NavigationCommand.Back -> navigator.pop()
                             is NavigationCommand.Replace -> navigator.replace(command.screen)
+                            is NavigationCommand.ReplaceAll -> navigator.replaceAll(command.screen)
                         }
                     }
                 }

@@ -40,7 +40,6 @@ fun BleDeviceStep(
     stepNumber: Int,
     task: ActiveTaskDto,
     onComplete: () -> Unit,
-    onReportIssue: () -> Unit,
     modifier: Modifier = Modifier,
     bleScanner: BleScanner = koinInject()
 ) {
@@ -157,8 +156,7 @@ fun BleDeviceStep(
                     onComplete()
                 }
             )
-        },
-        onReportIssue = onReportIssue
+        }
     )
 }
 

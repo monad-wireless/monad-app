@@ -64,7 +64,7 @@ class LoginScreenModel(
                 val response = authService.login(email, password)
                 authManager.saveUserFromLogin(response.email, response.name, response.token)
                 mutableState.value = state.value.copy(isLoading = false)
-                navigationManager.replace(MainContainerScreen())
+                navigationManager.replaceAll(MainContainerScreen())
             } catch (e: Exception) {
                 val errorMessage = parseErrorMessage(e)
                 mutableState.value = state.value.copy(isLoading = false, error = errorMessage)

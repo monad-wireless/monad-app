@@ -9,7 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.*
@@ -163,9 +162,7 @@ data class ActiveQuestScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             ActiveQuestTopBar(
-                title = state.questName,
-                isBleCollecting = state.isBleCollecting,
-                bleRecordCount = state.bleRecordCount
+                title = state.questName
             )
             when {
                 state.isLoading -> {
@@ -228,9 +225,6 @@ data class ActiveQuestScreen(
                                 task = task,
                                 onComplete = {
                                     screenModel.onEvent(ActiveQuestEvent.CompleteTask(index))
-                                },
-                                onReportIssue = {
-                                    screenModel.onEvent(ActiveQuestEvent.FailTask(index, "Issue reported by user"))
                                 }
                             )
                         }
@@ -288,78 +282,41 @@ data class ActiveQuestScreen(
 
 @Composable
 private fun ActiveQuestTopBar(
-    title: String,
-    isBleCollecting: Boolean = false,
-    bleRecordCount: Long = 0
+    title: String
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFFFFFFFF))
             .displayCutoutPadding()
             .statusBarsPadding()
+            .padding(top = 16.dp)
+            .height(70.dp)
+            .shadow(
+                elevation = 1.dp,
+                shape = RoundedCornerShape(0.dp),
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.05f),
+                spotColor = Color.Black.copy(alpha = 0.05f)
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(70.dp)
-                .shadow(
-                    elevation = 1.dp,
-                    shape = RoundedCornerShape(0.dp),
-                    clip = false,
-                    ambientColor = Color.Black.copy(alpha = 0.05f),
-                    spotColor = Color.Black.copy(alpha = 0.05f)
-                )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF22C55E))
-                    )
-                    Text(
-                        text = title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black
-                    )
-                }
-
-                // BLE Status indicator
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isBleCollecting) Color(0xFFDCFCE7) else Color(0xFFF3F4F6))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Sensors,
-                        contentDescription = "BLE",
-                        tint = if (isBleCollecting) Color(0xFF22C55E) else Color(0xFF9CA3AF),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "$bleRecordCount",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isBleCollecting) Color(0xFF166534) else Color(0xFF6B7280)
-                    )
-                }
-            }
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF22C55E))
+            )
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Black
+            )
         }
     }
 }

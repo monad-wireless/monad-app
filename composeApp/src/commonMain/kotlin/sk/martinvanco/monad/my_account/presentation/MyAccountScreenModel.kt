@@ -39,7 +39,7 @@ class MyAccountScreenModel(
     private fun logout() {
         screenModelScope.launch {
             authManager.clearUser()
-            navigationManager.replace(LoginScreen())
+            navigationManager.replaceAll(LoginScreen())
         }
     }
 }

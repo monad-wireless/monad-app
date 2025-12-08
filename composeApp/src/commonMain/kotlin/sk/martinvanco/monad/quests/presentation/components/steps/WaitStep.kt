@@ -27,7 +27,6 @@ fun WaitStep(
     stepNumber: Int,
     task: ActiveTaskDto,
     onComplete: () -> Unit,
-    onReportIssue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val config = remember(task) {
@@ -86,8 +85,7 @@ fun WaitStep(
                     isPaused = false
                 }
             )
-        },
-        onReportIssue = onReportIssue
+        }
     )
 }
 

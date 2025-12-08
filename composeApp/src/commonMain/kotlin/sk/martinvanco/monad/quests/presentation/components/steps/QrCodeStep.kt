@@ -29,7 +29,6 @@ fun QrCodeStep(
     stepNumber: Int,
     task: ActiveTaskDto,
     onComplete: () -> Unit,
-    onReportIssue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val config = remember(task) {
@@ -74,8 +73,7 @@ fun QrCodeStep(
                     errorMessage = null
                 }
             )
-        },
-        onReportIssue = onReportIssue
+        }
     )
 }
 

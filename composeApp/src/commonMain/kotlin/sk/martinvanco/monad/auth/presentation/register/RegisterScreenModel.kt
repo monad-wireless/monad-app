@@ -82,7 +82,7 @@ class RegisterScreenModel(
                     token = response.token
                 )
                 mutableState.value = state.value.copy(isLoading = false)
-                navigationManager.replace(MainContainerScreen())
+                navigationManager.replaceAll(MainContainerScreen())
             } catch (e: Exception) {
                 val errorMessage = parseErrorMessage(e)
                 mutableState.value = state.value.copy(isLoading = false, error = errorMessage)

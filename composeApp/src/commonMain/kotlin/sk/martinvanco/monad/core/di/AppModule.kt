@@ -67,7 +67,7 @@ val appModule = module {
     factory { OnboardingScreenModel(get(), get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
-    factory { HomeScreenModel(get(), get(), get(), get(), get(), get()) }
+    factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get()) }
     factory { QuestsScreenModel() }
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), questId) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), get(), get(), questId) }

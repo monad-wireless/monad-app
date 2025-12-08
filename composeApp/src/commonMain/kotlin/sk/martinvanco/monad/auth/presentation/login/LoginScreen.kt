@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -53,6 +54,7 @@ class LoginScreen : Screen {
     override fun Content() {
         val screenModel = koinScreenModel<LoginScreenModel>()
         val state by screenModel.state.collectAsState()
+        val keyboardController = LocalSoftwareKeyboardController.current
 
         Box(
             modifier = Modifier
@@ -110,7 +112,10 @@ class LoginScreen : Screen {
                         imeAction = ImeAction.Done
                     ),
                     keyboardActions = KeyboardActions(
-                        onDone = { screenModel.onEvent(LoginEvent.LoginButtonClick) }
+                        onDone = {
+                            keyboardController?.hide()
+                            screenModel.onEvent(LoginEvent.LoginButtonClick)
+                        }
                     )
                 )
 

@@ -13,6 +13,7 @@ import sk.martinvanco.monad.ble.domain.BleScanner
 import sk.martinvanco.monad.ble.domain.BleSensingService
 import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
 import sk.martinvanco.monad.core.domain.toast.ToastManager
+import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.domain.model.QuestCardDt
 import sk.martinvanco.monad.storage.domain.BleDataExportService
@@ -23,7 +24,8 @@ class HomeScreenModel(
     private val toastManager: ToastManager,
     private val questsService: QuestsService,
     private val bleSensingService: BleSensingService,
-    private val bleDataExportService: BleDataExportService
+    private val bleDataExportService: BleDataExportService,
+    private val userRepository: UserRepository
 ) : StateScreenModel<HomeState>(HomeState()) {
 
     private var scanJob: Job? = null
@@ -31,6 +33,14 @@ class HomeScreenModel(
     init {
         loadQuests()
         observeBleRecordCount()
+        loadUserName()
+    }
+
+    private fun loadUserName() {
+        screenModelScope.launch {
+            val user = userRepository.getCurrentUser()
+            mutableState.value = mutableState.value.copy(userName = user?.name)
+        }
     }
 
     private fun observeBleRecordCount() {

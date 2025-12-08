@@ -22,7 +22,6 @@ fun TextBoxStep(
     stepNumber: Int,
     task: ActiveTaskDto,
     onComplete: () -> Unit,
-    onReportIssue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     QuestStepCard(
@@ -36,8 +35,7 @@ fun TextBoxStep(
         },
         actions = {
             TextBoxActions(onContinue = onComplete)
-        },
-        onReportIssue = onReportIssue
+        }
     )
 }
 

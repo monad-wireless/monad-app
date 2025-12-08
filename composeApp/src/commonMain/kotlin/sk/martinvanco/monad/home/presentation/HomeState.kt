@@ -15,5 +15,6 @@ data class HomeState(
     val isBleCollecting: Boolean = false,
     val isUploading: Boolean = false,
     val uploadSuccess: Boolean? = null,
-    val uploadError: String? = null
+    val uploadError: String? = null,
+    val userName: String? = null
 )

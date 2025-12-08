@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,7 +25,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Timelapse
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,11 +67,9 @@ class HomeScreen : Screen {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             GreetingsMessage(
-                name = "Martin",
+                name = state.userName,
                 bleRecordCount = state.bleRecordCount,
-                isBleCollecting = state.isBleCollecting,
-                isUploading = state.isUploading,
-                onUploadClick = { screenModel.onEvent(HomeEvent.UploadBleData) }
+                isBleCollecting = state.isBleCollecting
             )
 
             Column(
@@ -285,11 +281,9 @@ class HomeScreen : Screen {
 
     @Composable
     private fun GreetingsMessage(
-        name: String,
+        name: String?,
         bleRecordCount: Long = 0,
-        isBleCollecting: Boolean = false,
-        isUploading: Boolean = false,
-        onUploadClick: () -> Unit = {}
+        isBleCollecting: Boolean = false
     ) {
         Column(
             Modifier
@@ -305,7 +299,7 @@ class HomeScreen : Screen {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Hey $name!",
+                        if (name != null) "Hey $name!" else "Hey!",
                         style = MaterialTheme.typography.h2,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.SemiBold
@@ -339,50 +333,6 @@ class HomeScreen : Screen {
                         fontWeight = FontWeight.SemiBold,
                         color = if (isBleCollecting) Color(0xFF166534) else Color(0xFF5B6ECC)
                     )
-                }
-            }
-
-            // Upload Button
-            if (bleRecordCount > 0) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isUploading) Color(0xFF9CA3AF) else Color(0xFF5B6ECC))
-                        .clickable(enabled = !isUploading) { onUploadClick() }
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isUploading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Uploading...",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.CloudUpload,
-                            contentDescription = "Upload",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Upload BLE Data",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
-                        )
-                    }
                 }
             }
         }
