@@ -1,4 +1,4 @@
 TEAM_ID=
 BUNDLE_ID=sk.martinvanco.monad
-APP_NAME=Monad
+APP_NAME=Monad Scan
 OTHER_LDFLAGS = $(inherited) -lsqlite3
