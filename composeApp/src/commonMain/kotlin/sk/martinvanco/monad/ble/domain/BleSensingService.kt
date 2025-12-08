@@ -33,7 +33,7 @@ class BleSensingService(
 
     companion object {
         private val ALLOWED_DEVICE_NAMES = setOf(
-            "MONAD1", "MONAD2", "MONAD3", "MONAD4", "MONAD5", "MONAD6", "MONAD7"
+            "MONAD", "MONAD1", "MONAD2", "MONAD3", "MONAD4", "MONAD5", "MONAD6", "MONAD7"
         )
     }
 

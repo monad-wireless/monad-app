@@ -2,6 +2,7 @@ package sk.martinvanco.monad.core.presentation.components.button_primary
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,12 +25,12 @@ fun ButtonPrimary(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp),
-        enabled = enabled && !isLoading,
+        enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
-            disabledContainerColor = MaterialTheme.colorScheme.surface,
-            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+            disabledContentColor = MaterialTheme.colorScheme.onPrimary
         ),
         shape = MaterialTheme.shapes.medium,
         elevation = ButtonDefaults.buttonElevation(
@@ -42,7 +43,7 @@ fun ButtonPrimary(
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                modifier = Modifier.height(24.dp),
+                modifier = Modifier.size(24.dp),
                 color = MaterialTheme.colorScheme.onPrimary,
                 strokeWidth = 2.dp
             )
