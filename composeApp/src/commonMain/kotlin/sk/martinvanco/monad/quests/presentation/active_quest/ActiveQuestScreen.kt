@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -31,6 +30,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform.getKoin
 import sk.martinvanco.monad.quests.presentation.components.StepRouter
+import sk.martinvanco.monad.quests.presentation.quest_completed.QuestCompletedScreen
 import sk.martinvanco.monad.quests.presentation.quest_ended.QuestEndedEarlyScreen
 
 data class ActiveQuestScreen(
@@ -60,6 +60,21 @@ data class ActiveQuestScreen(
                         enrollmentId = state.enrollmentId,
                         userName = state.userName,
                         startTime = state.startTime
+                    )
+                )
+            }
+        }
+
+        // Navigate to completed screen when quest is completed
+        LaunchedEffect(state.navigateToCompletedScreen) {
+            if (state.navigateToCompletedScreen) {
+                navigator.replace(
+                    QuestCompletedScreen(
+                        questId = questId,
+                        enrollmentId = state.enrollmentId,
+                        userName = state.userName,
+                        startTime = state.startTime,
+                        uploadAlreadyCompleted = true
                     )
                 )
             }
@@ -104,42 +119,6 @@ data class ActiveQuestScreen(
                     }
                 }
             }
-        }
-
-        // Success dialog
-        if (state.isCompleted) {
-            AlertDialog(
-                onDismissRequest = { navigator.popUntilRoot() },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = "Success",
-                        tint = Color(0xFF22C55E),
-                        modifier = Modifier.size(48.dp)
-                    )
-                },
-                title = {
-                    Text(
-                        text = "Quest Completed!",
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center
-                    )
-                },
-                text = {
-                    Text(
-                        text = "Your data has been uploaded successfully. Thank you for participating!",
-                        textAlign = TextAlign.Center
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { navigator.popUntilRoot() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
-                    ) {
-                        Text("Return Home", color = Color.White)
-                    }
-                }
-            )
         }
 
         // Error dialog

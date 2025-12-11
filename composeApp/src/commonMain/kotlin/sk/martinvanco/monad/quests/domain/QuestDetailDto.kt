@@ -149,7 +149,7 @@ data class QuestDetailDto(
                     .map { TaskDto.fromStepResponse(it) },
                 points = response.points,
                 questType = "Quest",
-                imageUrl = "https://picsum.photos/800/400" // TODO: Replace with response.imageUrl from backend
+                imageUrl = response.featuredImage
             )
         }
     }

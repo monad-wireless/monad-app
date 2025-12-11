@@ -18,7 +18,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,24 +25,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import monad.composeapp.generated.resources.Res
-import monad.composeapp.generated.resources.field_label_email
-import monad.composeapp.generated.resources.field_label_password
-import monad.composeapp.generated.resources.login_screen
-import monad.composeapp.generated.resources.login_screen_forgot_password
-import monad.composeapp.generated.resources.login_screen_login
-import monad.composeapp.generated.resources.login_screen_no_acc
 import monad.composeapp.generated.resources.monad_logo_dark
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
-import cafe.adriel.voyager.navigator.LocalNavigator
-import cafe.adriel.voyager.navigator.currentOrThrow
 import org.jetbrains.compose.resources.painterResource
-import org.jetbrains.compose.resources.stringResource
 import sk.martinvanco.monad.core.presentation.components.button_primary.ButtonPrimary
 import sk.martinvanco.monad.core.presentation.components.filled_input.FilledInput
 import sk.martinvanco.monad.core.util.dismissKeyboardOnTap
@@ -70,12 +60,21 @@ class LoginScreen : Screen {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = stringResource(Res.string.login_screen),
+                    text = "Welcome to MONAD",
                     style = MaterialTheme.typography.h1,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Enter your nickname to continue",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 state.error?.let { error ->
                     Text(
@@ -84,68 +83,34 @@ class LoginScreen : Screen {
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
                 FilledInput(
-                    value = state.email,
-                    onValueChange = { screenModel.onEvent(LoginEvent.OnEmailFieldChange(it)) },
-                    label = stringResource(Res.string.field_label_email),
-                    errorText = state.emailError ?: "",
+                    value = state.nickname,
+                    onValueChange = { screenModel.onEvent(LoginEvent.OnNicknameFieldChange(it)) },
+                    label = "Nickname",
+                    errorText = state.nicknameError ?: "",
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Email,
-                        imeAction = ImeAction.Next
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                FilledInput(
-                    value = state.password,
-                    onValueChange = { screenModel.onEvent(LoginEvent.OnPasswordFieldChange(it)) },
-                    label = stringResource(Res.string.field_label_password),
-                    errorText = state.passwordError ?: "",
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Done,
+                        capitalization = KeyboardCapitalization.None
                     ),
                     keyboardActions = KeyboardActions(
                         onDone = {
                             keyboardController?.hide()
-                            screenModel.onEvent(LoginEvent.LoginButtonClick)
+                            screenModel.onEvent(LoginEvent.ContinueButtonClick)
                         }
                     )
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TextButton(
-                    onClick = { screenModel.onEvent(LoginEvent.ForgotPasswordClick) },
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text(
-                        text = stringResource(Res.string.login_screen_forgot_password),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
                 Spacer(modifier = Modifier.height(24.dp))
 
                 ButtonPrimary(
-                    text = stringResource(Res.string.login_screen_login),
-                    onClick = { screenModel.onEvent(LoginEvent.LoginButtonClick) },
+                    text = "Continue",
+                    onClick = { screenModel.onEvent(LoginEvent.ContinueButtonClick) },
                     isLoading = state.isLoading
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                TextButton(
-                    onClick = { screenModel.onEvent(LoginEvent.CreateAccountButtonClick) }
-                ) {
-                    Text(text = stringResource(Res.string.login_screen_no_acc))
-                }
             }
 
             // Logo at the bottom

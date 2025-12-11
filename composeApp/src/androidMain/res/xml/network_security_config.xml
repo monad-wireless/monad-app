@@ -9,6 +9,15 @@
         <domain includeSubdomains="false">10.0.2.2</domain> <!-- Android emulator host -->
     </domain-config>
 
+    <!-- FIIT server with certificate chain issue -->
+    <domain-config>
+        <domain includeSubdomains="true">fiit.stuba.sk</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+
     <!-- Production: Only HTTPS allowed (default) -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>

@@ -32,13 +32,13 @@ object TaskConfigParser {
      * Type-safe getters for specific config types
      */
     fun getQrCodeConfig(task: TaskDto): QrCodeConfig? {
-        return if (task.type == TaskType.QR_CODE) {
+        return if (task.type == TaskType.QR_CODE || task.type == TaskType.SCAN_QR) {
             parseConfig(task.type, task.config) as? QrCodeConfig
         } else null
     }
 
     fun getQrCodeConfig(task: ActiveTaskDto): QrCodeConfig? {
-        return if (task.type == TaskType.QR_CODE) {
+        return if (task.type == TaskType.QR_CODE || task.type == TaskType.SCAN_QR) {
             parseConfig(task.type, task.config) as? QrCodeConfig
         } else null
     }

@@ -42,6 +42,7 @@ kotlin {
             implementation(libs.sqldelight.android.driver)
             implementation(libs.kmm.wifi.connect.android)
             implementation(libs.androidx.startup.runtime)
+            implementation(libs.coil.network.okhttp)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

@@ -414,10 +414,10 @@ class ActiveQuestScreenModel(
                 mutableState.value = mutableState.value.copy(uploadProgress = "Cleaning up...")
                 questDataFlushService.flushQuestData(enrollmentId, questId, user.id)
 
-                // 5. Done!
+                // 5. Done! Navigate to completed screen
                 mutableState.value = mutableState.value.copy(
                     isUploading = false,
-                    isCompleted = true
+                    navigateToCompletedScreen = true
                 )
 
             } catch (e: ClientRequestException) {

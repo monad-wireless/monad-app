@@ -1,9 +1,5 @@
 package sk.martinvanco.monad
 
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -12,6 +8,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.Navigator
+import coil3.compose.setSingletonImageLoaderFactory
+import sk.martinvanco.monad.core.image.createImageLoader
 import org.koin.core.context.startKoin
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.mp.KoinPlatform.getKoin
@@ -41,6 +39,11 @@ fun App() {
         } catch (e: Exception) {
             // Already initialized
         }
+    }
+
+    // Setup Coil ImageLoader with platform-specific networking
+    setSingletonImageLoaderFactory { context ->
+        createImageLoader(context)
     }
 
     AppTheme(darkTheme = false) {

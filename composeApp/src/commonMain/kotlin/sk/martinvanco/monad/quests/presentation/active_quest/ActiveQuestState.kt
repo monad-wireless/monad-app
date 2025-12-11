@@ -23,5 +23,7 @@ data class ActiveQuestState(
     val shouldNavigateHome: Boolean = false,
     // End quest early fields
     val showEndQuestConfirmation: Boolean = false,
-    val navigateToEndedEarlyScreen: Boolean = false
+    val navigateToEndedEarlyScreen: Boolean = false,
+    // Navigate to completed screen
+    val navigateToCompletedScreen: Boolean = false
 )

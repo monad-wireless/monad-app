@@ -12,7 +12,8 @@ data class QuestDetailResponseDto(
     val points: Float,
     val estimatedDuration: Int?,
     val createdAt: String,
-    val steps: List<StepResponseDto>
+    val steps: List<StepResponseDto>,
+    val featuredImage: String? = null
 )
 
 @Serializable

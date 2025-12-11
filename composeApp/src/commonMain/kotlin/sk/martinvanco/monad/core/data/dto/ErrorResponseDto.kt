@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ErrorResponseDto(
-    val code: Int? = null,
+    val code: String? = null,
     val message: String? = null,
     val error: String? = null
 )

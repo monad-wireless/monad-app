@@ -163,7 +163,7 @@ class HomeScreen : Screen {
                         ) {
                             state.quests.forEach { quest ->
                                 QuestCard(quest = quest, onClick = {
-                                    navigator.parent?.push(QuestDetailScreen(quest.id))
+                                    navigator.push(QuestDetailScreen(quest.id))
                                 })
                             }
                         }

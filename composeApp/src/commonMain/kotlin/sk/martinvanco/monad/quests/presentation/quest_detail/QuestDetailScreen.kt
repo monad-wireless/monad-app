@@ -170,13 +170,15 @@ data class QuestDetailScreen(val questId: String) : Screen {
         isStartingQuest: Boolean,
         onStartClick: () -> Unit
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp, 32.dp, 24.dp, 48.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Scrollable content
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp, 32.dp, 24.dp, 80.dp), // Extra bottom padding for fixed button
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             // Quest Type Badge
             Row(
                 modifier = Modifier
@@ -210,16 +212,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
                 lineHeight = 36.sp
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = quest.description,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Normal,
-                color = Color.Black,
-            )
-
-            // Quest image
+            // Quest image - right after title, before description
             quest.imageUrl?.let { imageUrl ->
                 Spacer(modifier = Modifier.height(12.dp))
                 AsyncImage(
@@ -232,6 +225,15 @@ data class QuestDetailScreen(val questId: String) : Screen {
                     contentScale = ContentScale.Crop
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = quest.description,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Normal,
+                color = Color.Black,
+            )
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -306,41 +308,49 @@ data class QuestDetailScreen(val questId: String) : Screen {
                     }
                 }
             }
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Button(
-                onClick = onStartClick,
-                enabled = !isStartingQuest,
+            // Fixed button section at bottom with white background
+            Box(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF5B6ECC),
-                    disabledContainerColor = Color(0xFF5B6ECC).copy(alpha = 0.6f)
-                ),
-                shape = RoundedCornerShape(6.dp)
+                    .background(Color.White)
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
-                if (isStartingQuest) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Starting...",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                } else {
-                    Text(
-                        text = "Start the experiment",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
+                Button(
+                    onClick = onStartClick,
+                    enabled = !isStartingQuest,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF5B6ECC),
+                        disabledContainerColor = Color(0xFF5B6ECC).copy(alpha = 0.6f)
+                    ),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    if (isStartingQuest) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Starting...",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    } else {
+                        Text(
+                            text = "Start Quest",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
         }
