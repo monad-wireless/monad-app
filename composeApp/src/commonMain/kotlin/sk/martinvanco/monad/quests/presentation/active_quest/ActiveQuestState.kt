@@ -6,6 +6,7 @@ data class ActiveQuestState(
     val questId: String = "",
     val enrollmentId: String = "",
     val questName: String = "",
+    val userName: String = "",
     val tasks: List<ActiveTaskDto> = emptyList(),
     val points: Float = 0f,
     val isBleCollecting: Boolean = false,
@@ -19,5 +20,8 @@ data class ActiveQuestState(
     val isCompleted: Boolean = false,
     val completionError: String? = null,
     val startTime: Long = 0L,
-    val shouldNavigateHome: Boolean = false
+    val shouldNavigateHome: Boolean = false,
+    // End quest early fields
+    val showEndQuestConfirmation: Boolean = false,
+    val navigateToEndedEarlyScreen: Boolean = false
 )

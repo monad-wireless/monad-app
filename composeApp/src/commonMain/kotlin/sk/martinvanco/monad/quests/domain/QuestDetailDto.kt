@@ -134,7 +134,8 @@ data class QuestDetailDto(
     val duration: Int?,
     val tasks: List<TaskDto>,
     val points: Float,
-    val questType: String = "Quest"
+    val questType: String = "Quest",
+    val imageUrl: String? = null
 ) {
     companion object {
         fun fromResponse(response: QuestDetailResponseDto): QuestDetailDto {
@@ -147,7 +148,8 @@ data class QuestDetailDto(
                     .sortedBy { it.order }
                     .map { TaskDto.fromStepResponse(it) },
                 points = response.points,
-                questType = "Quest"
+                questType = "Quest",
+                imageUrl = "https://picsum.photos/800/400" // TODO: Replace with response.imageUrl from backend
             )
         }
     }

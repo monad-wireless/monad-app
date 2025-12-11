@@ -100,6 +100,7 @@ class ActiveQuestScreenModel(
                 mutableState.value = mutableState.value.copy(
                     enrollmentId = enrollmentId,
                     questName = "Quest in Progress",
+                    userName = user.name ?: "",
                     tasks = tasks,
                     isLoading = false,
                     startTime = currentTimeMillis(),
@@ -181,13 +182,56 @@ class ActiveQuestScreenModel(
         when (event) {
             is ActiveQuestEvent.CompleteTask -> completeTask(event.taskIndex)
             is ActiveQuestEvent.FailTask -> failTask(event.taskIndex, event.reason)
-            is ActiveQuestEvent.EndQuestEarly -> endQuestEarly()
             is ActiveQuestEvent.SubmitQuest -> submitQuest(success = true)
-            is ActiveQuestEvent.RetryUpload -> submitQuest(success = true)
+            is ActiveQuestEvent.RetryUpload -> retryUpload()
             is ActiveQuestEvent.RetryLoad -> initializeQuest()
             is ActiveQuestEvent.DismissCompletionError -> dismissCompletionError()
             is ActiveQuestEvent.DismissSuccessAndNavigateHome -> navigateHomeAfterSuccess()
+            // End quest early events
+            is ActiveQuestEvent.ShowEndQuestConfirmation -> showEndQuestConfirmation()
+            is ActiveQuestEvent.DismissEndQuestConfirmation -> dismissEndQuestConfirmation()
+            is ActiveQuestEvent.ConfirmEndQuest -> confirmEndQuest()
         }
+    }
+
+    private fun showEndQuestConfirmation() {
+        mutableState.value = mutableState.value.copy(showEndQuestConfirmation = true)
+    }
+
+    private fun dismissEndQuestConfirmation() {
+        mutableState.value = mutableState.value.copy(showEndQuestConfirmation = false)
+    }
+
+    private fun confirmEndQuest() {
+        // Stop BLE sensing immediately
+        stopBleSensing()
+
+        // Mark current active step as failed
+        screenModelScope.launch {
+            val enrollmentId = mutableState.value.enrollmentId
+            val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
+            val activeStep = steps.find { it.status == "in_progress" }
+
+            activeStep?.let { step ->
+                val currentTime = currentTimeMillis()
+                questStepCompletionRepository.markStepFailed(
+                    backendId = step.backendId,
+                    completedAt = currentTime,
+                    skipMessage = "Quest ended early by user",
+                    skipErrorCode = "USER_CANCELLED"
+                )
+            }
+        }
+
+        // Navigate to ended early screen
+        mutableState.value = mutableState.value.copy(
+            showEndQuestConfirmation = false,
+            navigateToEndedEarlyScreen = true
+        )
+    }
+
+    private fun retryUpload() {
+        submitQuest(success = true)
     }
 
     private fun dismissCompletionError() {
@@ -195,7 +239,10 @@ class ActiveQuestScreenModel(
     }
 
     private fun navigateHomeAfterSuccess() {
-        mutableState.value = mutableState.value.copy(shouldNavigateHome = true)
+        mutableState.value = mutableState.value.copy(
+            isCompleted = false,
+            shouldNavigateHome = true
+        )
     }
 
     private fun completeTask(taskIndex: Int) {
@@ -418,33 +465,9 @@ class ActiveQuestScreenModel(
         }
     }
 
-    private fun endQuestEarly() {
-        screenModelScope.launch {
-            // Stop BLE sensing immediately
-            stopBleSensing()
-
-            // Mark current active step as failed
-            val enrollmentId = mutableState.value.enrollmentId
-            val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
-            val activeStep = steps.find { it.status == "in_progress" }
-
-            activeStep?.let { step ->
-                val currentTime = currentTimeMillis()
-                questStepCompletionRepository.markStepFailed(
-                    backendId = step.backendId,
-                    completedAt = currentTime,
-                    skipMessage = "Quest ended early by user",
-                    skipErrorCode = "USER_CANCELLED"
-                )
-            }
-
-            // Submit with failure status
-            submitQuest(success = false, failReason = "Quest ended early")
-        }
-    }
-
     private fun stopBleSensing() {
         bleSensingService.stopSensing()
+        mutableState.value = mutableState.value.copy(isBleCollecting = false)
     }
 
     override fun onDispose() {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.*
@@ -29,8 +30,8 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform.getKoin
-import sk.martinvanco.monad.quests.presentation.end_quest.EndQuestScreen
 import sk.martinvanco.monad.quests.presentation.components.StepRouter
+import sk.martinvanco.monad.quests.presentation.quest_ended.QuestEndedEarlyScreen
 
 data class ActiveQuestScreen(
     val questId: String
@@ -43,10 +44,24 @@ data class ActiveQuestScreen(
         }
         val state by screenModel.state.collectAsState()
 
-        // Navigate home when enrollment not found (404)
+        // Navigate home when requested
         LaunchedEffect(state.shouldNavigateHome) {
             if (state.shouldNavigateHome) {
                 navigator.popUntilRoot()
+            }
+        }
+
+        // Navigate to ended early screen when quest is ended early
+        LaunchedEffect(state.navigateToEndedEarlyScreen) {
+            if (state.navigateToEndedEarlyScreen) {
+                navigator.replace(
+                    QuestEndedEarlyScreen(
+                        questId = questId,
+                        enrollmentId = state.enrollmentId,
+                        userName = state.userName,
+                        startTime = state.startTime
+                    )
+                )
             }
         }
 
@@ -94,7 +109,7 @@ data class ActiveQuestScreen(
         // Success dialog
         if (state.isCompleted) {
             AlertDialog(
-                onDismissRequest = { screenModel.onEvent(ActiveQuestEvent.DismissSuccessAndNavigateHome) },
+                onDismissRequest = { navigator.popUntilRoot() },
                 icon = {
                     Icon(
                         imageVector = Icons.Filled.CheckCircle,
@@ -118,7 +133,7 @@ data class ActiveQuestScreen(
                 },
                 confirmButton = {
                     Button(
-                        onClick = { screenModel.onEvent(ActiveQuestEvent.DismissSuccessAndNavigateHome) },
+                        onClick = { navigator.popUntilRoot() },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
                     ) {
                         Text("Return Home", color = Color.White)
@@ -153,6 +168,49 @@ data class ActiveQuestScreen(
                         onClick = { screenModel.onEvent(ActiveQuestEvent.DismissCompletionError) }
                     ) {
                         Text("Cancel", color = Color(0xFF6B7280))
+                    }
+                }
+            )
+        }
+
+        // End quest confirmation dialog
+        if (state.showEndQuestConfirmation) {
+            AlertDialog(
+                onDismissRequest = { screenModel.onEvent(ActiveQuestEvent.DismissEndQuestConfirmation) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = "Warning",
+                        tint = Color(0xFFF59E0B),
+                        modifier = Modifier.size(48.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "End Quest?",
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to end the quest? Your progress will be uploaded but you won't receive full points.",
+                        textAlign = TextAlign.Center
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { screenModel.onEvent(ActiveQuestEvent.ConfirmEndQuest) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                    ) {
+                        Text("Yes, End Quest", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { screenModel.onEvent(ActiveQuestEvent.DismissEndQuestConfirmation) }
+                    ) {
+                        Text("Continue Quest", color = Color(0xFF5B6ECC))
                     }
                 }
             )
@@ -264,8 +322,7 @@ data class ActiveQuestScreen(
                     }
                 } else {
                     TextButton(onClick = {
-                        screenModel.onEvent(ActiveQuestEvent.EndQuestEarly)
-                        navigator.push(EndQuestScreen(questId = questId, questName = state.questName))
+                        screenModel.onEvent(ActiveQuestEvent.ShowEndQuestConfirmation)
                     }) {
                         Text(
                             text = "End Quest",
