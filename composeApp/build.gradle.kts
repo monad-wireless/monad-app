@@ -40,8 +40,6 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.sqldelight.android.driver)
-            implementation(libs.kmm.wifi.connect.android)
-            implementation(libs.androidx.startup.runtime)
             implementation(libs.coil.network.okhttp)
         }
         iosMain.dependencies {
@@ -80,7 +78,6 @@ kotlin {
             implementation(libs.napier)
             implementation(libs.kable.core)
             implementation(libs.qrkit.compose)
-            implementation(libs.kmm.wifi.connect)
             implementation(libs.kotlinx.datetime)
         }
     }

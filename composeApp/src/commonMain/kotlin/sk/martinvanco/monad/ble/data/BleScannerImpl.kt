@@ -37,8 +37,9 @@ class BleScannerImpl(
         )
     }
 
-    override suspend fun startScanning() {
+    override suspend fun startScanning(): Result<Unit> {
         _isScanning.value = true
+        return Result.success(Unit)
     }
 
     override fun stopScanning() {

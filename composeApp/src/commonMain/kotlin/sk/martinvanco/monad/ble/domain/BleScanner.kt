@@ -6,7 +6,7 @@ interface BleScanner {
     val advertisements: Flow<BleAdvertisement>
     val isScanning: Flow<Boolean>
 
-    suspend fun startScanning()
+    suspend fun startScanning(): Result<Unit>
     fun stopScanning()
 }
 

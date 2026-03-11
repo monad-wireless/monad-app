@@ -1,0 +1,12 @@
+-- Migration 3: Add BleAdvertisementRecord table
+CREATE TABLE IF NOT EXISTS BleAdvertisementRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    questId TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    deviceAddress TEXT NOT NULL,
+    deviceName TEXT,
+    rssi INTEGER NOT NULL,
+    manufacturerDataCompanyId INTEGER,
+    manufacturerDataBytes TEXT,
+    serviceUuids TEXT
+);

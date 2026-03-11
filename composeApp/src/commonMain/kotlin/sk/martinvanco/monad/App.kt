@@ -15,6 +15,7 @@ import org.koin.dsl.KoinAppDeclaration
 import org.koin.mp.KoinPlatform.getKoin
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreen
 import sk.martinvanco.monad.core.di.appModule
+import sk.martinvanco.monad.core.di.platformModule
 import sk.martinvanco.monad.core.navigation.CustomScreenTransition
 import sk.martinvanco.monad.core.navigation.NavigationCommand
 import sk.martinvanco.monad.core.navigation.NavigationManager
@@ -25,7 +26,7 @@ import sk.martinvanco.monad.ui.theme.AppTheme
 fun initKoin(appDeclaration: KoinAppDeclaration = {}) {
     startKoin {
         appDeclaration()
-        modules(appModule)
+        modules(platformModule, appModule)
     }
 }
 
