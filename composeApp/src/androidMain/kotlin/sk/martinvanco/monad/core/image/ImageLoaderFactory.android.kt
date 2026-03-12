@@ -5,6 +5,7 @@ import coil3.PlatformContext
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import okhttp3.OkHttpClient
+import sk.martinvanco.monad.core.config.isDebug
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
@@ -14,7 +15,8 @@ import javax.net.ssl.X509TrustManager
 actual fun createImageLoader(context: PlatformContext): ImageLoader {
     return ImageLoader.Builder(context)
         .components {
-            add(OkHttpNetworkFetcherFactory(callFactory = { createUnsafeOkHttpClient() }))
+            val client = if (isDebug()) createUnsafeOkHttpClient() else OkHttpClient()
+            add(OkHttpNetworkFetcherFactory(callFactory = { client }))
         }
         .crossfade(true)
         .build()

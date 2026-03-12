@@ -1,10 +1,7 @@
 package sk.martinvanco.monad.core.config
 
-/**
- * Application configuration
- *
- * TODO: Move to environment-specific configuration files for different build variants
- */
+expect fun isDebug(): Boolean
+
 object AppConfig {
     /**
      * Base URL for API endpoints

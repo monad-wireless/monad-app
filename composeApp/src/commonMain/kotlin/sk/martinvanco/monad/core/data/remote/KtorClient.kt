@@ -13,6 +13,7 @@ import io.ktor.http.takeFrom
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import sk.martinvanco.monad.core.config.AppConfig
+import sk.martinvanco.monad.core.config.isDebug
 
 object KtorClient {
 
@@ -44,10 +45,10 @@ object KtorClient {
             install(Logging) {
                 logger = object : Logger {
                     override fun log(message: String) {
-                        println("HTTP Client: $message")
+                        if (isDebug()) println("HTTP Client: $message")
                     }
                 }
-                level = LogLevel.ALL
+                level = if (isDebug()) LogLevel.ALL else LogLevel.NONE
             }
         }
     }

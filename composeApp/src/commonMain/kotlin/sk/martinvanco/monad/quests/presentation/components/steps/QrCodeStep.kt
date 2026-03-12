@@ -18,6 +18,7 @@ import qrscanner.QrScanner
 import sk.martinvanco.monad.quests.domain.ActiveTaskDto
 import sk.martinvanco.monad.quests.domain.QrCodeConfig
 import sk.martinvanco.monad.quests.domain.TaskConfigParser
+import sk.martinvanco.monad.core.config.isDebug
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
 
 /**
@@ -121,7 +122,7 @@ private fun QrCodeContent(
                     imagePickerHandler = { /* Not used */ },
                     onFailure = { errorMsg ->
                         // Handle scan failure - could be logged or shown to user
-                        println("QR Scan failed: $errorMsg")
+                        if (isDebug()) println("QR Scan failed: $errorMsg")
                     }
                 )
             }

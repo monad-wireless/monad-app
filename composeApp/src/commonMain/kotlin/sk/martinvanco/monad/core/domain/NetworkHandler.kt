@@ -7,6 +7,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.ContentConvertException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import sk.martinvanco.monad.core.config.isDebug
 import sk.martinvanco.monad.core.data.remote.KtorClient
 
 class NetworkHandler(private val ktorClient: KtorClient) {
@@ -19,12 +20,12 @@ class NetworkHandler(private val ktorClient: KtorClient) {
             // 1. Emit loading state
             emit(ResultHandler.Loading())
 
-            println("🔵 NetworkHandler: Executing API call...")
+            if (isDebug()) println("🔵 NetworkHandler: Executing API call...")
 
             // 2. Execute the API call
             val result = ktorClient.call()
 
-            println("🟢 NetworkHandler: API call successful")
+            if (isDebug()) println("🟢 NetworkHandler: API call successful")
 
             // 3. Emit success with data
             emit(ResultHandler.Success(result))
@@ -37,8 +38,10 @@ class NetworkHandler(private val ktorClient: KtorClient) {
                 "Unable to read error body"
             }
 
-            println("🔴 NetworkHandler: Client error ${e.response.status.value}")
-            println("🔴 NetworkHandler: Error body: $errorBody")
+            if (isDebug()) {
+                println("🔴 NetworkHandler: Client error ${e.response.status.value}")
+                println("🔴 NetworkHandler: Error body: $errorBody")
+            }
 
             val networkError = when (e.response.status) {
                 HttpStatusCode.BadRequest ->
@@ -64,20 +67,24 @@ class NetworkHandler(private val ktorClient: KtorClient) {
 
         } catch (e: ServerResponseException) {
             // 5xx errors
-            println("🔴 NetworkHandler: Server error ${e.response.status.value}")
+            if (isDebug()) println("🔴 NetworkHandler: Server error ${e.response.status.value}")
             emit(ResultHandler.Error(DataError.NetworkError.SERVER))
 
         } catch (e: ContentConvertException) {
             // JSON parsing errors
-            println("🔴 NetworkHandler: Serialization error - ${e.message}")
-            e.printStackTrace()
+            if (isDebug()) {
+                println("🔴 NetworkHandler: Serialization error - ${e.message}")
+                e.printStackTrace()
+            }
             emit(ResultHandler.Error(DataError.NetworkError.SERIALIZATION))
 
         } catch (e: Exception) {
             // Network errors or unknown errors
             val errorMessage = e.message ?: "Unknown error"
-            println("🔴 NetworkHandler: Exception - $errorMessage")
-            e.printStackTrace()
+            if (isDebug()) {
+                println("🔴 NetworkHandler: Exception - $errorMessage")
+                e.printStackTrace()
+            }
 
             // Check if it's a network-related error
             val networkError = if (errorMessage.contains("ConnectException", ignoreCase = true) ||

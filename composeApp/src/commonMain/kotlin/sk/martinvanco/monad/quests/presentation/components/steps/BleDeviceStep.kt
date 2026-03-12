@@ -28,6 +28,7 @@ import sk.martinvanco.monad.ble.domain.BleScanner
 import sk.martinvanco.monad.quests.domain.ActiveTaskDto
 import sk.martinvanco.monad.quests.domain.BleDeviceConfig
 import sk.martinvanco.monad.quests.domain.TaskConfigParser
+import sk.martinvanco.monad.core.config.isDebug
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
 import kotlin.math.pow
 
@@ -81,7 +82,7 @@ fun BleDeviceStep(
             bleScanner.advertisements
                 .onEach { advertisement ->
                     // Log all BLE advertisements
-                    println("BLE Advertisement received: ${advertisement.name} (${advertisement.address}) - RSSI: ${advertisement.rssi} dBm")
+                    if (isDebug()) println("BLE Advertisement received: ${advertisement.name} (${advertisement.address}) - RSSI: ${advertisement.rssi} dBm")
 
                     // Filter for the target device by MAC address or name
                     val isTargetDevice = if (config.deviceId.isNotBlank()) {
@@ -93,13 +94,13 @@ fun BleDeviceStep(
                     }
 
                     if (isTargetDevice) {
-                        println("BLE Target device found! RSSI: ${advertisement.rssi} dBm")
+                        if (isDebug()) println("BLE Target device found! RSSI: ${advertisement.rssi} dBm")
                         signalStrength = advertisement.rssi
 
                         // Mark as found when signal is strong enough
                         if (advertisement.rssi > -60 && !deviceFound) {
                             deviceFound = true
-                            println("BLE Device marked as found (RSSI > -60)")
+                            if (isDebug()) println("BLE Device marked as found (RSSI > -60)")
                         }
                     }
                 }
