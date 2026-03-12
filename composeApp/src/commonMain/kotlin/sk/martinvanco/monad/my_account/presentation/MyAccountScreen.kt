@@ -16,12 +16,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -105,34 +107,106 @@ class MyAccountScreen : Screen {
                         )
                     }
 
-                    Button(
-                        onClick = { screenModel.onEvent(MyAccountEvent.LogoutClick) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFDC2626)
-                        ),
-                        shape = RoundedCornerShape(6.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Button(
+                            onClick = { screenModel.onEvent(MyAccountEvent.LogoutClick) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFDC2626)
+                            ),
+                            shape = RoundedCornerShape(6.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = "Log out",
-                                tint = Color.White
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = "Log out",
+                                    tint = Color.White
+                                )
+                                Text(
+                                    text = "Log out",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        TextButton(
+                            onClick = { screenModel.onEvent(MyAccountEvent.DeleteAccountClick) }
+                        ) {
                             Text(
-                                text = "Log out",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                text = "Delete my account",
+                                fontSize = 14.sp,
+                                color = Color.Gray
                             )
                         }
                     }
                 }
+            }
+
+            if (state.showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        if (!state.isDeleting) {
+                            screenModel.onEvent(MyAccountEvent.DismissDeleteDialog)
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = "Delete Account",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Are you sure you want to delete your account? All your data will be permanently removed.")
+                            state.deleteError?.let { error ->
+                                Text(
+                                    text = error,
+                                    color = Color(0xFFDC2626),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = { screenModel.onEvent(MyAccountEvent.ConfirmDeleteAccount) },
+                            enabled = !state.isDeleting
+                        ) {
+                            if (state.isDeleting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = "Delete",
+                                    color = Color(0xFFDC2626),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { screenModel.onEvent(MyAccountEvent.DismissDeleteDialog) },
+                            enabled = !state.isDeleting
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
         }
     }

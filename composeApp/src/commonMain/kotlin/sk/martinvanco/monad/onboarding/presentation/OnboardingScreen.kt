@@ -46,6 +46,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,9 +65,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
+import dev.icerock.moko.permissions.DeniedAlwaysException
+import dev.icerock.moko.permissions.DeniedException
+import dev.icerock.moko.permissions.compose.BindEffect
+import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
+import kotlinx.coroutines.withTimeoutOrNull
 import sk.martinvanco.monad.core.config.AppConfig
-import sk.martinvanco.monad.core.domain.permissions.Permission
-import sk.martinvanco.monad.core.domain.permissions.PermissionStatus
 
 class OnboardingScreen : Screen {
 
@@ -72,8 +79,55 @@ class OnboardingScreen : Screen {
         val screenModel = koinScreenModel<OnboardingScreenModel>()
         val state by screenModel.state.collectAsState()
 
+        val factory = rememberPermissionsControllerFactory()
+        val controller = remember(factory) { factory.createPermissionsController() }
+        BindEffect(controller)
+
+        // Track resume count to re-trigger permission checks when returning from Settings
+        var resumeCount by remember { mutableStateOf(0) }
+        LifecycleResumeEffect(Unit) {
+            resumeCount++
+            onPauseOrDispose { }
+        }
+
+        // Check permission statuses on every resume
+        LaunchedEffect(controller, resumeCount) {
+            OnboardingStep.entries.forEach { step ->
+                step.permission?.let { permission ->
+                    val granted = controller.isPermissionGranted(permission)
+                    screenModel.updatePermissionStatus(permission, granted)
+                }
+            }
+        }
+
+        // Handle events from ScreenModel
         LaunchedEffect(Unit) {
-            screenModel.refreshPermissions()
+            screenModel.events.collect { event ->
+                when (event) {
+                    is OnboardingEvent.RequestPermission -> {
+                        try {
+                            val result = withTimeoutOrNull(30_000L) {
+                                controller.providePermission(event.permission)
+                                true
+                            }
+                            if (result == true) {
+                                screenModel.onPermissionResult(event.permission, granted = true, deniedPermanently = false)
+                            } else {
+                                screenModel.onPermissionResult(event.permission, granted = false, deniedPermanently = false)
+                            }
+                        } catch (e: DeniedAlwaysException) {
+                            screenModel.onPermissionResult(event.permission, granted = false, deniedPermanently = true)
+                        } catch (e: DeniedException) {
+                            screenModel.onPermissionResult(event.permission, granted = false, deniedPermanently = false)
+                        } catch (e: Exception) {
+                            screenModel.onPermissionResult(event.permission, granted = false, deniedPermanently = false)
+                        }
+                    }
+                    is OnboardingEvent.OpenAppSettings -> {
+                        controller.openAppSettings()
+                    }
+                }
+            }
         }
 
         Surface(
@@ -104,9 +158,10 @@ class OnboardingScreen : Screen {
                     modifier = Modifier.weight(0.6f),
                     label = "OnboardingContent"
                 ) { step ->
+                    val isGranted = step.permission?.let { state.isPermissionGranted(it) } ?: false
                     OnboardingStepContent(
                         step = step,
-                        permissionStatus = step.permission?.let { state.permissionStatuses[it] }
+                        isPermissionGranted = isGranted
                     )
                 }
 
@@ -122,8 +177,7 @@ class OnboardingScreen : Screen {
                 OnboardingButtons(
                     state = state,
                     onNextClick = { screenModel.onNextClick() },
-                    onSkipClick = { screenModel.onSkipClick() },
-                    onSettingsClick = { screenModel.openAppSettings() }
+                    onSkipClick = { screenModel.onSkipClick() }
                 )
 
                 Spacer(modifier = Modifier.weight(0.1f))
@@ -135,7 +189,7 @@ class OnboardingScreen : Screen {
 @Composable
 private fun OnboardingStepContent(
     step: OnboardingStep,
-    permissionStatus: PermissionStatus?
+    isPermissionGranted: Boolean
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -143,7 +197,7 @@ private fun OnboardingStepContent(
         verticalArrangement = Arrangement.Center
     ) {
         val icon = getStepIcon(step)
-        val iconColor = if (permissionStatus == PermissionStatus.GRANTED) {
+        val iconColor = if (isPermissionGranted) {
             Color(0xFF4CAF50)
         } else {
             MaterialTheme.colorScheme.primary
@@ -156,7 +210,7 @@ private fun OnboardingStepContent(
                 .background(iconColor.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            if (permissionStatus == PermissionStatus.GRANTED) {
+            if (isPermissionGranted) {
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = "Permission Granted",
@@ -198,7 +252,7 @@ private fun OnboardingStepContent(
             TermsLinks()
         }
 
-        if (permissionStatus != null && permissionStatus == PermissionStatus.GRANTED) {
+        if (step.permission != null && isPermissionGranted) {
             Spacer(modifier = Modifier.height(16.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -254,27 +308,19 @@ private fun PageIndicator(
 private fun OnboardingButtons(
     state: OnboardingState,
     onNextClick: () -> Unit,
-    onSkipClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSkipClick: () -> Unit
 ) {
     val currentStep = state.currentStep
     val permission = currentStep.permission
-    val permissionStatus = permission?.let { state.permissionStatuses[it] }
-    val isPermissionGranted = permissionStatus == PermissionStatus.GRANTED
-    val isDeniedPermanently = permissionStatus == PermissionStatus.DENIED_PERMANENTLY
+    val isPermissionGranted = permission?.let { state.isPermissionGranted(it) } ?: false
+    val isDeniedPermanently = permission?.let { state.isPermissionDeniedPermanently(it) } ?: false
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Button(
-            onClick = {
-                if (isDeniedPermanently) {
-                    onSettingsClick()
-                } else {
-                    onNextClick()
-                }
-            },
+            onClick = onNextClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),

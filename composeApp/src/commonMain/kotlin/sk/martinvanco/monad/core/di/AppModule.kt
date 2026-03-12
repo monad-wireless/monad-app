@@ -59,12 +59,12 @@ val appModule = module {
     single { QuestDataFlushService(get(), get(), get()) }
 
     // BLE - now with dependencies
-    single<BleScanner> { BleScannerImpl(get(), get()) }
+    single<BleScanner> { BleScannerImpl(get()) }
     single { BleSensingService(get(), get()) }
 
     // New screen models
     factory { SplashScreenModel(get(), get(), get()) }
-    factory { OnboardingScreenModel(get(), get(), get()) }
+    factory { OnboardingScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
     factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get()) }

@@ -85,6 +85,10 @@ kotlin {
             implementation(libs.firebase.common)
             implementation(libs.firebase.crashlytics)
             api(libs.kmpnotifier)
+            api(libs.moko.permissions.compose)
+            api(libs.moko.permissions.camera)
+            api(libs.moko.permissions.bluetooth)
+            api(libs.moko.permissions.location)
         }
     }
 }

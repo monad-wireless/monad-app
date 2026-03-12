@@ -23,6 +23,7 @@ firebaseGitlive = "2.1.0"
 googleServices = "4.4.2"
 firebaseCrashlyticsPlugin = "3.0.3"
 kmpnotifier = "1.6.1"
+mokoPermissions = "0.20.1"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
@@ -61,6 +62,10 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 firebase-crashlytics = { module = "dev.gitlive:firebase-crashlytics", version.ref = "firebaseGitlive" }
 firebase-common = { module = "dev.gitlive:firebase-common", version.ref = "firebaseGitlive" }
 kmpnotifier = { module = "io.github.mirzemehdi:kmpnotifier", version.ref = "kmpnotifier" }
+moko-permissions-compose = { module = "dev.icerock.moko:permissions-compose", version.ref = "mokoPermissions" }
+moko-permissions-camera = { module = "dev.icerock.moko:permissions-camera", version.ref = "mokoPermissions" }
+moko-permissions-bluetooth = { module = "dev.icerock.moko:permissions-bluetooth", version.ref = "mokoPermissions" }
+moko-permissions-location = { module = "dev.icerock.moko:permissions-location", version.ref = "mokoPermissions" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -33,6 +33,13 @@ class MyAccountScreenModel(
     fun onEvent(event: MyAccountEvent) {
         when (event) {
             MyAccountEvent.LogoutClick -> logout()
+            MyAccountEvent.DeleteAccountClick -> {
+                mutableState.value = state.value.copy(showDeleteDialog = true, deleteError = null)
+            }
+            MyAccountEvent.ConfirmDeleteAccount -> deleteAccount()
+            MyAccountEvent.DismissDeleteDialog -> {
+                mutableState.value = state.value.copy(showDeleteDialog = false, deleteError = null)
+            }
         }
     }
 
@@ -40,6 +47,22 @@ class MyAccountScreenModel(
         screenModelScope.launch {
             authManager.clearUser()
             navigationManager.replaceAll(LoginScreen())
+        }
+    }
+
+    private fun deleteAccount() {
+        screenModelScope.launch {
+            mutableState.value = state.value.copy(isDeleting = true, deleteError = null)
+            authManager.deleteAccount()
+                .onSuccess {
+                    navigationManager.replaceAll(LoginScreen())
+                }
+                .onFailure { error ->
+                    mutableState.value = state.value.copy(
+                        isDeleting = false,
+                        deleteError = error.message ?: "Failed to delete account"
+                    )
+                }
         }
     }
 }

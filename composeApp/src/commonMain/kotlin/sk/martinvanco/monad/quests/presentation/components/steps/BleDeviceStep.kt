@@ -18,6 +18,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import dev.icerock.moko.permissions.DeniedAlwaysException
+import dev.icerock.moko.permissions.DeniedException
+import dev.icerock.moko.permissions.Permission
+import dev.icerock.moko.permissions.bluetooth.BLUETOOTH_LE
+import dev.icerock.moko.permissions.compose.BindEffect
+import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
@@ -29,6 +36,7 @@ import sk.martinvanco.monad.quests.domain.ActiveTaskDto
 import sk.martinvanco.monad.quests.domain.BleDeviceConfig
 import sk.martinvanco.monad.quests.domain.TaskConfigParser
 import sk.martinvanco.monad.core.config.isDebug
+import sk.martinvanco.monad.core.presentation.components.PermissionRequiredCard
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
 import kotlin.math.pow
 
@@ -44,6 +52,54 @@ fun BleDeviceStep(
     modifier: Modifier = Modifier,
     bleScanner: BleScanner = koinInject()
 ) {
+    // Permission pre-flight check
+    val permFactory = rememberPermissionsControllerFactory()
+    val permController = remember(permFactory) { permFactory.createPermissionsController() }
+    BindEffect(permController)
+
+    var permissionGranted by remember { mutableStateOf(false) }
+    var permissionDeniedPermanently by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Track resume count to re-trigger permission checks when returning from Settings
+    var resumeCount by remember { mutableStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        resumeCount++
+        onPauseOrDispose { }
+    }
+
+    // Recheck permission on every resume
+    LaunchedEffect(permController, resumeCount) {
+        val granted = permController.isPermissionGranted(Permission.BLUETOOTH_LE)
+        permissionGranted = granted
+        if (granted) permissionDeniedPermanently = false
+    }
+
+    if (!permissionGranted) {
+        PermissionRequiredCard(
+            permissionName = "Bluetooth",
+            deniedPermanently = permissionDeniedPermanently,
+            onRequestPermission = {
+                scope.launch {
+                    try {
+                        permController.providePermission(Permission.BLUETOOTH_LE)
+                        permissionGranted = true
+                        permissionDeniedPermanently = false
+                    } catch (e: DeniedAlwaysException) {
+                        permissionDeniedPermanently = true
+                    } catch (e: DeniedException) {
+                        // User denied once, stay on screen
+                    } catch (e: Exception) {
+                        // Platform error fallback
+                        permissionDeniedPermanently = false
+                    }
+                }
+            },
+            onOpenSettings = { permController.openAppSettings() }
+        )
+        return
+    }
+
     val config = remember(task) {
         TaskConfigParser.getBleDeviceConfig(task)
     }
@@ -53,7 +109,6 @@ fun BleDeviceStep(
     var signalStrength by remember { mutableStateOf<Int?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showMoveHint by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
 
     // Handle BLE scanning lifecycle
     LaunchedEffect(task.status) {

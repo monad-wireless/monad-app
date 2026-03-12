@@ -1,6 +1,7 @@
 package sk.martinvanco.monad.auth.data.api
 
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
@@ -38,5 +39,13 @@ class AuthService(private val ktorClient: KtorClient) {
             }
         }
         return response.body<MeResponseDto>()
+    }
+
+    suspend fun deleteAccount(token: String) {
+        ktorClient.client.delete("/api/auth/account") {
+            headers {
+                append(HttpHeaders.Authorization, "Bearer $token")
+            }
+        }
     }
 }

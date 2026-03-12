@@ -44,4 +44,16 @@ class AuthManager(
     suspend fun clearUser() {
         userRepository.deleteAllUsers()
     }
+
+    suspend fun deleteAccount(): Result<Unit> {
+        return try {
+            val user = userRepository.getCurrentUser() ?: return Result.failure(Exception("No user found"))
+            val token = user.token ?: return Result.failure(Exception("No token found"))
+            authService.deleteAccount(token)
+            userRepository.deleteAllUsers()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

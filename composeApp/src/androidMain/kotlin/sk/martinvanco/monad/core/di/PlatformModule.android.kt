@@ -5,8 +5,6 @@ import sk.martinvanco.monad.Database
 import sk.martinvanco.monad.core.data.database.SqlDelightDriverFactory
 import sk.martinvanco.monad.core.domain.bluetooth.AndroidBluetoothStateChecker
 import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
-import sk.martinvanco.monad.core.domain.permissions.AndroidPermissionHandler
-import sk.martinvanco.monad.core.domain.permissions.PermissionHandler
 import sk.martinvanco.monad.core.domain.toast.AndroidToastManager
 import sk.martinvanco.monad.core.domain.toast.ToastManager
 import sk.martinvanco.monad.core.util.ContextProvider
@@ -23,10 +21,6 @@ actual val platformModule = module {
 
     single<BluetoothStateChecker> {
         AndroidBluetoothStateChecker(ContextProvider.getContext())
-    }
-
-    single<PermissionHandler> {
-        AndroidPermissionHandler(ContextProvider.getContext())
     }
 
     single<ToastManager> {

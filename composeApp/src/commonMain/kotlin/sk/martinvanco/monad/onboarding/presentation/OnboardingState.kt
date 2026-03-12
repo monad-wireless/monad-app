@@ -1,11 +1,14 @@
 package sk.martinvanco.monad.onboarding.presentation
 
-import sk.martinvanco.monad.core.domain.permissions.Permission
-import sk.martinvanco.monad.core.domain.permissions.PermissionStatus
+import dev.icerock.moko.permissions.Permission
+import dev.icerock.moko.permissions.bluetooth.BLUETOOTH_LE
+import dev.icerock.moko.permissions.camera.CAMERA
+import dev.icerock.moko.permissions.location.LOCATION
 
 data class OnboardingState(
     val currentPage: Int = 0,
-    val permissionStatuses: Map<Permission, PermissionStatus> = emptyMap(),
+    val grantedPermissions: Set<Permission> = emptySet(),
+    val deniedPermanently: Set<Permission> = emptySet(),
     val isLoading: Boolean = false
 ) {
     val totalPages: Int = OnboardingStep.entries.size
@@ -14,9 +17,9 @@ data class OnboardingState(
 
     val currentStep: OnboardingStep = OnboardingStep.entries.getOrElse(currentPage) { OnboardingStep.WELCOME }
 
-    fun isPermissionGranted(permission: Permission): Boolean {
-        return permissionStatuses[permission] == PermissionStatus.GRANTED
-    }
+    fun isPermissionGranted(permission: Permission): Boolean = permission in grantedPermissions
+
+    fun isPermissionDeniedPermanently(permission: Permission): Boolean = permission in deniedPermanently
 
     fun isCurrentPermissionGranted(): Boolean {
         val permission = currentStep.permission ?: return true
@@ -39,7 +42,7 @@ enum class OnboardingStep(
     BLUETOOTH(
         title = "Bluetooth Access",
         description = "We use Bluetooth to scan for nearby BLE beacons and devices during quests. This enables location-based experiences and interactions.",
-        permission = Permission.BLUETOOTH_SCAN,
+        permission = Permission.BLUETOOTH_LE,
         buttonText = "Allow Bluetooth"
     ),
     LOCATION(
