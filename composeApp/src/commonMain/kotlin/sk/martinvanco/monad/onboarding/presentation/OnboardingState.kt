@@ -54,6 +54,12 @@ enum class OnboardingStep(
         permission = Permission.CAMERA,
         buttonText = "Allow Camera"
     ),
+    TERMS(
+        title = "Terms of Service",
+        description = "By continuing, you agree to our Terms of Service. This includes anonymous crash reporting to help us improve the app. We collect basic device info and error data when something goes wrong - no personal data is shared.",
+        permission = null,
+        buttonText = "I Agree"
+    ),
     COMPLETE(
         title = "You're All Set!",
         description = "Great! All permissions are configured. You can now enjoy the full Monad experience.",

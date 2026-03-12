@@ -2,6 +2,8 @@ package sk.martinvanco.monad.onboarding.presentation
 
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import dev.gitlive.firebase.Firebase
+import dev.gitlive.firebase.crashlytics.crashlytics
 import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.data.repository.SettingsRepository
@@ -46,6 +48,10 @@ class OnboardingScreenModel(
                 } else {
                     goToNextPage()
                 }
+            }
+            OnboardingStep.TERMS -> {
+                enableCrashReporting()
+                goToNextPage()
             }
             OnboardingStep.COMPLETE -> {
                 completeOnboarding()
@@ -108,6 +114,10 @@ class OnboardingScreenModel(
 
     fun refreshPermissions() {
         checkAllPermissions()
+    }
+
+    private fun enableCrashReporting() {
+        Firebase.crashlytics.setCrashlyticsCollectionEnabled(true)
     }
 
     private fun completeOnboarding() {

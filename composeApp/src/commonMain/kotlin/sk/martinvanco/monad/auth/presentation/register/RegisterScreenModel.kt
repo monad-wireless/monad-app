@@ -47,6 +47,12 @@ class RegisterScreenModel(
                     error = null
                 )
             }
+            is RegisterEvent.OnTermsAcceptedChange -> {
+                mutableState.value = state.value.copy(
+                    termsAccepted = event.value,
+                    error = null
+                )
+            }
         }
     }
 
@@ -68,6 +74,11 @@ class RegisterScreenModel(
 
         if (password != repeatPassword) {
             mutableState.value = state.value.copy(repeatPasswordError = "Passwords do not match")
+            return
+        }
+
+        if (!state.value.termsAccepted) {
+            mutableState.value = state.value.copy(error = "You must accept the Terms and Privacy Policy")
             return
         }
 

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CameraAlt
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Rocket
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,11 +51,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
+import sk.martinvanco.monad.core.config.AppConfig
 import sk.martinvanco.monad.core.domain.permissions.Permission
 import sk.martinvanco.monad.core.domain.permissions.PermissionStatus
 
@@ -184,6 +192,11 @@ private fun OnboardingStepContent(
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             modifier = Modifier.padding(horizontal = 16.dp)
         )
+
+        if (step == OnboardingStep.TERMS) {
+            Spacer(modifier = Modifier.height(16.dp))
+            TermsLinks()
+        }
 
         if (permissionStatus != null && permissionStatus == PermissionStatus.GRANTED) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -321,12 +334,50 @@ private fun OnboardingButtons(
     }
 }
 
+@Composable
+private fun TermsLinks() {
+    val uriHandler = LocalUriHandler.current
+    val linkColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+
+    val annotatedText = buildAnnotatedString {
+        withStyle(SpanStyle(color = textColor)) {
+            append("Read our ")
+        }
+        pushStringAnnotation(tag = "URL", annotation = "${AppConfig.BASE_URL}/terms")
+        withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
+            append("Terms & Conditions")
+        }
+        pop()
+        withStyle(SpanStyle(color = textColor)) {
+            append(" and ")
+        }
+        pushStringAnnotation(tag = "URL", annotation = "${AppConfig.BASE_URL}/privacy-policy")
+        withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
+            append("Privacy Policy")
+        }
+        pop()
+    }
+
+    ClickableText(
+        text = annotatedText,
+        style = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
+        onClick = { offset ->
+            annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    uriHandler.openUri(annotation.item)
+                }
+        }
+    )
+}
+
 private fun getStepIcon(step: OnboardingStep): ImageVector {
     return when (step) {
         OnboardingStep.WELCOME -> Icons.Default.Rocket
         OnboardingStep.BLUETOOTH -> Icons.Default.Bluetooth
         OnboardingStep.LOCATION -> Icons.Default.LocationOn
         OnboardingStep.CAMERA -> Icons.Default.CameraAlt
+        OnboardingStep.TERMS -> Icons.Default.Security
         OnboardingStep.COMPLETE -> Icons.Default.CheckCircle
     }
 }

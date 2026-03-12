@@ -22,6 +22,7 @@ class AuthManager(
     }
 
     suspend fun saveUserFromLogin(email: String, name: String, token: String) {
+        userRepository.deleteAllUsers()
         userRepository.insertUser(
             backendId = null,
             email = email,
@@ -31,6 +32,7 @@ class AuthManager(
     }
 
     suspend fun saveUserFromRegister(email: String, name: String, token: String) {
+        userRepository.deleteAllUsers()
         userRepository.insertUser(
             backendId = null,
             email = email,

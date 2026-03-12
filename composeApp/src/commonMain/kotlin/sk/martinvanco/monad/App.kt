@@ -22,6 +22,9 @@ import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.core.util.Logger
 import sk.martinvanco.monad.ui.theme.AppTheme
+import com.mmk.kmpnotifier.notification.NotifierManager
+import dev.gitlive.firebase.Firebase
+import dev.gitlive.firebase.crashlytics.crashlytics
 
 fun initKoin(appDeclaration: KoinAppDeclaration = {}) {
     startKoin {
@@ -32,13 +35,40 @@ fun initKoin(appDeclaration: KoinAppDeclaration = {}) {
 
 @Composable
 fun App() {
-    // Initialize Logger and Koin once
-    remember {
+    // Initialize Logger, Koin and Firebase once
+    remember<Unit> {
         try {
             Logger.init()
             initKoin()
         } catch (e: Exception) {
             // Already initialized
+        }
+        try {
+            Firebase.crashlytics.setCrashlyticsCollectionEnabled(false)
+            Logger.i("Firebase initialized, Crashlytics disabled until user accepts terms")
+        } catch (e: Exception) {
+            Logger.e("Firebase Crashlytics error: ${e.message}", throwable = e)
+        }
+        Logger.i("Initializing push notification listener...")
+        NotifierManager.addListener(object : NotifierManager.Listener {
+            override fun onNewToken(token: String) {
+                Logger.i("Push notifications ready - FCM Token: $token")
+            }
+
+            override fun onPushNotification(title: String?, body: String?) {
+                Logger.i("Push notification received - Title: $title, Body: $body")
+            }
+        })
+        Logger.i("Push notification listener registered successfully")
+    }
+
+    // Fetch FCM token on startup
+    LaunchedEffect(Unit) {
+        try {
+            val token = NotifierManager.getPushNotifier().getToken()
+            Logger.i("FCM Token fetched: $token")
+        } catch (e: Exception) {
+            Logger.e("Failed to fetch FCM token: ${e.message}", throwable = e)
         }
     }
 

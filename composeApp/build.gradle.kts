@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.sqldelight)
+    alias(libs.plugins.googleServices)
+    alias(libs.plugins.firebaseCrashlytics)
 }
 
 kotlin {
@@ -25,6 +27,7 @@ kotlin {
             baseName = "ComposeApp"
             isStatic = true
             linkerOpts("-lsqlite3")
+            export(libs.kmpnotifier)
         }
     }
 
@@ -79,6 +82,9 @@ kotlin {
             implementation(libs.kable.core)
             implementation(libs.qrkit.compose)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.firebase.common)
+            implementation(libs.firebase.crashlytics)
+            api(libs.kmpnotifier)
         }
     }
 }
