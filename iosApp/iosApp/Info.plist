@@ -34,6 +34,8 @@
 	<string>This app uses your location to enable location-based quest features and Bluetooth scanning.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires camera access to scan QR codes.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app sends UDP packets to devices on your local network for research data collection.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

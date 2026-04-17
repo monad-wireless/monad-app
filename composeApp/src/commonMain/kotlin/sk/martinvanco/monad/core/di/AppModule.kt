@@ -10,6 +10,8 @@ import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.core.data.repository.SettingsRepository
 import sk.martinvanco.monad.core.domain.NetworkHandler
+import sk.martinvanco.monad.core.domain.udp.UdpSender
+import sk.martinvanco.monad.core.domain.udp.UdpService
 import sk.martinvanco.monad.onboarding.presentation.OnboardingScreenModel
 import sk.martinvanco.monad.ble.data.BleScannerImpl
 import sk.martinvanco.monad.ble.data.repository.BleAdvertisementRepository
@@ -45,6 +47,8 @@ val appModule = module {
     single { AuthService(get()) }
     single { QuestsService(get()) }
     single { StorageService(get()) }
+    single { UdpSender() }
+    single { UdpService(get()) }
 
     // Repositories
     single { UserRepository(get()) }
