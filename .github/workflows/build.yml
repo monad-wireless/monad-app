@@ -34,10 +34,14 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :composeApp:assembleDebug --stacktrace
 
+      # Artifact names reject `/`, so feature/* branch names must be flattened first.
+      - name: Compute artifact name
+        run: echo "ARTIFACT_REF=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - uses: actions/upload-artifact@v4
         with:
           # Branch-scoped so two feature builds do not overwrite each other's APK.
-          name: monad-app-debug-apk-${{ github.ref_name }}
+          name: monad-app-debug-apk-${{ env.ARTIFACT_REF }}
           path: composeApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
