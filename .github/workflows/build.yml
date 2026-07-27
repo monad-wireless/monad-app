@@ -36,7 +36,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: monad-app-debug-apk
+          # Branch-scoped so two feature builds do not overwrite each other's APK.
+          name: monad-app-debug-apk-${{ github.ref_name }}
           path: composeApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
