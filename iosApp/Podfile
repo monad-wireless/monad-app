@@ -1,8 +1,0 @@
-platform :ios, '16.0'
-
-target 'Monad' do
-  use_frameworks!
-  pod 'FirebaseCore'
-  pod 'FirebaseCrashlytics'
-  pod 'FirebaseMessaging'
-end

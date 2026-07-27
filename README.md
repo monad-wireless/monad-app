@@ -16,7 +16,7 @@ in the foreground during a session**. See `ARCHITECTURE.md`.
 ```bash
 ./gradlew :composeApp:compileKotlinIosSimulatorArm64   # iOS
 ./gradlew :composeApp:assembleDebug                    # Android (minSdk 29)
-open iosApp/iosApp.xcworkspace                         # iOS app (CocoaPods workspace, not the project)
+open iosApp/iosApp.xcodeproj                           # iOS app (Firebase via SPM, resolved by Xcode)
 ```
 
 Firebase is optional and off unless `composeApp/google-services.json` is present.
