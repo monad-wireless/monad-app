@@ -1,0 +1,65 @@
+name: Build
+
+# The previous workflows were KMP-template leftovers: both were gated on
+# `github.event.repository.name == 'KMP-App-Template' && github.repository_owner == 'Kotlin'`,
+# so neither had ever run a single build for this repository.
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # google-services.json carries per-deployment Firebase secrets and is not in the repository.
+      # The build applies the Firebase plugins only when it is present, so CI builds without crash
+      # reporting and push — deliberately, so a fresh clone is always buildable.
+      - name: Assemble debug APK
+        run: ./gradlew :composeApp:assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monad-app-debug-apk
+          path: composeApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS
+    # iOS is the first-class target: background residency, beacon witnessing and socket pinning all
+    # have their primary implementation here, so a broken iOS compile must fail the build rather
+    # than be discovered on a bench.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile Kotlin/Native (device + simulator)
+        run: |
+          ./gradlew :composeApp:compileKotlinIosArm64 \
+                    :composeApp:compileKotlinIosSimulatorArm64 --stacktrace
+
+      - name: Link shared framework
+        run: ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64 --stacktrace

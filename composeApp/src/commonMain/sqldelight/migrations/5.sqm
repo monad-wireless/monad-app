@@ -1,0 +1,11 @@
+-- Migration 5: retire BleAdvertisementRecord.
+--
+-- Superseded by BeaconObservationRecord (added in migration 4), which differs in three ways that
+-- matter: it is keyed by lab session rather than by quest id, it carries the monotonic clock
+-- alongside the wall clock, and it stores the anchor's surveyed iBeacon identity (uuid/major/minor)
+-- instead of a device name. Name-based identity is unreadable by a backgrounded iOS app, which is
+-- why the old table could not simply be extended.
+--
+-- No data is migrated: the old rows carry no monotonic timestamps and no anchor identity, so they
+-- cannot be placed on a shared timeline and are not usable as measurements.
+DROP TABLE IF EXISTS BleAdvertisementRecord;

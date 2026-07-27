@@ -21,19 +21,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import io.ktor.http.encodeURLParameter
-import kotlinx.datetime.Instant
-import org.koin.mp.KoinPlatform.getKoin
-import sk.martinvanco.monad.auth.data.repository.UserRepository
-import sk.martinvanco.monad.core.util.currentTimeMillis
-import sk.martinvanco.monad.home.data.api.QuestsService
-import sk.martinvanco.monad.quests.data.dto.QuestCompleteRequestDto
-import sk.martinvanco.monad.quests.data.dto.SkipRecordDto
-import sk.martinvanco.monad.quests.data.dto.StepCompletionRequestDto
-import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
-import sk.martinvanco.monad.quests.domain.QuestDataExportService
-import sk.martinvanco.monad.quests.domain.QuestDataFlushService
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
-import sk.martinvanco.monad.storage.data.api.StorageService
 
 data class QuestEndedEarlyScreen(
     val questId: String,
@@ -47,129 +35,13 @@ data class QuestEndedEarlyScreen(
         val navigator = LocalNavigator.currentOrThrow
         val uriHandler = LocalUriHandler.current
 
-        // Get dependencies
-        val questStepCompletionRepository: QuestStepCompletionRepository = remember { getKoin().get() }
-        val questDataExportService: QuestDataExportService = remember { getKoin().get() }
-        val questDataFlushService: QuestDataFlushService = remember { getKoin().get() }
-        val questsService: QuestsService = remember { getKoin().get() }
-        val storageService: StorageService = remember { getKoin().get() }
-        val userRepository: UserRepository = remember { getKoin().get() }
-
-        var isUploading by remember { mutableStateOf(true) }
-        var uploadProgress by remember { mutableStateOf("Preparing data...") }
-        var uploadError by remember { mutableStateOf<String?>(null) }
-        var uploadSuccess by remember { mutableStateOf(false) }
-
-        // Upload data on screen launch
-        LaunchedEffect(Unit) {
-            try {
-                val user = userRepository.getCurrentUser()
-                    ?: throw Exception("User not logged in")
-                val token = user.token ?: throw Exception("No auth token")
-
-                // 1. Generate and upload BLE data
-                uploadProgress = "Uploading BLE data..."
-                val bleData = questDataExportService.generateBleDataTsv(questId)
-                val bleCount = questDataExportService.getBleRecordCount(questId)
-
-                storageService.uploadExperimentFile(
-                    filename = "ble_data.tsv",
-                    experimentId = enrollmentId,
-                    content = bleData,
-                    token = token
-                )
-
-                // 2. Generate and upload metadata
-                uploadProgress = "Uploading metadata..."
-                val endTimeMillis = currentTimeMillis()
-                val startTimeFormatted = Instant.fromEpochMilliseconds(startTime).toString()
-                val endTimeFormatted = Instant.fromEpochMilliseconds(endTimeMillis).toString()
-
-                val metadata = questDataExportService.generateMetadataTsv(
-                    questId = questId,
-                    enrollmentId = enrollmentId,
-                    startTime = startTimeFormatted,
-                    endTime = endTimeFormatted,
-                    status = "failed",
-                    totalBleRecords = bleCount
-                )
-
-                storageService.uploadExperimentFile(
-                    filename = "metadata.tsv",
-                    experimentId = enrollmentId,
-                    content = metadata,
-                    token = token
-                )
-
-                // 3. Send completion to backend
-                uploadProgress = "Completing quest..."
-                val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
-
-                val stepCompletions = steps.map { step ->
-                    val mappedStatus = when (step.status) {
-                        "completed" -> "completed"
-                        "failed" -> "failed"
-                        "skipped" -> "skipped"
-                        "pending" -> "skipped"
-                        "in_progress" -> "failed"
-                        else -> "skipped"
-                    }
-
-                    val skipRecord = when {
-                        step.status == "failed" || step.status == "skipped" -> {
-                            SkipRecordDto(
-                                message = step.skipMessage ?: "Unknown reason",
-                                errorCode = step.skipErrorCode
-                            )
-                        }
-                        step.status == "pending" -> {
-                            SkipRecordDto(
-                                message = "Quest ended before this step was reached",
-                                errorCode = "QUEST_ENDED_EARLY"
-                            )
-                        }
-                        step.status == "in_progress" -> {
-                            SkipRecordDto(
-                                message = "Quest ended while this step was in progress",
-                                errorCode = "QUEST_ENDED_EARLY"
-                            )
-                        }
-                        else -> null
-                    }
-
-                    StepCompletionRequestDto(
-                        stepCompletionId = step.backendId,
-                        status = mappedStatus,
-                        startedAt = step.startedAt?.let { Instant.fromEpochMilliseconds(it).toString() } ?: startTimeFormatted,
-                        completedAt = step.completedAt?.let { Instant.fromEpochMilliseconds(it).toString() } ?: endTimeFormatted,
-                        stepData = step.stepData?.let {
-                            kotlinx.serialization.json.Json.parseToJsonElement(it)
-                        },
-                        skipRecord = skipRecord
-                    )
-                }
-
-                val completeRequest = QuestCompleteRequestDto(
-                    enrollmentId = enrollmentId,
-                    completedAt = endTimeFormatted,
-                    steps = stepCompletions
-                )
-
-                questsService.completeQuest(questId, completeRequest, token)
-
-                // 4. Flush local data
-                uploadProgress = "Cleaning up..."
-                questDataFlushService.flushQuestData(enrollmentId, questId, user.id)
-
-                // 5. Done
-                isUploading = false
-                uploadSuccess = true
-
-            } catch (e: Exception) {
-                isUploading = false
-                uploadError = "Upload failed: ${e.message}"
-            }
-        }
+        // Upload and submission are owned by QuestSessionCoordinator, invoked from
+        // ActiveQuestScreenModel.submitQuest(). This screen is presentational — the third copy of
+        // the export/upload/flush sequence lived here and had already drifted from the other two.
+        val isUploading = false
+        val uploadProgress = ""
+        val uploadError: String? = null
+        val uploadSuccess = true
 
         Box(
             modifier = Modifier

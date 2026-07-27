@@ -1,0 +1,63 @@
+-- Lab session: one instrumented recording (illuminator and/or witness roles).
+-- A session is only deletable once status = 'uploaded' — see LabSessionUploader.
+CREATE TABLE IF NOT EXISTS LabSessionRecord (
+    sessionId TEXT PRIMARY KEY NOT NULL,
+    participantId TEXT NOT NULL,
+    enrollmentId TEXT,
+    questId TEXT,
+    site TEXT,
+    apId TEXT,
+    profileId TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    startedWallMs INTEGER NOT NULL,
+    endedWallMs INTEGER,
+    startedMonoNs INTEGER NOT NULL,
+    endedMonoNs INTEGER,
+    boundInterface TEXT,
+    socketPinned INTEGER NOT NULL DEFAULT 0,
+    sidecarJson TEXT,
+    uploadError TEXT
+);
+
+insertSession:
+INSERT OR REPLACE INTO LabSessionRecord(
+    sessionId, participantId, enrollmentId, questId, site, apId, profileId,
+    status, startedWallMs, startedMonoNs, boundInterface, socketPinned
+) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?);
+
+closeSession:
+UPDATE LabSessionRecord
+SET status = 'closed', endedWallMs = ?, endedMonoNs = ?, sidecarJson = ?
+WHERE sessionId = ?;
+
+markUploaded:
+UPDATE LabSessionRecord SET status = 'uploaded', uploadError = NULL WHERE sessionId = ?;
+
+markFailed:
+UPDATE LabSessionRecord SET status = 'failed', uploadError = ? WHERE sessionId = ?;
+
+updateBinding:
+UPDATE LabSessionRecord SET boundInterface = ?, socketPinned = ? WHERE sessionId = ?;
+
+selectAll:
+SELECT * FROM LabSessionRecord ORDER BY startedWallMs DESC;
+
+selectById:
+SELECT * FROM LabSessionRecord WHERE sessionId = ?;
+
+selectPendingUpload:
+SELECT * FROM LabSessionRecord
+WHERE status IN ('closed', 'failed')
+ORDER BY startedWallMs ASC;
+
+selectOpen:
+SELECT * FROM LabSessionRecord WHERE status = 'open' ORDER BY startedWallMs DESC;
+
+countUnsynced:
+SELECT COUNT(*) FROM LabSessionRecord WHERE status != 'uploaded';
+
+deleteSession:
+DELETE FROM LabSessionRecord WHERE sessionId = ?;
+
+deleteUploaded:
+DELETE FROM LabSessionRecord WHERE status = 'uploaded';

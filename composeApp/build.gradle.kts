@@ -5,8 +5,19 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.sqldelight)
-    alias(libs.plugins.googleServices)
-    alias(libs.plugins.firebaseCrashlytics)
+    alias(libs.plugins.googleServices) apply false
+    alias(libs.plugins.firebaseCrashlytics) apply false
+}
+
+// Firebase carries per-deployment secrets in google-services.json, which is not in the repository.
+// Applying its plugins unconditionally made a fresh clone unbuildable — the build failed at
+// :processDebugGoogleServices before a single line of Kotlin was compiled. Crash reporting and push
+// are not needed to build or to run a lab session, so they are opt-in on the file's presence.
+if (file("google-services.json").exists()) {
+    apply(plugin = libs.plugins.googleServices.get().pluginId)
+    apply(plugin = libs.plugins.firebaseCrashlytics.get().pluginId)
+} else {
+    logger.lifecycle("composeApp: google-services.json absent — Firebase and Crashlytics disabled")
 }
 
 kotlin {
@@ -100,7 +111,10 @@ android {
 
     defaultConfig {
         applicationId = "sk.martinvanco.monad"
-        minSdk = 24
+        // 29: WifiNetworkSpecifier + Network.bindSocket are the app-scoped association and
+        // socket-pinning primitives the lab instrument is built on, and WifiConnectionServiceV2 is
+        // already @RequiresApi(Q). Declaring 24 promised a compatibility the code never had.
+        minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -133,7 +147,9 @@ sqldelight {
         create("Database") {
             packageName.set("sk.martinvanco.monad")
             schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
-            version = 3
+            // 4 — EXP-P3 lab instrument tables (sessions + traffic/beacon/transition/clock streams)
+            // 5 — retire BleAdvertisementRecord, superseded by BeaconObservationRecord
+            version = 5
         }
     }
 }

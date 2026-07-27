@@ -10,32 +10,28 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.core.util.currentTimeMillis
-import sk.martinvanco.monad.ble.domain.BleSensingService
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.quests.data.dto.QuestCompleteRequestDto
 import sk.martinvanco.monad.quests.data.dto.StepCompletionRequestDto
 import sk.martinvanco.monad.quests.data.dto.SkipRecordDto
 import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
 import sk.martinvanco.monad.quests.domain.ActiveTaskDto
-import sk.martinvanco.monad.quests.domain.QuestDataExportService
-import sk.martinvanco.monad.quests.domain.QuestDataFlushService
 import sk.martinvanco.monad.quests.domain.TaskStatus
 import sk.martinvanco.monad.quests.domain.TaskType
-import sk.martinvanco.monad.storage.data.api.StorageService
+import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.quests.domain.QuestSessionCoordinator
 
 class ActiveQuestScreenModel(
-    private val bleSensingService: BleSensingService,
+    private val sessionCoordinator: QuestSessionCoordinator,
+    private val instrument: LabInstrument,
     private val questStepCompletionRepository: QuestStepCompletionRepository,
-    private val questDataExportService: QuestDataExportService,
-    private val questDataFlushService: QuestDataFlushService,
     private val questsService: QuestsService,
-    private val storageService: StorageService,
     private val userRepository: UserRepository,
     private val questId: String
 ) : StateScreenModel<ActiveQuestState>(ActiveQuestState(questId = questId)) {
 
     init {
-        observeBleRecordCount()
+        observeInstrument()
         initializeQuest()
     }
 
@@ -108,7 +104,7 @@ class ActiveQuestScreenModel(
                 )
 
                 // Start BLE sensing only after successful initialization
-                startBleSensing()
+                startLabSession()
             } catch (e: CancellationException) {
                 // Coroutine was cancelled - show error so user can retry
                 showErrorWithoutCleanup("Quest loading was interrupted. Please try again.")
@@ -131,16 +127,9 @@ class ActiveQuestScreenModel(
         enrollmentId: String? = null,
         userId: Long? = null
     ) {
-        // Try to clean up data, but don't let cleanup failures block navigation
-        try {
-            if (enrollmentId != null && userId != null) {
-                questDataFlushService.flushQuestData(enrollmentId, questId, userId)
-            } else {
-                questDataFlushService.flushAllQuestData()
-            }
-        } catch (e: Exception) {
-            // Ignore cleanup errors - navigation is more important
-        }
+        // Abandon the quest but keep the measurement: a corrupt enrolment does not make the
+        // radio session worthless, and the previous flush-everything path discarded it.
+        runCatching { sessionCoordinator.abandonSession(enrollmentId) }
 
         mutableState.value = mutableState.value.copy(
             isLoading = false,
@@ -149,31 +138,33 @@ class ActiveQuestScreenModel(
         )
     }
 
-    private fun startBleSensing() {
+    /**
+     * A quest run *is* a lab session. Roles are chosen by the lab bundle: every participant
+     * witnesses the surveyed anchors, and a phone that also has a traffic profile configured plays
+     * the illuminator role as well.
+     */
+    private fun startLabSession() {
         screenModelScope.launch {
-            // Try to start BLE sensing, retry once if it fails due to "already collecting"
-            var result = bleSensingService.startSensing(questId)
-            if (result.isFailure) {
-                // If already collecting (stale state), stop and retry
-                bleSensingService.stopSensing()
-                result = bleSensingService.startSensing(questId)
-            }
-            if (result.isSuccess) {
-                mutableState.value = mutableState.value.copy(isBleCollecting = true)
-            }
+            val enrollmentId = mutableState.value.enrollmentId
+            if (enrollmentId.isEmpty()) return@launch
+            sessionCoordinator.startSession(questId, enrollmentId)
+                .onFailure {
+                    // Not fatal for the quest: the participant can still complete the steps, and
+                    // the reason is recorded rather than swallowed.
+                    mutableState.value = mutableState.value.copy(
+                        error = "Instrument did not start: ${it.message}"
+                    )
+                }
         }
     }
 
-    private fun observeBleRecordCount() {
-        bleSensingService.recordCount
-            .onEach { count ->
-                mutableState.value = mutableState.value.copy(bleRecordCount = count)
-            }
-            .launchIn(screenModelScope)
-
-        bleSensingService.isCollecting
-            .onEach { isCollecting ->
-                mutableState.value = mutableState.value.copy(isBleCollecting = isCollecting)
+    private fun observeInstrument() {
+        instrument.state
+            .onEach { instrumentState ->
+                mutableState.value = mutableState.value.copy(
+                    bleRecordCount = instrumentState.beaconCount,
+                    isBleCollecting = instrumentState.isRunning,
+                )
             }
             .launchIn(screenModelScope)
     }
@@ -203,8 +194,8 @@ class ActiveQuestScreenModel(
     }
 
     private fun confirmEndQuest() {
-        // Stop BLE sensing immediately
-        stopBleSensing()
+        // The instrument keeps running until submitQuest() closes the session; ending the quest
+        // early is a quest-state change, not a reason to truncate the measurement mid-flight.
 
         // Mark current active step as failed
         screenModelScope.launch {
@@ -298,155 +289,50 @@ class ActiveQuestScreenModel(
         }
     }
 
+    /**
+     * Close the run: stop the instrument, submit the completion, upload every unsynced session,
+     * and purge only what the server acknowledged.
+     *
+     * The export/upload/flush sequence used to live here *and* in the completed screen *and* in
+     * the abandoned screen, in three copies that had already drifted apart. It now lives once, in
+     * [QuestSessionCoordinator].
+     */
     private fun submitQuest(success: Boolean, failReason: String? = null) {
         screenModelScope.launch {
-            // Stop BLE sensing immediately to ensure clean data cutoff
-            stopBleSensing()
+            val enrollmentId = mutableState.value.enrollmentId
+            if (enrollmentId.isEmpty()) {
+                mutableState.value = mutableState.value.copy(completionError = "No active enrollment")
+                return@launch
+            }
 
             mutableState.value = mutableState.value.copy(
                 isUploading = true,
-                uploadProgress = "Preparing data..."
+                uploadProgress = "Closing session..."
             )
 
-            try {
-                val user = userRepository.getCurrentUser()
-                    ?: throw Exception("User not logged in")
-                val token = user.token ?: throw Exception("No auth token")
-                val enrollmentId = mutableState.value.enrollmentId
+            val outcome = sessionCoordinator.finishSession(
+                questId = questId,
+                enrollmentId = enrollmentId,
+                startedWallMillis = mutableState.value.startTime,
+                completed = success,
+                skip = failReason?.let { SkipRecordDto(message = it, errorCode = null) },
+            )
 
-                if (enrollmentId.isEmpty()) {
-                    throw Exception("No active enrollment")
-                }
-
-                // 1. Generate and upload BLE data
-                mutableState.value = mutableState.value.copy(uploadProgress = "Uploading BLE data...")
-                val bleData = questDataExportService.generateBleDataTsv(questId)
-                val bleCount = questDataExportService.getBleRecordCount(questId)
-
-                storageService.uploadExperimentFile(
-                    filename = "ble_data.tsv",
-                    experimentId = enrollmentId,
-                    content = bleData,
-                    token = token
-                )
-
-                // 2. Generate and upload metadata
-                mutableState.value = mutableState.value.copy(uploadProgress = "Uploading metadata...")
-                val endTimeMillis = currentTimeMillis()
-                val startTimeFormatted = Instant.fromEpochMilliseconds(mutableState.value.startTime).toString()
-                val endTimeFormatted = Instant.fromEpochMilliseconds(endTimeMillis).toString()
-
-                val metadata = questDataExportService.generateMetadataTsv(
-                    questId = questId,
-                    enrollmentId = enrollmentId,
-                    startTime = startTimeFormatted,
-                    endTime = endTimeFormatted,
-                    status = if (success) "completed" else "failed",
-                    totalBleRecords = bleCount
-                )
-
-                storageService.uploadExperimentFile(
-                    filename = "metadata.tsv",
-                    experimentId = enrollmentId,
-                    content = metadata,
-                    token = token
-                )
-
-                // 3. Send completion to backend
-                mutableState.value = mutableState.value.copy(uploadProgress = "Completing quest...")
-                val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
-
-                val stepCompletions = steps.map { step ->
-                    // Map status to backend-accepted values: completed, failed, skipped
-                    val mappedStatus = when (step.status) {
-                        "completed" -> "completed"
-                        "failed" -> "failed"
-                        "skipped" -> "skipped"
-                        "pending" -> "skipped"  // Never started
-                        "in_progress" -> "failed"  // Started but not completed
-                        else -> "skipped"
-                    }
-
-                    // Create skip record for non-completed steps
-                    val skipRecord = when {
-                        step.status == "failed" || step.status == "skipped" -> {
-                            SkipRecordDto(
-                                message = step.skipMessage ?: "Unknown reason",
-                                errorCode = step.skipErrorCode
-                            )
-                        }
-                        step.status == "pending" -> {
-                            SkipRecordDto(
-                                message = "Quest ended before this step was reached",
-                                errorCode = "QUEST_ENDED_EARLY"
-                            )
-                        }
-                        step.status == "in_progress" -> {
-                            SkipRecordDto(
-                                message = "Quest ended while this step was in progress",
-                                errorCode = "QUEST_ENDED_EARLY"
-                            )
-                        }
-                        else -> null
-                    }
-
-                    StepCompletionRequestDto(
-                        stepCompletionId = step.backendId,
-                        status = mappedStatus,
-                        startedAt = step.startedAt?.let { Instant.fromEpochMilliseconds(it).toString() } ?: startTimeFormatted,
-                        completedAt = step.completedAt?.let { Instant.fromEpochMilliseconds(it).toString() } ?: endTimeFormatted,
-                        stepData = step.stepData?.let {
-                            kotlinx.serialization.json.Json.parseToJsonElement(it)
-                        },
-                        skipRecord = skipRecord
-                    )
-                }
-
-                val completeRequest = QuestCompleteRequestDto(
-                    enrollmentId = enrollmentId,
-                    completedAt = endTimeFormatted,
-                    steps = stepCompletions
-                )
-
-                questsService.completeQuest(questId, completeRequest, token)
-
-                // 4. Flush local data
-                mutableState.value = mutableState.value.copy(uploadProgress = "Cleaning up...")
-                questDataFlushService.flushQuestData(enrollmentId, questId, user.id)
-
-                // 5. Done! Navigate to completed screen
-                mutableState.value = mutableState.value.copy(
+            mutableState.value = if (outcome.completionSubmitted) {
+                mutableState.value.copy(
                     isUploading = false,
-                    navigateToCompletedScreen = true
+                    navigateToCompletedScreen = true,
                 )
-
-            } catch (e: ClientRequestException) {
-                if (e.response.status.value == 404) {
-                    // Enrollment not found - clean up local data and navigate home
-                    val user = userRepository.getCurrentUser()
-                    val enrollmentId = mutableState.value.enrollmentId
-                    if (user != null && enrollmentId.isNotEmpty()) {
-                        questDataFlushService.flushQuestData(enrollmentId, questId, user.id)
-                    }
-                    mutableState.value = mutableState.value.copy(
-                        isUploading = false,
-                        shouldNavigateHome = true
-                    )
-                } else {
-                    mutableState.value = mutableState.value.copy(
-                        isUploading = false,
-                        completionError = "Upload failed: ${e.message}"
-                    )
-                }
-            } catch (e: Exception) {
-                mutableState.value = mutableState.value.copy(
+            } else {
+                mutableState.value.copy(
                     isUploading = false,
-                    completionError = "Upload failed: ${e.message}"
+                    // Data is retained locally; the lab console shows it as unsynced and can retry.
+                    completionError = "Not submitted (${outcome.completionError ?: "unknown"}). " +
+                        "${outcome.sessionsUnsynced} session(s) kept on device.",
                 )
             }
         }
     }
-
     private fun failTask(taskIndex: Int, reason: String) {
         screenModelScope.launch {
             val enrollmentId = mutableState.value.enrollmentId
@@ -465,13 +351,10 @@ class ActiveQuestScreenModel(
         }
     }
 
-    private fun stopBleSensing() {
-        bleSensingService.stopSensing()
-        mutableState.value = mutableState.value.copy(isBleCollecting = false)
-    }
-
     override fun onDispose() {
         super.onDispose()
-        stopBleSensing()
+        // The session is deliberately NOT stopped here. Leaving the screen must not end a
+        // measurement — the whole point of the instrument is that it keeps running while the app
+        // is backgrounded. Only submitQuest() closes a session.
     }
 }

@@ -31,7 +31,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app uses your location to enable location-based quest features and Bluetooth scanning.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>This app uses your location to enable location-based quest features and Bluetooth scanning.</string>
+	<string>Always access is required so the app can record which zone you are in while it is in your pocket. "When In Use" is revoked the moment the app is backgrounded, which is when a lab session actually runs.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Always access is required so the app can record which zone you are in while it is in your pocket.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires camera access to scan QR codes.</string>
 	<key>NSLocalNetworkUsageDescription</key>
@@ -41,8 +43,14 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<!-- `location` is what buys the process continuous background runtime: iOS grants it to an
+	     app holding an active CoreLocation session, and the paced UDP emitter rides along on that
+	     session. Without it the instrument is suspended the moment the app is backgrounded, which
+	     is the only state a field session runs in. -->
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>location</string>
+		<string>bluetooth-central</string>
 		<string>remote-notification</string>
 	</array>
 	<key>UILaunchScreen</key>
@@ -51,7 +59,9 @@
 	<false/>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
+		<string>bluetooth-le</string>
+		<string>location-services</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

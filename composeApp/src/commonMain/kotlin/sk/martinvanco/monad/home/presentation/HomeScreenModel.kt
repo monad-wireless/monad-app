@@ -10,29 +10,29 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import sk.martinvanco.monad.ble.domain.BleAdvertisement
 import sk.martinvanco.monad.ble.domain.BleScanner
-import sk.martinvanco.monad.ble.domain.BleSensingService
 import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
 import sk.martinvanco.monad.core.domain.toast.ToastManager
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.domain.model.QuestCardDt
-import sk.martinvanco.monad.storage.domain.BleDataExportService
+import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.quests.domain.QuestSessionCoordinator
 
 class HomeScreenModel(
     private val bleScanner: BleScanner,
     private val bluetoothStateChecker: BluetoothStateChecker,
     private val toastManager: ToastManager,
     private val questsService: QuestsService,
-    private val bleSensingService: BleSensingService,
-    private val bleDataExportService: BleDataExportService,
-    private val userRepository: UserRepository
+    private val instrument: LabInstrument,
+    private val sessionCoordinator: QuestSessionCoordinator,
+    private val userRepository: UserRepository,
 ) : StateScreenModel<HomeState>(HomeState()) {
 
     private var scanJob: Job? = null
 
     init {
         loadQuests()
-        observeBleRecordCount()
+        observeInstrument()
         loadUserName()
     }
 
@@ -43,21 +43,24 @@ class HomeScreenModel(
         }
     }
 
-    private fun observeBleRecordCount() {
-        bleSensingService.recordCount
-            .onEach { count ->
-                mutableState.value = mutableState.value.copy(bleRecordCount = count)
-            }
-            .launchIn(screenModelScope)
-
-        bleSensingService.isCollecting
-            .onEach { isCollecting ->
-                mutableState.value = mutableState.value.copy(isBleCollecting = isCollecting)
+    /**
+     * The home screen's sensing indicator reflects the lab instrument rather than a separate BLE
+     * collector: one source of truth for whether this phone is currently measuring anything.
+     */
+    private fun observeInstrument() {
+        instrument.state
+            .onEach { instrumentState ->
+                mutableState.value = mutableState.value.copy(
+                    beaconCount = instrumentState.beaconCount,
+                    isInstrumentRunning = instrumentState.isRunning,
+                )
             }
             .launchIn(screenModelScope)
 
         screenModelScope.launch {
-            bleSensingService.refreshRecordCount()
+            mutableState.value = mutableState.value.copy(
+                unsyncedSessions = sessionCoordinator.unsyncedSessions()
+            )
         }
     }
 
@@ -70,7 +73,7 @@ class HomeScreenModel(
                 // Navigation handled in UI
             }
             is HomeEvent.LoadQuests -> loadQuests()
-            is HomeEvent.UploadBleData -> uploadBleData()
+            is HomeEvent.RetryUploads -> retryUploads()
         }
     }
 
@@ -195,12 +198,12 @@ class HomeScreenModel(
         stopScanning()
     }
 
-    private fun uploadBleData() {
+    /**
+     * Drain the upload backlog. Replaces the old "export BLE, upload, clear" button, which cleared
+     * local data whether or not the upload succeeded.
+     */
+    private fun retryUploads() {
         if (mutableState.value.isUploading) return
-        if (mutableState.value.bleRecordCount == 0L) {
-            toastManager.showToast("No BLE data to upload")
-            return
-        }
 
         screenModelScope.launch {
             mutableState.value = mutableState.value.copy(
@@ -208,26 +211,18 @@ class HomeScreenModel(
                 uploadSuccess = null,
                 uploadError = null
             )
-
-            val result = bleDataExportService.exportAndUploadThenClear()
-
-            result.onSuccess { response ->
-                mutableState.value = mutableState.value.copy(
-                    isUploading = false,
-                    uploadSuccess = true,
-                    uploadError = null
-                )
-                toastManager.showToast("Data uploaded successfully!")
-                bleSensingService.refreshRecordCount()
-            }.onFailure { error ->
-                val errorMessage = error.message ?: "Upload failed"
-                mutableState.value = mutableState.value.copy(
-                    isUploading = false,
-                    uploadSuccess = false,
-                    uploadError = errorMessage
-                )
-                toastManager.showToast("Upload failed: $errorMessage")
-            }
+            val uploaded = sessionCoordinator.retryUploads()
+            val remaining = sessionCoordinator.unsyncedSessions()
+            mutableState.value = mutableState.value.copy(
+                isUploading = false,
+                uploadSuccess = remaining == 0L,
+                uploadError = if (remaining > 0L) "$remaining session(s) still unsynced" else null,
+                unsyncedSessions = remaining,
+            )
+            toastManager.showToast(
+                if (remaining == 0L) "Uploaded $uploaded session(s)"
+                else "Uploaded $uploaded, $remaining still pending"
+            )
         }
     }
 }

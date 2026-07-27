@@ -1,0 +1,108 @@
+-- Per-session sample streams. Deliberately three narrow tables rather than one wide one: the
+-- traffic stream is high-rate (hundreds of rows per second) and must not carry beacon columns.
+
+CREATE TABLE IF NOT EXISTS TrafficSampleRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    sentMonoNs INTEGER NOT NULL,
+    latenessNs INTEGER NOT NULL,
+    sizeBytes INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_session ON TrafficSampleRecord(sessionId);
+
+CREATE TABLE IF NOT EXISTS BeaconObservationRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    uuid TEXT NOT NULL,
+    major INTEGER NOT NULL,
+    minor INTEGER NOT NULL,
+    rssi INTEGER NOT NULL,
+    txPower INTEGER,
+    proximity TEXT,
+    accuracyM REAL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_beacon_session ON BeaconObservationRecord(sessionId);
+
+CREATE TABLE IF NOT EXISTS ZoneTransitionRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    major INTEGER NOT NULL,
+    minor INTEGER NOT NULL,
+    cellId TEXT,
+    label TEXT,
+    entered INTEGER NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_transition_session ON ZoneTransitionRecord(sessionId);
+
+CREATE TABLE IF NOT EXISTS ClockSampleRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    offsetNs INTEGER NOT NULL,
+    rttNs INTEGER NOT NULL,
+    skewPpm REAL NOT NULL,
+    samples INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_clock_session ON ClockSampleRecord(sessionId);
+
+-- Traffic
+insertTrafficSample:
+INSERT INTO TrafficSampleRecord(sessionId, sequence, sentMonoNs, latenessNs, sizeBytes)
+VALUES (?, ?, ?, ?, ?);
+
+selectTrafficBySession:
+SELECT * FROM TrafficSampleRecord WHERE sessionId = ? ORDER BY sequence ASC;
+
+countTrafficBySession:
+SELECT COUNT(*) FROM TrafficSampleRecord WHERE sessionId = ?;
+
+deleteTrafficBySession:
+DELETE FROM TrafficSampleRecord WHERE sessionId = ?;
+
+-- Beacons
+insertBeaconObservation:
+INSERT INTO BeaconObservationRecord(sessionId, uuid, major, minor, rssi, txPower, proximity, accuracyM, monoNs, wallMs)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectBeaconsBySession:
+SELECT * FROM BeaconObservationRecord WHERE sessionId = ? ORDER BY monoNs ASC;
+
+countBeaconsBySession:
+SELECT COUNT(*) FROM BeaconObservationRecord WHERE sessionId = ?;
+
+deleteBeaconsBySession:
+DELETE FROM BeaconObservationRecord WHERE sessionId = ?;
+
+-- Transitions
+insertZoneTransition:
+INSERT INTO ZoneTransitionRecord(sessionId, major, minor, cellId, label, entered, monoNs, wallMs)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectTransitionsBySession:
+SELECT * FROM ZoneTransitionRecord WHERE sessionId = ? ORDER BY monoNs ASC;
+
+countTransitionsBySession:
+SELECT COUNT(*) FROM ZoneTransitionRecord WHERE sessionId = ?;
+
+deleteTransitionsBySession:
+DELETE FROM ZoneTransitionRecord WHERE sessionId = ?;
+
+-- Clock
+insertClockSample:
+INSERT INTO ClockSampleRecord(sessionId, monoNs, offsetNs, rttNs, skewPpm, samples)
+VALUES (?, ?, ?, ?, ?, ?);
+
+selectClockBySession:
+SELECT * FROM ClockSampleRecord WHERE sessionId = ? ORDER BY monoNs ASC;
+
+deleteClockBySession:
+DELETE FROM ClockSampleRecord WHERE sessionId = ?;

@@ -33,6 +33,21 @@ actual class WifiConnectionServiceV2 {
 
     private var currentNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
+    companion object {
+        /**
+         * The app-scoped network the last successful [connect] produced.
+         *
+         * Held here because `WifiNetworkSpecifier` grants a network that is *not* the process
+         * default: unless a socket is explicitly bound to it, datagrams leave over cellular while
+         * the UI happily reports "connected". `LabDatagramSocket` reads this to pin itself, and
+         * the lab console reports whether the pin took — a silent fallback here is the worst
+         * failure mode in the whole instrument.
+         */
+        @Volatile
+        var boundNetwork: Network? = null
+            internal set
+    }
+
     actual suspend fun connect(
         ssid: String,
         password: String?,
@@ -90,6 +105,7 @@ actual class WifiConnectionServiceV2 {
                         override fun onAvailable(network: Network) {
                             super.onAvailable(network)
                             Napier.i("🟢 [WiFiV2-Android] onAvailable - Network connected!")
+                            boundNetwork = network
                             if (!resumed) {
                                 resumed = true
                                 currentNetworkCallback = this
@@ -116,6 +132,7 @@ actual class WifiConnectionServiceV2 {
                         override fun onLost(network: Network) {
                             super.onLost(network)
                             Napier.w("⚠️ [WiFiV2-Android] onLost - Network connection lost")
+                            if (boundNetwork == network) boundNetwork = null
                             if (currentNetworkCallback == this) {
                                 currentNetworkCallback = null
                             }
@@ -183,6 +200,7 @@ actual class WifiConnectionServiceV2 {
                 connectivityManager.unregisterNetworkCallback(callback)
                 currentNetworkCallback = null
             }
+            boundNetwork = null
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

@@ -34,25 +34,26 @@ class StorageService(private val ktorClient: KtorClient) {
     }
 
     /**
-     * Upload experiment data file to S3 via backend
+     * Upload one artefact of a lab session (EXP-P3).
      *
-     * @param filename The filename (e.g., "ble_data.tsv", "metadata.tsv")
-     * @param experimentId The quest enrollment ID
-     * @param content The file content as ByteArray
-     * @param contentType The MIME type (default: text/tab-separated-values)
-     * @param token The auth token
+     * Artefacts land under `datasets/monad-app-sessions/<participant>/<session>/<filename>` so a
+     * phone session sits beside the `csid` fleet captures in the same bucket, addressable the same
+     * way. Replaces the date-partitioned `experiment-upload` layout, which keyed data by upload
+     * date rather than by session and could not be joined to a `csid` capture.
      */
-    suspend fun uploadExperimentFile(
+    suspend fun uploadSessionFile(
+        sessionId: String,
+        participantId: String,
         filename: String,
-        experimentId: String,
         content: ByteArray,
         contentType: String = "text/tab-separated-values",
         token: String
     ): UploadResponseDto {
-        val response = ktorClient.client.post("/api/storage/experiment-upload") {
+        val response = ktorClient.client.post("/api/storage/session-upload") {
             header(HttpHeaders.Authorization, "Bearer $token")
             header("X-Filename", filename)
-            header("X-Experiment-Id", experimentId)
+            header("X-Session-Id", sessionId)
+            header("X-Participant-Id", participantId)
             contentType(ContentType.parse(contentType))
             setBody(content)
         }

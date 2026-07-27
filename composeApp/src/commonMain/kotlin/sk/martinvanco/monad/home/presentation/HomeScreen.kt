@@ -47,6 +47,7 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import sk.martinvanco.monad.home.domain.model.QuestCardDt
+import sk.martinvanco.monad.lab.presentation.LabConsoleScreen
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 import sk.martinvanco.monad.ui.theme.Primary50
 import sk.martinvanco.monad.ui.theme.h2
@@ -68,8 +69,10 @@ class HomeScreen : Screen {
         ) {
             GreetingsMessage(
                 name = state.userName,
-                bleRecordCount = state.bleRecordCount,
-                isBleCollecting = state.isBleCollecting
+                beaconCount = state.beaconCount,
+                isInstrumentRunning = state.isInstrumentRunning,
+                unsyncedSessions = state.unsyncedSessions,
+                onOpenLabConsole = { navigator.push(LabConsoleScreen()) }
             )
 
             Column(
@@ -282,8 +285,10 @@ class HomeScreen : Screen {
     @Composable
     private fun GreetingsMessage(
         name: String?,
-        bleRecordCount: Long = 0,
-        isBleCollecting: Boolean = false
+        beaconCount: Long = 0,
+        isInstrumentRunning: Boolean = false,
+        unsyncedSessions: Long = 0,
+        onOpenLabConsole: () -> Unit = {}
     ) {
         Column(
             Modifier
@@ -312,26 +317,36 @@ class HomeScreen : Screen {
                     )
                 }
 
-                // BLE Record Count Badge
+                // Instrument badge — doubles as the entry point to the lab console. The console is
+                // reachable from the first screen on purpose: it is where an operator finds out
+                // why a session is not measuring, and that question comes up on a bench, not in a
+                // settings menu.
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (isBleCollecting) Color(0xFFDCFCE7) else Color.White)
+                        .background(
+                            when {
+                                unsyncedSessions > 0 -> Color(0xFFFEF3C7)
+                                isInstrumentRunning -> Color(0xFFDCFCE7)
+                                else -> Color.White
+                            }
+                        )
+                        .clickable(onClick = onOpenLabConsole)
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Sensors,
-                        contentDescription = "BLE Records",
-                        tint = if (isBleCollecting) Color(0xFF22C55E) else Color(0xFF5B6ECC),
+                        contentDescription = "Lab console",
+                        tint = if (isInstrumentRunning) Color(0xFF22C55E) else Color(0xFF5B6ECC),
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = "$bleRecordCount",
+                        text = if (unsyncedSessions > 0) "$beaconCount · $unsyncedSessions unsynced" else "$beaconCount",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isBleCollecting) Color(0xFF166534) else Color(0xFF5B6ECC)
+                        color = if (isInstrumentRunning) Color(0xFF166534) else Color(0xFF5B6ECC)
                     )
                 }
             }

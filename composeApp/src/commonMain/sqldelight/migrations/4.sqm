@@ -1,0 +1,75 @@
+-- Migration 4: lab instrument tables (EXP-P3).
+-- Sessions plus three narrow sample streams. Traffic is high-rate and kept apart from the
+-- beacon/clock streams so a 200 Hz emission does not carry unused columns per row.
+
+CREATE TABLE IF NOT EXISTS LabSessionRecord (
+    sessionId TEXT PRIMARY KEY NOT NULL,
+    participantId TEXT NOT NULL,
+    enrollmentId TEXT,
+    questId TEXT,
+    site TEXT,
+    apId TEXT,
+    profileId TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    startedWallMs INTEGER NOT NULL,
+    endedWallMs INTEGER,
+    startedMonoNs INTEGER NOT NULL,
+    endedMonoNs INTEGER,
+    boundInterface TEXT,
+    socketPinned INTEGER NOT NULL DEFAULT 0,
+    sidecarJson TEXT,
+    uploadError TEXT
+);
+
+CREATE TABLE IF NOT EXISTS TrafficSampleRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    sentMonoNs INTEGER NOT NULL,
+    latenessNs INTEGER NOT NULL,
+    sizeBytes INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_session ON TrafficSampleRecord(sessionId);
+
+CREATE TABLE IF NOT EXISTS BeaconObservationRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    uuid TEXT NOT NULL,
+    major INTEGER NOT NULL,
+    minor INTEGER NOT NULL,
+    rssi INTEGER NOT NULL,
+    txPower INTEGER,
+    proximity TEXT,
+    accuracyM REAL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_beacon_session ON BeaconObservationRecord(sessionId);
+
+CREATE TABLE IF NOT EXISTS ZoneTransitionRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    major INTEGER NOT NULL,
+    minor INTEGER NOT NULL,
+    cellId TEXT,
+    label TEXT,
+    entered INTEGER NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_transition_session ON ZoneTransitionRecord(sessionId);
+
+CREATE TABLE IF NOT EXISTS ClockSampleRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    offsetNs INTEGER NOT NULL,
+    rttNs INTEGER NOT NULL,
+    skewPpm REAL NOT NULL,
+    samples INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_clock_session ON ClockSampleRecord(sessionId);
