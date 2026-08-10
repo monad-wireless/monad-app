@@ -1,6 +1,6 @@
 package sk.martinvanco.monad.quests.presentation.quest_detail
 
-import sk.martinvanco.monad.quests.domain.QuestDetailDto
+import sk.martinvanco.monad.quests.data.dto.QuestDetailDto
 
 data class QuestDetailState(
     val questId: String = "",

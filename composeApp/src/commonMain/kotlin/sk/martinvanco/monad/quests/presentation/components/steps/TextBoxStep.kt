@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import sk.martinvanco.monad.quests.domain.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
 
 /**
@@ -30,27 +30,12 @@ fun TextBoxStep(
         description = task.description,
         status = task.status,
         modifier = modifier,
-        content = {
-            TextBoxContent(content = task.description)
-        },
+        // No content slot: QuestStepCard already renders the description, and an informational
+        // step has no step-specific UI of its own. Passing it here as well printed every briefing
+        // twice — invisible while descriptions were empty, obvious the moment they were plumbed in.
         actions = {
             TextBoxActions(onContinue = onComplete)
         }
-    )
-}
-
-/**
- * Content section: Simple text display
- */
-@Composable
-private fun TextBoxContent(content: String) {
-    // Simple text paragraphs - no markdown, no scrolling
-    Text(
-        text = content,
-        fontSize = 14.sp,
-        color = Color(0xFF475569),
-        lineHeight = 20.sp,
-        modifier = Modifier.padding(vertical = 8.dp)
     )
 }
 

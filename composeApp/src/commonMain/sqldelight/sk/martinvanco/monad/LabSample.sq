@@ -54,6 +54,57 @@ CREATE TABLE IF NOT EXISTS ClockSampleRecord (
 
 CREATE INDEX IF NOT EXISTS idx_clock_session ON ClockSampleRecord(sessionId);
 
+
+-- Markers: what the participant was being asked to do, stamped onto the same timeline as the
+-- samples. The instrument records one continuous session; a marker says "from here, this window
+-- is occupancy 3, arrangement o3-a". That keeps the radio warm across takes (no restart gaps) and
+-- survives a UI crash: the stream continues, the markers simply stop.
+CREATE TABLE IF NOT EXISTS SessionMarkerRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    stepId TEXT,
+    label TEXT NOT NULL,
+    payload TEXT,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_marker_session ON SessionMarkerRecord(sessionId);
+
+-- Health checkpoints: liveness, periodically written down.
+--
+-- Health was in memory only, so a session the OS killed produced a recovered sidecar that could
+-- reconstruct row counts and nothing else. "Was it degraded for 42 minutes?" — the question the
+-- whole health module exists to answer — was unanswerable for exactly the sessions most likely to
+-- have gone wrong, because a crashed session is not a random sample of sessions.
+--
+-- One row per stream per checkpoint, written off the same 1 Hz heartbeat that already polls the
+-- counters (throttled to one checkpoint per 30 s). Nothing here touches the emission path: the
+-- heartbeat reads counters the instrument already maintains, and this write happens on the
+-- heartbeat's own coroutine.
+CREATE TABLE IF NOT EXISTS SessionHealthCheckpointRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    stream TEXT NOT NULL,
+    state TEXT NOT NULL,
+    worst TEXT NOT NULL,
+    events INTEGER NOT NULL,
+    eventsPerSecond REAL NOT NULL,
+    expectedRateHz REAL,
+    silenceMs INTEGER NOT NULL,
+    degradedMs INTEGER NOT NULL,
+    staleMs INTEGER NOT NULL,
+    deadMs INTEGER NOT NULL,
+    clockGateStatus TEXT NOT NULL,
+    clockSamples INTEGER NOT NULL,
+    clockResidualMs REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_health_session ON SessionHealthCheckpointRecord(sessionId, monoNs);
+
 -- Traffic
 insertTrafficSample:
 INSERT INTO TrafficSampleRecord(sessionId, sequence, sentMonoNs, latenessNs, sizeBytes)
@@ -104,5 +155,51 @@ VALUES (?, ?, ?, ?, ?, ?);
 selectClockBySession:
 SELECT * FROM ClockSampleRecord WHERE sessionId = ? ORDER BY monoNs ASC;
 
+countClockBySession:
+SELECT COUNT(*) FROM ClockSampleRecord WHERE sessionId = ?;
+
 deleteClockBySession:
 DELETE FROM ClockSampleRecord WHERE sessionId = ?;
+
+-- Markers
+insertMarker:
+INSERT INTO SessionMarkerRecord(sessionId, kind, stepId, label, payload, monoNs, wallMs)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+markersForSession:
+SELECT * FROM SessionMarkerRecord WHERE sessionId = ? ORDER BY monoNs ASC;
+
+countMarkersBySession:
+SELECT COUNT(*) FROM SessionMarkerRecord WHERE sessionId = ?;
+
+countBlockMarkersBySession:
+SELECT COUNT(*) FROM SessionMarkerRecord
+WHERE sessionId = ? AND kind IN ('block_start', 'block_stop');
+
+deleteMarkersForSession:
+DELETE FROM SessionMarkerRecord WHERE sessionId = ?;
+
+-- Health checkpoints
+insertHealthCheckpoint:
+INSERT INTO SessionHealthCheckpointRecord(
+    sessionId, monoNs, wallMs, stream, state, worst, events, eventsPerSecond, expectedRateHz,
+    silenceMs, degradedMs, staleMs, deadMs, clockGateStatus, clockSamples, clockResidualMs
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectHealthBySession:
+SELECT * FROM SessionHealthCheckpointRecord WHERE sessionId = ? ORDER BY monoNs ASC, id ASC;
+
+-- The newest checkpoint, whole. Recovery reads this and nothing else: the last row per stream is
+-- the furthest the session got, and its time-in-state counters are cumulative, so one checkpoint
+-- carries the entire history the in-memory tracker had at that instant.
+selectLastHealthCheckpoint:
+SELECT * FROM SessionHealthCheckpointRecord
+WHERE sessionId = ?
+  AND monoNs = (SELECT MAX(monoNs) FROM SessionHealthCheckpointRecord WHERE sessionId = ?)
+ORDER BY id ASC;
+
+countHealthBySession:
+SELECT COUNT(*) FROM SessionHealthCheckpointRecord WHERE sessionId = ?;
+
+deleteHealthBySession:
+DELETE FROM SessionHealthCheckpointRecord WHERE sessionId = ?;

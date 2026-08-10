@@ -9,7 +9,7 @@ import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.core.util.currentTimeMillis
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
-import sk.martinvanco.monad.quests.domain.QuestDetailDto
+import sk.martinvanco.monad.quests.data.dto.QuestDetailDto
 
 class QuestDetailScreenModel(
     private val questsService: QuestsService,

@@ -114,33 +114,3 @@ val Typography.h2: TextStyle
     @Composable
     @ReadOnlyComposable
     get() = headlineMedium
-
-val Typography.h3: TextStyle
-    @Composable
-    @ReadOnlyComposable
-    get() = headlineSmall
-
-val Typography.textLg: TextStyle
-    @Composable
-    @ReadOnlyComposable
-    get() = titleLarge
-
-val Typography.textMd: TextStyle
-    @Composable
-    @ReadOnlyComposable
-    get() = titleMedium
-
-val Typography.textRegular: TextStyle
-    @Composable
-    @ReadOnlyComposable
-    get() = bodyLarge
-
-val Typography.textSmall: TextStyle
-    @Composable
-    @ReadOnlyComposable
-    get() = bodyMedium
-
-val Typography.textTiny: TextStyle
-    @Composable
-    @ReadOnlyComposable
-    get() = bodySmall

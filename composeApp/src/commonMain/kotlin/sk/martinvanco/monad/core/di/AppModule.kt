@@ -11,29 +11,50 @@ import sk.martinvanco.monad.ble.data.BleScannerImpl
 import sk.martinvanco.monad.ble.domain.BleScanner
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.core.data.repository.SettingsRepository
-import sk.martinvanco.monad.core.domain.NetworkHandler
-import sk.martinvanco.monad.core.domain.wifi_v2.WifiConnectionServiceV2
+import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.presentation.HomeScreenModel
+import sk.martinvanco.monad.lab.data.GroundTruthRepository
+import sk.martinvanco.monad.lab.data.GroundTruthTallyService
 import sk.martinvanco.monad.lab.data.LabConfigService
+import sk.martinvanco.monad.lab.data.LabSessionRecovery
 import sk.martinvanco.monad.lab.data.LabSessionRepository
 import sk.martinvanco.monad.lab.data.LabSessionUploader
+import sk.martinvanco.monad.lab.data.PreflightService
+import sk.martinvanco.monad.lab.data.RoomTallyGateway
+import sk.martinvanco.monad.lab.data.StorageArtefactSink
 import sk.martinvanco.monad.lab.domain.BackgroundResidency
 import sk.martinvanco.monad.lab.domain.BeaconWitness
 import sk.martinvanco.monad.lab.domain.ClockSyncService
+import sk.martinvanco.monad.lab.domain.GroundTruthRecorder
+import sk.martinvanco.monad.lab.domain.GroundTruthStore
 import sk.martinvanco.monad.lab.domain.LabDatagramSocket
 import sk.martinvanco.monad.lab.domain.LabEnvironment
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.SessionRecorder
 import sk.martinvanco.monad.lab.domain.TrafficGenerator
+import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
+import sk.martinvanco.monad.lab.presentation.GroundTruthScanScreenModel
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreenModel
+import sk.martinvanco.monad.lab.presentation.SessionStatusScreenModel
 import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
 import sk.martinvanco.monad.news.presentation.NewsScreenModel
 import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
 import sk.martinvanco.monad.onboarding.presentation.OnboardingScreenModel
+import sk.martinvanco.monad.quests.data.adapter.LabBundleSourceAdapter
+import sk.martinvanco.monad.quests.data.adapter.LabSessionArchiveAdapter
+import sk.martinvanco.monad.quests.data.adapter.ParticipantDirectoryAdapter
+import sk.martinvanco.monad.quests.data.adapter.QuestCompletionGatewayAdapter
+import sk.martinvanco.monad.quests.data.adapter.QuestStepJournalAdapter
 import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
 import sk.martinvanco.monad.quests.domain.QuestSessionCoordinator
+import sk.martinvanco.monad.quests.domain.port.LabBundleSource
+import sk.martinvanco.monad.quests.domain.port.LabSessionArchive
+import sk.martinvanco.monad.quests.domain.port.ParticipantDirectory
+import sk.martinvanco.monad.quests.domain.port.QuestCompletionGateway
+import sk.martinvanco.monad.quests.domain.port.QuestStepJournal
 import sk.martinvanco.monad.quests.presentation.QuestsScreenModel
 import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreenModel
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreenModel
@@ -44,10 +65,8 @@ val appModule = module {
     single<NavigationManager> { NavigationManagerImpl() }
 
     // Network + API surface
-    single { WifiConnectionServiceV2() }
+    single { WifiConnectionService() }
     single { KtorClient }
-    single { KtorClient.client }
-    single { NetworkHandler(get()) }
     single { AuthService(get()) }
     single { QuestsService(get()) }
     single { StorageService(get()) }
@@ -74,7 +93,30 @@ val appModule = module {
     single { BackgroundResidency() }
     single { LabSessionRepository(get()) }
     single { LabConfigService(get()) }
-    single { LabSessionUploader(get(), get(), get()) }
+    // Ground truth (people channel). Buffered locally like every other stream and drained by the
+    // same uploader — there is one path off this device, not two.
+    single { GroundTruthRepository(get()) }
+    // The same two objects, seen through the narrow ports the measurement path is allowed. Aliases,
+    // not second instances: `get<…Repository>()` resolves the singleton above, so there is still one
+    // database handle and one write path. What changes is what the instrument can reach — the
+    // recorder cannot delete a row or render a TSV, and the ground-truth store cannot read another
+    // participant's scans.
+    single<SessionRecorder> { get<LabSessionRepository>() }
+    single<GroundTruthStore> { get<GroundTruthRepository>() }
+    // The room-wide tally. Read-mostly and stateless: unlike the config bundle there is nothing
+    // worth caching, because the whole meaning of this number is how fresh it is.
+    single<RoomTallyGateway> { GroundTruthTallyService() }
+    // The upload path's rules — upload-then-delete, streams before sidecar, bounded retry — are
+    // about ordering and bookkeeping, not about HTTP. Naming the network as a one-method port is
+    // what lets those rules be tested against a real schema instead of believed.
+    single<ArtefactSink> { StorageArtefactSink(get()) }
+    single { LabSessionUploader(get(), get(), get(), get(), get()) }
+    // Pre-flight readiness. Holds the same singleton socket the instrument uses, so it refuses to
+    // probe while a session is live and always resets the clock service afterwards.
+    single { PreflightService(get(), get(), get(), get(), get(), get()) }
+    // Crash / kill / reboot recovery. A session left `open` is invisible to every upload path, so
+    // this runs before anything else can read the backlog.
+    single { LabSessionRecovery(get()) }
     single {
         LabInstrument(
             socket = get(),
@@ -87,19 +129,32 @@ val appModule = module {
             environment = get(),
         )
     }
-    single { QuestSessionCoordinator(get(), get(), get(), get(), get(), get(), get()) }
+    single { GroundTruthRecorder(get(), get()) }
+    // The quest path's ports (see `quests/domain/port`). Adapters over the same singletons, not
+    // second instances: one config service, one uploader, one user table. What changes is what the
+    // coordinator can reach — it can drain the backlog but not delete a session, read step rows but
+    // not write them, and read the participant but not the account.
+    single<LabBundleSource> { LabBundleSourceAdapter(get()) }
+    single<LabSessionArchive> { LabSessionArchiveAdapter(get(), get()) }
+    single<ParticipantDirectory> { ParticipantDirectoryAdapter(get()) }
+    single<QuestCompletionGateway> { QuestCompletionGatewayAdapter(get()) }
+    single<QuestStepJournal> { QuestStepJournalAdapter(get()) }
+    single { QuestSessionCoordinator(get(), get(), get(), get(), get(), get()) }
 
     // Screen models
     factory { SplashScreenModel(get(), get(), get()) }
     factory { OnboardingScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
-    factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get()) }
+    factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { QuestsScreenModel() }
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), questId) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), questId) }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }
-    factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get()) }
+    factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    factory { GroundTruthScanScreenModel(get(), get(), get(), get()) }
+    // "Am I recording?" — the participant surface for a backgrounded session.
+    factory { SessionStatusScreenModel(get(), get(), get(), get(), get(), get()) }
 }

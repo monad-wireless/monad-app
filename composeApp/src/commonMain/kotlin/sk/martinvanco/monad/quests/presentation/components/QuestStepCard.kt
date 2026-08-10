@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import sk.martinvanco.monad.quests.domain.TaskStatus
+import sk.martinvanco.monad.quests.data.dto.TaskStatus
 
 /**
  * Reusable wrapper for quest step cards

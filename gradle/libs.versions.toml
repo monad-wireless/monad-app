@@ -24,8 +24,12 @@ googleServices = "4.4.2"
 firebaseCrashlyticsPlugin = "3.0.3"
 kmpnotifier = "1.6.1"
 mokoPermissions = "0.20.1"
+arcore = "1.49.0"
+androidxUwb = "1.0.0-alpha08"
 
 [libraries]
+arcore = { module = "com.google.ar:core", version.ref = "arcore" }
+androidx-core-uwb = { module = "androidx.core.uwb:uwb", version.ref = "androidxUwb" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = "androidx-ui-tooling" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "androidx-ui-tooling" }
@@ -37,6 +41,7 @@ decompose-extensions = { module = "com.arkivanov.decompose:extensions-compose", 
 essenty-lifecycle-coroutines = { module = "com.arkivanov.essenty:lifecycle-coroutines", version.ref = "essenty" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
+koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
@@ -51,6 +56,10 @@ napier = { module = "io.github.aakira:napier", version.ref = "napier" }
 navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
+# JVM driver, test-only. `JdbcSqliteDriver(IN_MEMORY)` is what lets the boot-epoch guard in
+# LabSessionRecovery and the upload-then-delete rule in LabSessionUploader be checked against a real
+# schema and real SQL instead of against reasoning.
+sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyager" }
 voyager-screenmodel = { module = "cafe.adriel.voyager:voyager-screenmodel", version.ref = "voyager" }

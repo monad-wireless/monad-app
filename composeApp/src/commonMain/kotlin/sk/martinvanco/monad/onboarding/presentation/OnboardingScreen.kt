@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Rocket
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
@@ -422,6 +423,7 @@ private fun getStepIcon(step: OnboardingStep): ImageVector {
         OnboardingStep.WELCOME -> Icons.Default.Rocket
         OnboardingStep.BLUETOOTH -> Icons.Default.Bluetooth
         OnboardingStep.LOCATION -> Icons.Default.LocationOn
+        OnboardingStep.BACKGROUND_LOCATION -> Icons.Default.MyLocation
         OnboardingStep.CAMERA -> Icons.Default.CameraAlt
         OnboardingStep.TERMS -> Icons.Default.Security
         OnboardingStep.COMPLETE -> Icons.Default.CheckCircle

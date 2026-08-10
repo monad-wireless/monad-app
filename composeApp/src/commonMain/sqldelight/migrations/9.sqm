@@ -1,0 +1,34 @@
+-- Migration 9: health survives process death.
+--
+-- Per-stream liveness lived only in memory, so a session the OS killed came back through recovery
+-- with row counts and nothing else. The one question the health module exists to answer — "was it
+-- degraded, and for how long?" — was therefore unanswerable for precisely the sessions most likely
+-- to have gone wrong. A crashed session is not a random sample of sessions.
+--
+-- A checkpoint row is written per stream every 30 s off the existing 1 Hz heartbeat. The
+-- time-in-state columns are cumulative, so the newest checkpoint alone reconstructs the whole
+-- history the in-memory tracker had at that instant; recovery reads that one row set and no more.
+--
+-- Nothing on the emission path changed. The heartbeat already polled counters the instrument
+-- maintains; this write happens on the heartbeat's own coroutine, never inside the send loop.
+CREATE TABLE IF NOT EXISTS SessionHealthCheckpointRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    stream TEXT NOT NULL,
+    state TEXT NOT NULL,
+    worst TEXT NOT NULL,
+    events INTEGER NOT NULL,
+    eventsPerSecond REAL NOT NULL,
+    expectedRateHz REAL,
+    silenceMs INTEGER NOT NULL,
+    degradedMs INTEGER NOT NULL,
+    staleMs INTEGER NOT NULL,
+    deadMs INTEGER NOT NULL,
+    clockGateStatus TEXT NOT NULL,
+    clockSamples INTEGER NOT NULL,
+    clockResidualMs REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_health_session ON SessionHealthCheckpointRecord(sessionId, monoNs);

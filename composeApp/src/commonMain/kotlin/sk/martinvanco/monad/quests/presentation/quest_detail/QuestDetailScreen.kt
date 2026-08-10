@@ -54,8 +54,8 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform.getKoin
 import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
-import sk.martinvanco.monad.quests.domain.QuestDetailDto
-import sk.martinvanco.monad.quests.domain.TaskDto
+import sk.martinvanco.monad.quests.data.dto.QuestDetailDto
+import sk.martinvanco.monad.quests.data.dto.TaskDto
 import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreen
 
 data class QuestDetailScreen(val questId: String) : Screen {

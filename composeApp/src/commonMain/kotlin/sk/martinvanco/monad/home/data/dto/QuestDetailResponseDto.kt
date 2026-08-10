@@ -1,5 +1,11 @@
 package sk.martinvanco.monad.home.data.dto
 
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -26,6 +32,30 @@ data class StepResponseDto(
 )
 
 @Serializable
+/**
+ * Tolerant step-type serializer for the quest-detail DTO.
+ *
+ * This is the *second* step-type enum in the app — `quests/data/dto/TaskType` is the other — and
+ * making only one of them forward-compatible fixed nothing: adding `sensor_capture` server-side
+ * still broke the whole quest with an unexplained "Network error", just from the other layer.
+ * Duplicated enums over the same wire contract are exactly how that recurs, so both now degrade
+ * unknown values to [StepType.UNKNOWN] instead of throwing.
+ */
+object StepTypeSerializer : KSerializer<StepType> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("StepType", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: StepType) {
+        encoder.encodeString(value.wire)
+    }
+
+    override fun deserialize(decoder: Decoder): StepType {
+        val raw = decoder.decodeString()
+        return StepType.entries.firstOrNull { it.wire == raw } ?: StepType.UNKNOWN
+    }
+}
+
+@Serializable(with = StepTypeSerializer::class)
 enum class StepType {
     @SerialName("start")
     START,
@@ -45,6 +75,26 @@ enum class StepType {
     @SerialName("find_ble_device")
     FIND_BLE_DEVICE,
 
+    @SerialName("sensor_capture")
+    SENSOR_CAPTURE,
+
     @SerialName("finish")
-    FINISH
+    FINISH,
+
+    /** A step type this build does not know about; rendered as a plain instruction. */
+    @SerialName("unknown")
+    UNKNOWN;
+
+    val wire: String
+        get() = when (this) {
+            START -> "start"
+            WAIT -> "wait"
+            SCAN_QR -> "scan_qr"
+            CONNECT_TO_AP -> "connect_to_ap"
+            WALK_TO -> "walk_to"
+            FIND_BLE_DEVICE -> "find_ble_device"
+            SENSOR_CAPTURE -> "sensor_capture"
+            FINISH -> "finish"
+            UNKNOWN -> "unknown"
+        }
 }

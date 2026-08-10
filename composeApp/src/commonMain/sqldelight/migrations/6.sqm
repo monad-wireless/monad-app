@@ -1,0 +1,41 @@
+-- Migration 6: the ground-truth (people) channel.
+--
+-- BLE counts phones. The calibration this instrument feeds needs people, and phone-vs-person bias
+-- is the quantity a later experiment measures — so the truth channel must not be derivable from
+-- phone presence. Hence an explicit human act: a scan of a printed session/zone code, tied to the
+-- participant pseudonym and stamped on the same clock pair (monoNs / wallMs) as every other stream.
+CREATE TABLE IF NOT EXISTS GroundTruthEventRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    labSessionId TEXT NOT NULL,
+    recordingSessionId TEXT,
+    participantToken TEXT NOT NULL,
+    zoneId TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    site TEXT NOT NULL DEFAULT '',
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    scanNonce TEXT NOT NULL UNIQUE,
+    uploaded INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_ground_truth_session ON GroundTruthEventRecord(labSessionId);
+CREATE INDEX IF NOT EXISTS idx_ground_truth_pending ON GroundTruthEventRecord(uploaded);
+
+-- Repair, carried here because it is idempotent and because the alternative is a crash.
+--
+-- SessionMarkerRecord was added to LabSample.sq without a migration, so `CREATE TABLE IF NOT
+-- EXISTS` only ever ran on a *fresh* install: any device that had already reached schema version 6
+-- has the marker queries but not the table, and the first quest step to raise a marker throws.
+-- Creating it here costs nothing on a device that already has it.
+CREATE TABLE IF NOT EXISTS SessionMarkerRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    stepId TEXT,
+    label TEXT NOT NULL,
+    payload TEXT,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_marker_session ON SessionMarkerRecord(sessionId);

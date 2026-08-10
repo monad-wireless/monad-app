@@ -1,6 +1,7 @@
 package sk.martinvanco.monad.home.data.api
 
 import io.ktor.client.call.body
+import sk.martinvanco.monad.lab.domain.detectCapabilities
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
@@ -16,8 +17,16 @@ import sk.martinvanco.monad.quests.data.dto.QuestStartResponseDto
 
 class QuestsService(private val ktorClient: KtorClient) {
 
+    /**
+     * Active quests this device can actually run.
+     *
+     * The capability list is sent so the backend withholds quests needing hardware this handset
+     * lacks. A quest offered to a device that cannot satisfy it does not fail loudly — it produces
+     * a session that looks complete and is missing the measurement, which is worse.
+     */
     suspend fun getActiveQuests(): QuestListResponseDto {
         val response = ktorClient.client.get("/api/quests") {
+            parameter("capabilities", detectCapabilities().capabilities.sorted().joinToString(","))
             parameter("status", "active")
         }
         return response.body<QuestListResponseDto>()

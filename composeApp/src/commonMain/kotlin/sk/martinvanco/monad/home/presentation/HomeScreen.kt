@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Stars
@@ -46,8 +47,11 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import sk.martinvanco.monad.home.domain.model.QuestCardDt
+import sk.martinvanco.monad.home.presentation.model.QuestCardDt
+import sk.martinvanco.monad.lab.domain.SessionReport
+import sk.martinvanco.monad.lab.presentation.GroundTruthScanScreen
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreen
+import sk.martinvanco.monad.lab.presentation.SessionStatusScreen
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 import sk.martinvanco.monad.ui.theme.Primary50
 import sk.martinvanco.monad.ui.theme.h2
@@ -72,7 +76,17 @@ class HomeScreen : Screen {
                 beaconCount = state.beaconCount,
                 isInstrumentRunning = state.isInstrumentRunning,
                 unsyncedSessions = state.unsyncedSessions,
-                onOpenLabConsole = { navigator.push(LabConsoleScreen()) }
+                onOpenLabConsole = { navigator.push(LabConsoleScreen()) },
+                onOpenCheckIn = { navigator.push(GroundTruthScanScreen()) },
+            )
+
+            // The participant's question, answered above the fold. A session runs for hours with
+            // the app backgrounded; the whole interaction is somebody unlocking their phone and
+            // needing "yes · ZONE-B · 4 s ago" without interpreting anything.
+            SessionStatusCard(
+                state = state,
+                onOpenStatus = { navigator.push(SessionStatusScreen()) },
+                onOpenCheckIn = { navigator.push(GroundTruthScanScreen()) },
             )
 
             Column(
@@ -171,6 +185,83 @@ class HomeScreen : Screen {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * "Am I recording? Which zone? How fresh?" — one card, three lines, no jargon.
+     *
+     * Colour carries the state so it is readable at arm's length, and the headline changes when a
+     * stream dies rather than only when the session stops: an instrument that says "recording"
+     * while a stream is dead is the exact failure this pass exists to make impossible.
+     */
+    @Composable
+    private fun SessionStatusCard(
+        state: HomeState,
+        onOpenStatus: () -> Unit,
+        onOpenCheckIn: () -> Unit,
+    ) {
+        val background = when {
+            !state.isInstrumentRunning -> Color(0xFFF1F5F9)
+            state.instrumentIsNominal -> Color(0xFFDCFCE7)
+            else -> Color(0xFFFEF3C7)
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(background)
+                .clickable(onClick = onOpenStatus)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                state.instrumentHeadline,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A),
+            )
+            Text(
+                state.zone.current?.let { "You are in ${it.zoneId}" } ?: "You are not checked in",
+                fontSize = 14.sp,
+                color = Color(0xFF334155),
+            )
+            Text(
+                state.lastEventAgeMillis
+                    ?.let { "last event ${SessionReport.formatDuration(it)} ago" }
+                    ?: if (state.isInstrumentRunning) "no events yet" else "nothing recording",
+                fontSize = 12.sp,
+                color = Color(0xFF475569),
+            )
+            if (state.recoveredSessions > 0) {
+                Text(
+                    "${state.recoveredSessions} interrupted session(s) recovered",
+                    fontSize = 12.sp,
+                    color = Color(0xFF92400E),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onOpenCheckIn) {
+                    Text(
+                        if (state.zone.isCheckedIn) "Move zone / check out" else "Check in",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF5B6ECC),
+                    )
+                }
+                TextButton(onClick = onOpenStatus) {
+                    Text(
+                        "Details",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF5B6ECC),
+                    )
                 }
             }
         }
@@ -288,7 +379,8 @@ class HomeScreen : Screen {
         beaconCount: Long = 0,
         isInstrumentRunning: Boolean = false,
         unsyncedSessions: Long = 0,
-        onOpenLabConsole: () -> Unit = {}
+        onOpenLabConsole: () -> Unit = {},
+        onOpenCheckIn: () -> Unit = {},
     ) {
         Column(
             Modifier
@@ -322,32 +414,53 @@ class HomeScreen : Screen {
                 // why a session is not measuring, and that question comes up on a bench, not in a
                 // settings menu.
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            when {
-                                unsyncedSessions > 0 -> Color(0xFFFEF3C7)
-                                isInstrumentRunning -> Color(0xFFDCFCE7)
-                                else -> Color.White
-                            }
-                        )
-                        .clickable(onClick = onOpenLabConsole)
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
+                    // Check in / out. Beside the instrument badge rather than buried in the lab
+                    // console, because this one is the *participant's* action: it is the only thing
+                    // in the app that records a person rather than a phone, and it has to be
+                    // reachable in the two seconds someone spends walking through a door.
                     Icon(
-                        imageVector = Icons.Filled.Sensors,
-                        contentDescription = "Lab console",
-                        tint = if (isInstrumentRunning) Color(0xFF22C55E) else Color(0xFF5B6ECC),
-                        modifier = Modifier.size(18.dp)
+                        imageVector = Icons.Filled.QrCodeScanner,
+                        contentDescription = "Check in or out",
+                        tint = Color(0xFF5B6ECC),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White)
+                            .clickable(onClick = onOpenCheckIn)
+                            .padding(8.dp)
+                            .size(18.dp)
                     )
-                    Text(
-                        text = if (unsyncedSessions > 0) "$beaconCount · $unsyncedSessions unsynced" else "$beaconCount",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isInstrumentRunning) Color(0xFF166534) else Color(0xFF5B6ECC)
-                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                when {
+                                    unsyncedSessions > 0 -> Color(0xFFFEF3C7)
+                                    isInstrumentRunning -> Color(0xFFDCFCE7)
+                                    else -> Color.White
+                                }
+                            )
+                            .clickable(onClick = onOpenLabConsole)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Sensors,
+                            contentDescription = "Lab console",
+                            tint = if (isInstrumentRunning) Color(0xFF22C55E) else Color(0xFF5B6ECC),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (unsyncedSessions > 0) "$beaconCount · $unsyncedSessions unsynced" else "$beaconCount",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isInstrumentRunning) Color(0xFF166534) else Color(0xFF5B6ECC)
+                        )
+                    }
                 }
             }
         }

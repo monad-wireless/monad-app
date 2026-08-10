@@ -5,7 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import io.github.aakira.napier.Napier
-import sk.martinvanco.monad.core.domain.wifi_v2.WifiConnectionServiceV2
+import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
 import sk.martinvanco.monad.core.util.ContextProvider
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -18,7 +18,7 @@ import java.net.SocketTimeoutException
  *
  * Pinning order, most specific first:
  *
- * 1. the app-scoped network from `WifiNetworkSpecifier` ([WifiConnectionServiceV2.boundNetwork]) —
+ * 1. the app-scoped network from `WifiNetworkSpecifier` ([WifiConnectionService.boundNetwork]) —
  *    this is the only one that reaches an experiment AP with no internet route;
  * 2. any transport-Wi-Fi network the connectivity manager knows about;
  * 3. unpinned, reported as such so the operator sees it.
@@ -90,7 +90,7 @@ actual class LabDatagramSocket actual constructor() {
     actual fun boundInterfaceDescription(): String = description
 
     private fun resolveWifiNetwork(): Network? {
-        WifiConnectionServiceV2.boundNetwork?.let { return it }
+        WifiConnectionService.boundNetwork?.let { return it }
         return runCatching {
             connectivity.allNetworks.firstOrNull { network ->
                 connectivity.getNetworkCapabilities(network)

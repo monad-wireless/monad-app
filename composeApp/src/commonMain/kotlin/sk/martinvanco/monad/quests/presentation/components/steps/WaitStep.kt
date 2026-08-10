@@ -13,9 +13,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import sk.martinvanco.monad.quests.domain.ActiveTaskDto
-import sk.martinvanco.monad.quests.domain.TaskConfigParser
-import sk.martinvanco.monad.quests.domain.WaitConfig
+import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.TaskConfigParser
+import sk.martinvanco.monad.quests.data.dto.WaitConfig
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
 
 /**

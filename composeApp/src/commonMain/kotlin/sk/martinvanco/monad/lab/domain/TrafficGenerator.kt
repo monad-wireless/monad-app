@@ -157,6 +157,23 @@ class TrafficGenerator(
         _stats.value = _stats.value.copy(isComplete = true)
     }
 
+    /**
+     * Clear the emission counters at session start.
+     *
+     * [stop] deliberately preserves the final counts so the just-ended session can be summarised,
+     * and [start] only re-initialises them *inside* the coroutine it launches — which never runs
+     * for a witness-only session. Without this reset, a non-emitting session inherits the previous
+     * session's `packetsSent` / `achievedRateHz` / `intervalCv` / `maxGapMillis` into its sidecar
+     * (LabInstrument reads `stats.value` unconditionally when building `SessionSummary`), silently
+     * attributing one session's illumination to another. Flipping between emitting and
+     * witness-only on one handset is the expected path, not an edge case.
+     *
+     * Called beside `clockSync.reset()` at session start; the same class of cross-session leak.
+     */
+    fun reset() {
+        _stats.value = TrafficStats.IDLE
+    }
+
     private fun snapshot(
         profile: TrafficProfile,
         origin: Long,

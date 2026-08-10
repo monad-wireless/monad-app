@@ -2,18 +2,18 @@ package sk.martinvanco.monad.quests.domain
 
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Instant
-import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.core.util.currentTimeMillis
-import sk.martinvanco.monad.home.data.api.QuestsService
-import sk.martinvanco.monad.lab.data.LabConfigService
-import sk.martinvanco.monad.lab.data.LabSessionRepository
-import sk.martinvanco.monad.lab.data.LabSessionUploader
+import sk.martinvanco.monad.lab.domain.LabConfig
 import sk.martinvanco.monad.lab.domain.LabInstrument
 import sk.martinvanco.monad.lab.domain.SessionRequest
-import sk.martinvanco.monad.quests.data.dto.QuestCompleteRequestDto
-import sk.martinvanco.monad.quests.data.dto.SkipRecordDto
-import sk.martinvanco.monad.quests.data.dto.StepCompletionRequestDto
-import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
+import sk.martinvanco.monad.quests.domain.port.LabBundleSource
+import sk.martinvanco.monad.quests.domain.port.LabSessionArchive
+import sk.martinvanco.monad.quests.domain.port.ParticipantDirectory
+import sk.martinvanco.monad.quests.domain.port.QuestCompletion
+import sk.martinvanco.monad.quests.domain.port.QuestCompletionGateway
+import sk.martinvanco.monad.quests.domain.port.QuestSkip
+import sk.martinvanco.monad.quests.domain.port.QuestStepJournal
+import sk.martinvanco.monad.quests.domain.port.QuestStepOutcome
 
 /**
  * The one place a quest becomes a lab session, and the one place a finished quest is uploaded.
@@ -26,16 +26,44 @@ import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
  *
  * This class enforces the replacement rule: **submit, upload, and only then purge.** A failure at
  * any stage leaves every byte on disk and the session visible as unsynced in the lab console.
+ *
+ * It names ports rather than repositories and services (see `quests/domain/port`). The rule above
+ * is a judgement about data that cannot be re-collected; it should be readable — and wrong-able —
+ * without a database, an HTTP client and three other features' data layers in scope. The only
+ * cross-feature types it still names are `lab.domain` ones (`LabInstrument`, `LabConfig`,
+ * `SessionRequest`), which are domain types on both sides of the boundary.
  */
 class QuestSessionCoordinator(
     private val instrument: LabInstrument,
-    private val labConfig: LabConfigService,
-    private val labSessions: LabSessionRepository,
-    private val uploader: LabSessionUploader,
-    private val questSteps: QuestStepCompletionRepository,
-    private val questsService: QuestsService,
-    private val users: UserRepository,
+    private val labBundle: LabBundleSource,
+    private val archive: LabSessionArchive,
+    private val participants: ParticipantDirectory,
+    private val stepJournal: QuestStepJournal,
+    private val completions: QuestCompletionGateway,
 ) {
+
+    /**
+     * Make sure a lab bundle is loaded before the roles are decided.
+     *
+     * The bundle used to be fetched only by the lab console, so a participant who never opened it
+     * started every session against [LabConfig.EMPTY]: no beacon plan, no traffic profile, and
+     * therefore neither the witness nor the illuminator role. The session still recorded — it just
+     * recorded nothing worth having, silently, which is the failure mode this whole subsystem is
+     * built to avoid.
+     *
+     * Cache first, then a best-effort network refresh: a phone about to join an experiment AP may
+     * already have no route to the internet, and a stale bundle beats no bundle. A refresh failure
+     * is logged by the adapter and deliberately not fatal.
+     */
+    private suspend fun ensureLabConfig(): LabConfig {
+        if (!labBundle.isLoaded) {
+            labBundle.loadCached()
+        }
+        if (!labBundle.current.isIlluminationReady) {
+            labBundle.refresh(participants.current()?.token)
+        }
+        return labBundle.current
+    }
 
     /**
      * Start instrumenting a quest.
@@ -50,8 +78,8 @@ class QuestSessionCoordinator(
         apId: String? = null,
         profileId: String? = null,
     ): Result<String> {
-        val config = labConfig.config.value
-        val user = users.getCurrentUser()
+        val config = ensureLabConfig()
+        val participant = participants.current()
             ?: return Result.failure(IllegalStateException("not logged in"))
 
         val profile = profileId?.let { config.trafficProfile(it) }
@@ -63,7 +91,7 @@ class QuestSessionCoordinator(
             SessionRequest(
                 // The dataset carries the pseudonym, never the account e-mail: the game owns the
                 // account, the measurement owns only the participant key.
-                participantId = user.backendId ?: user.id.toString(),
+                participantId = participant.participantId,
                 collector = config.collector,
                 beacons = config.beacons,
                 accessPoint = accessPoint,
@@ -92,11 +120,11 @@ class QuestSessionCoordinator(
         enrollmentId: String,
         startedWallMillis: Long,
         completed: Boolean,
-        skip: SkipRecordDto? = null,
+        skip: QuestSkip? = null,
     ): FinishOutcome {
         val sessionId = instrument.stop().getOrNull()
 
-        val token = users.getCurrentUser()?.token
+        val token = participants.current()?.token
         val endedWallMillis = currentTimeMillis()
         val startIso = Instant.fromEpochMilliseconds(startedWallMillis).toString()
         val endIso = Instant.fromEpochMilliseconds(endedWallMillis).toString()
@@ -105,8 +133,8 @@ class QuestSessionCoordinator(
         var submitError: String? = null
         if (token != null) {
             runCatching {
-                val steps = questSteps.getByEnrollmentId(enrollmentId)
-                val stepCompletions = steps.map { step ->
+                val steps = stepJournal.stepsFor(enrollmentId)
+                val stepOutcomes = steps.map { step ->
                     // The backend accepts completed / failed / skipped only. A step the
                     // participant never reached is *skipped*; one they were standing on when the
                     // quest ended is *failed* — the distinction matters because only the second
@@ -120,40 +148,40 @@ class QuestSessionCoordinator(
                         else -> "skipped"
                     }
                     val skipRecord = when (step.status) {
-                        "failed", "skipped" -> skip ?: SkipRecordDto(
+                        "failed", "skipped" -> skip ?: QuestSkip(
                             message = step.skipMessage ?: "Unknown reason",
                             errorCode = step.skipErrorCode,
                         )
 
-                        "pending" -> SkipRecordDto(
+                        "pending" -> QuestSkip(
                             message = "Quest ended before this step was reached",
                             errorCode = QUEST_ENDED_EARLY,
                         )
 
-                        "in_progress" -> SkipRecordDto(
+                        "in_progress" -> QuestSkip(
                             message = "Quest ended while this step was in progress",
                             errorCode = QUEST_ENDED_EARLY,
                         )
 
                         else -> null
                     }
-                    StepCompletionRequestDto(
-                        stepCompletionId = step.backendId,
+                    QuestStepOutcome(
+                        stepCompletionId = step.stepCompletionId,
                         status = mappedStatus,
-                        startedAt = step.startedAt?.let { Instant.fromEpochMilliseconds(it).toString() } ?: startIso,
-                        completedAt = step.completedAt?.let { Instant.fromEpochMilliseconds(it).toString() } ?: endIso,
-                        stepData = step.stepData?.let {
-                            runCatching { kotlinx.serialization.json.Json.parseToJsonElement(it) }.getOrNull()
-                        },
-                        skipRecord = skipRecord,
+                        startedAtIso = step.startedAtMillis
+                            ?.let { Instant.fromEpochMilliseconds(it).toString() } ?: startIso,
+                        completedAtIso = step.completedAtMillis
+                            ?.let { Instant.fromEpochMilliseconds(it).toString() } ?: endIso,
+                        stepDataJson = step.stepDataJson,
+                        skip = skipRecord,
                     )
                 }
-                questsService.completeQuest(
+                completions.submitCompletion(
                     questId = questId,
-                    request = QuestCompleteRequestDto(
+                    completion = QuestCompletion(
                         enrollmentId = enrollmentId,
-                        completedAt = endIso,
-                        steps = stepCompletions,
+                        completedAtIso = endIso,
+                        steps = stepOutcomes,
                     ),
                     token = token,
                 )
@@ -169,15 +197,15 @@ class QuestSessionCoordinator(
         // Upload every unsynced session, not just this one: a phone that spent a day offline in a
         // pocket is the normal case, and the moment it has connectivity is the moment to drain the
         // backlog.
-        val uploaded = uploader.uploadPending(purgeAfter = true)
+        val uploaded = archive.uploadPending()
 
         // Local step rows are only dropped once the completion actually reached the server.
         if (submitted) {
-            questSteps.deleteByEnrollmentId(enrollmentId)
-            users.getCurrentUser()?.let { users.clearActiveQuestId(it.id) }
+            stepJournal.clear(enrollmentId)
+            participants.current()?.let { participants.clearActiveQuest(it.userId) }
         }
 
-        val unsynced = labSessions.unsyncedCount()
+        val unsynced = archive.unsyncedCount()
         return FinishOutcome(
             sessionId = sessionId,
             completionSubmitted = submitted,
@@ -189,9 +217,9 @@ class QuestSessionCoordinator(
     }
 
     /** Drain the upload backlog without touching quest state — used by the lab console. */
-    suspend fun retryUploads(): Int = uploader.uploadPending(purgeAfter = true)
+    suspend fun retryUploads(): Int = archive.uploadPending()
 
-    suspend fun unsyncedSessions(): Long = labSessions.unsyncedCount()
+    suspend fun unsyncedSessions(): Long = archive.unsyncedCount()
 
     /**
      * Abandon a run whose local state is unusable (corrupt enrolment, missing steps).
@@ -202,9 +230,9 @@ class QuestSessionCoordinator(
      */
     suspend fun abandonSession(enrollmentId: String?) {
         instrument.stop()
-        enrollmentId?.let { questSteps.deleteByEnrollmentId(it) }
-        users.getCurrentUser()?.let { users.clearActiveQuestId(it.id) }
-        runCatching { uploader.uploadPending(purgeAfter = true) }
+        enrollmentId?.let { stepJournal.clear(it) }
+        participants.current()?.let { participants.clearActiveQuest(it.userId) }
+        runCatching { archive.uploadPending() }
     }
 
     private companion object {

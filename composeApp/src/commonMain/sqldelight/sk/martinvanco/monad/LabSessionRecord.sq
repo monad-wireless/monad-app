@@ -16,19 +16,48 @@ CREATE TABLE IF NOT EXISTS LabSessionRecord (
     boundInterface TEXT,
     socketPinned INTEGER NOT NULL DEFAULT 0,
     sidecarJson TEXT,
-    uploadError TEXT
+    uploadError TEXT,
+    -- Continuity epoch the session was opened in. monoNs is only comparable inside one epoch: it
+    -- resets on reboot, and on iOS it is also re-based on process launch. Storing it is what lets
+    -- crash recovery refuse to stamp a session's end with a monotonic reading from a different
+    -- clock — the one way this design could silently join two timelines into one.
+    bootId TEXT,
+    -- Non-null when the session did not end through stop(). The data is still uploaded; it is
+    -- marked so a truncated recording is not read as a quiet one.
+    interruptedReason TEXT,
+    -- The build that opened this session: `<version>+<code>.g<commit>[.dirty<hash>]`.
+    --
+    -- Written at open() rather than derived at close, because the sidecar of an *interrupted*
+    -- session is assembled by a later launch — possibly of a different build, possibly after an
+    -- app update. Deriving it then would put the recovering build's identity on the recording
+    -- build's data, which is worse than leaving it empty. Crashed sessions are also not a random
+    -- sample of sessions, so they are exactly the ones whose provenance must survive.
+    buildId TEXT
 );
 
 insertSession:
 INSERT OR REPLACE INTO LabSessionRecord(
     sessionId, participantId, enrollmentId, questId, site, apId, profileId,
-    status, startedWallMs, startedMonoNs, boundInterface, socketPinned
-) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?);
+    status, startedWallMs, startedMonoNs, boundInterface, socketPinned, bootId, buildId
+) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?);
 
 closeSession:
 UPDATE LabSessionRecord
 SET status = 'closed', endedWallMs = ?, endedMonoNs = ?, sidecarJson = ?
 WHERE sessionId = ?;
+
+-- Close a session that never reached stop(). Same terminal status as a clean close, because the
+-- data is just as worth uploading; the reason column is what tells the reader it is truncated.
+markInterrupted:
+UPDATE LabSessionRecord
+SET status = 'closed', endedWallMs = ?, endedMonoNs = ?, sidecarJson = ?, interruptedReason = ?
+WHERE sessionId = ?;
+
+-- `ifnull(...) != ''` rather than `IS NOT NULL`: the latter narrows the column's nullability in the
+-- projection, which makes SQLDelight emit a distinct result type for a plain `SELECT *` and forces
+-- every caller to speak in generated names instead of in LabSessionRecord.
+selectInterrupted:
+SELECT * FROM LabSessionRecord WHERE ifnull(interruptedReason, '') != '' ORDER BY startedWallMs DESC;
 
 markUploaded:
 UPDATE LabSessionRecord SET status = 'uploaded', uploadError = NULL WHERE sessionId = ?;

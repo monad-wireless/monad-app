@@ -14,8 +14,12 @@ import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
 import sk.martinvanco.monad.core.domain.toast.ToastManager
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.home.data.api.QuestsService
-import sk.martinvanco.monad.home.domain.model.QuestCardDt
+import sk.martinvanco.monad.home.presentation.model.QuestCardDt
+import io.github.aakira.napier.Napier
+import sk.martinvanco.monad.lab.data.GroundTruthRepository
+import sk.martinvanco.monad.lab.data.LabSessionRecovery
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.ZoneMembership
 import sk.martinvanco.monad.quests.domain.QuestSessionCoordinator
 
 class HomeScreenModel(
@@ -26,13 +30,19 @@ class HomeScreenModel(
     private val instrument: LabInstrument,
     private val sessionCoordinator: QuestSessionCoordinator,
     private val userRepository: UserRepository,
+    private val recovery: LabSessionRecovery,
+    private val groundTruth: GroundTruthRepository,
 ) : StateScreenModel<HomeState>(HomeState()) {
 
     private var scanJob: Job? = null
 
     init {
+        // Recovery first: it is the one thing here that must happen before a new session can be
+        // started, and Home is the first screen every launch passes through.
+        recoverInterruptedSessions()
         loadQuests()
         observeInstrument()
+        observeZone()
         loadUserName()
     }
 
@@ -57,9 +67,53 @@ class HomeScreenModel(
             }
             .launchIn(screenModelScope)
 
+        // Per-stream liveness, so the first screen can distinguish "running" from "running and
+        // actually producing" — the difference an overnight capture at 11.6 % delivery did not have
+        // a way to express.
+        instrument.health
+            .onEach { mutableState.value = mutableState.value.copy(health = it) }
+            .launchIn(screenModelScope)
+
         screenModelScope.launch {
             mutableState.value = mutableState.value.copy(
                 unsyncedSessions = sessionCoordinator.unsyncedSessions()
+            )
+        }
+    }
+
+    /**
+     * Rescue sessions the process did not survive.
+     *
+     * Runs here because Home is the first screen after login on every launch, and a session left
+     * `open` is invisible to every upload path — `selectPendingUpload` takes only `closed` and
+     * `failed`. Before this, an OS kill during a backgrounded session stranded the most expensive
+     * artefact in the system on the device, silently and permanently.
+     */
+    private fun recoverInterruptedSessions() {
+        screenModelScope.launch {
+            val recovered = runCatching { recovery.recover() }.getOrElse {
+                Napier.w("[home] session recovery failed: ${it.message}")
+                emptyList()
+            }
+            if (recovered.isEmpty()) return@launch
+            mutableState.value = mutableState.value.copy(
+                recoveredSessions = recovered.size,
+                unsyncedSessions = sessionCoordinator.unsyncedSessions(),
+            )
+            toastManager.showToast(
+                "${recovered.size} interrupted session(s) recovered — nothing was lost"
+            )
+        }
+    }
+
+    /** Where this participant is, by their own check-in scans. */
+    private fun observeZone() {
+        screenModelScope.launch {
+            val user = userRepository.getCurrentUser()
+            val token = user?.backendId ?: user?.id?.toString().orEmpty()
+            val session = groundTruth.lastScannedSession(token) ?: return@launch
+            mutableState.value = mutableState.value.copy(
+                zone = ZoneMembership.resolve(groundTruth.eventsForParticipant(session, token))
             )
         }
     }

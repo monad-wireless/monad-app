@@ -6,20 +6,23 @@ import io.ktor.client.plugins.ClientRequestException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.core.util.currentTimeMillis
 import sk.martinvanco.monad.home.data.api.QuestsService
-import sk.martinvanco.monad.quests.data.dto.QuestCompleteRequestDto
-import sk.martinvanco.monad.quests.data.dto.StepCompletionRequestDto
-import sk.martinvanco.monad.quests.data.dto.SkipRecordDto
 import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
-import sk.martinvanco.monad.quests.domain.ActiveTaskDto
-import sk.martinvanco.monad.quests.domain.TaskStatus
-import sk.martinvanco.monad.quests.domain.TaskType
+import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.TaskStatus
+import sk.martinvanco.monad.quests.data.dto.TaskType
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.SessionMarker
 import sk.martinvanco.monad.quests.domain.QuestSessionCoordinator
+import sk.martinvanco.monad.quests.domain.port.QuestSkip
 
 class ActiveQuestScreenModel(
     private val sessionCoordinator: QuestSessionCoordinator,
@@ -68,7 +71,7 @@ class ActiveQuestScreenModel(
                 val tasks = steps.map { step ->
                     ActiveTaskDto(
                         name = step.stepName,
-                        description = "",
+                        description = descriptionOf(step.stepConfig),
                         type = try {
                             TaskType.valueOf(step.stepType.uppercase())
                         } catch (e: IllegalArgumentException) {
@@ -139,20 +142,73 @@ class ActiveQuestScreenModel(
     }
 
     /**
-     * A quest run *is* a lab session. Roles are chosen by the lab bundle: every participant
-     * witnesses the surveyed anchors, and a phone that also has a traffic profile configured plays
-     * the illuminator role as well.
+     * Pull the lab targets out of the quest's own step configs.
+     *
+     * Any step may carry `ap_id` / `profile_id`; measurement quests put them on the briefing step
+     * so they are declared once for the whole run. First value wins, so a quest can still override
+     * per step later without changing this contract.
+     */
+    /**
+     * The instruction text a step widget shows.
+     *
+     * It lives inside the step's `config` JSON, not as a column, and both mapping sites used to
+     * hardcode it to the empty string — so every step rendered its title and its button with
+     * nothing in between. Harmless-looking for a treasure hunt; fatal for a measurement quest,
+     * where the description *is* the protocol ("3 people in the room, hold position for 30
+     * seconds").
+     */
+    private fun descriptionOf(rawConfig: String?): String {
+        val raw = rawConfig ?: return ""
+        return runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonObject["description"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull().orEmpty()
+    }
+
+    private fun labTargetsFromSteps(): Pair<String?, String?> {
+        var apId: String? = null
+        var profileId: String? = null
+        for (task in mutableState.value.tasks) {
+            val config = task.config as? JsonObject ?: continue
+            if (apId == null) apId = config["ap_id"]?.jsonPrimitive?.contentOrNull
+            if (profileId == null) profileId = config["profile_id"]?.jsonPrimitive?.contentOrNull
+            if (apId != null && profileId != null) break
+        }
+        return apId to profileId
+    }
+
+    /**
+     * A quest run *is* a lab session. Every participant witnesses the surveyed anchors; a run whose
+     * quest names an AP and a traffic profile plays the illuminator role as well.
      */
     private fun startLabSession() {
         screenModelScope.launch {
             val enrollmentId = mutableState.value.enrollmentId
             if (enrollmentId.isEmpty()) return@launch
-            sessionCoordinator.startSession(questId, enrollmentId)
+            // Which AP and traffic profile this run uses is a property of the *quest*, not of the
+            // handset: a measurement quest names them so every participant illuminates the same
+            // way, while an ordinary quest names neither and stays a witness-only session.
+            // Without passing these the coordinator could never resolve a profile, so `emit` was
+            // always false and the illuminator role was unreachable from the quest path.
+            val (apId, profileId) = labTargetsFromSteps()
+            val started = sessionCoordinator.startSession(questId, enrollmentId, apId, profileId)
+            if (started.isSuccess) {
+                // The first step has no predecessor to open it, so the run's opening marker is
+                // raised here — otherwise take 1 would have no begin boundary.
+                val first = questStepCompletionRepository.getByEnrollmentId(enrollmentId).firstOrNull()
+                instrument.mark(
+                    kind = SessionMarker.Kind.ANNOTATION,
+                    label = "quest run started",
+                    stepId = first?.backendId,
+                    payload = first?.stepConfig,
+                )
+            }
+            started
                 .onFailure {
                     // Not fatal for the quest: the participant can still complete the steps, and
-                    // the reason is recorded rather than swallowed.
+                    // the reason is recorded rather than swallowed. Routed to the warning channel
+                    // so it does not take the step list down with it.
                     mutableState.value = mutableState.value.copy(
-                        error = "Instrument did not start: ${it.message}"
+                        instrumentWarning = "Instrument did not start: ${it.message}"
                     )
                 }
         }
@@ -176,6 +232,12 @@ class ActiveQuestScreenModel(
             is ActiveQuestEvent.SubmitQuest -> submitQuest(success = true)
             is ActiveQuestEvent.RetryUpload -> retryUpload()
             is ActiveQuestEvent.RetryLoad -> initializeQuest()
+            is ActiveQuestEvent.DismissInstrumentWarning ->
+                mutableState.value = mutableState.value.copy(instrumentWarning = null)
+            is ActiveQuestEvent.RetryInstrument -> {
+                mutableState.value = mutableState.value.copy(instrumentWarning = null)
+                startLabSession()
+            }
             is ActiveQuestEvent.DismissCompletionError -> dismissCompletionError()
             is ActiveQuestEvent.DismissSuccessAndNavigateHome -> navigateHomeAfterSuccess()
             // End quest early events
@@ -247,9 +309,25 @@ class ActiveQuestScreenModel(
             // Mark current step as completed
             questStepCompletionRepository.markStepCompleted(step.backendId, currentTime)
 
+            // Close this take on the recording timeline. The instrument records one continuous
+            // session; markers are what let the analysis slice it into takes afterwards, carrying
+            // the step's own occupancy / arrangement / posture config verbatim.
+            instrument.mark(
+                kind = SessionMarker.Kind.STEP_END,
+                label = step.stepName,
+                stepId = step.backendId,
+                payload = step.stepConfig,
+            )
+
             // Mark next step as in_progress
             steps.getOrNull(taskIndex + 1)?.let { nextStep ->
                 questStepCompletionRepository.updateStepStatus(nextStep.backendId, "in_progress", currentTime)
+                instrument.mark(
+                    kind = SessionMarker.Kind.STEP_BEGIN,
+                    label = nextStep.stepName,
+                    stepId = nextStep.backendId,
+                    payload = nextStep.stepConfig,
+                )
             }
 
             // Reload tasks from DB to update UI (this also computes allTasksCompleted)
@@ -264,7 +342,7 @@ class ActiveQuestScreenModel(
             val tasks = steps.map { step ->
                 ActiveTaskDto(
                     name = step.stepName,
-                    description = "",
+                    description = descriptionOf(step.stepConfig),
                     type = try {
                         TaskType.valueOf(step.stepType.uppercase())
                     } catch (e: IllegalArgumentException) {
@@ -315,7 +393,7 @@ class ActiveQuestScreenModel(
                 enrollmentId = enrollmentId,
                 startedWallMillis = mutableState.value.startTime,
                 completed = success,
-                skip = failReason?.let { SkipRecordDto(message = it, errorCode = null) },
+                skip = failReason?.let { QuestSkip(message = it, errorCode = null) },
             )
 
             mutableState.value = if (outcome.completionSubmitted) {

@@ -1,9 +1,7 @@
 package sk.martinvanco.monad.onboarding.presentation
 
 import dev.icerock.moko.permissions.Permission
-import dev.icerock.moko.permissions.bluetooth.BLUETOOTH_LE
-import dev.icerock.moko.permissions.camera.CAMERA
-import dev.icerock.moko.permissions.location.LOCATION
+import sk.martinvanco.monad.core.domain.permissions.LabPermission
 
 data class OnboardingState(
     val currentPage: Int = 0,
@@ -27,46 +25,80 @@ data class OnboardingState(
     }
 }
 
+/**
+ * The onboarding sequence.
+ *
+ * Every permission step's copy comes from [LabPermission], which states the **consequence** of
+ * refusing rather than the platform rule behind the ask. The two versions of the location step are
+ * the clearest case: "location access is required for Bluetooth scanning to work properly" tells a
+ * student nothing they can act on, while "the session stops recording as soon as you put the phone
+ * away" is a decision they can actually make.
+ *
+ * The Always-location step is new and is not optional theatre. On iOS *When In Use* is revoked the
+ * instant the app is backgrounded, and a field session is a phone in a pocket with the screen off;
+ * without Always the app records the one condition that never occurs during the experiment.
+ */
 enum class OnboardingStep(
     val title: String,
     val description: String,
     val permission: Permission?,
-    val buttonText: String
+    val buttonText: String,
 ) {
     WELCOME(
-        title = "Welcome to Monad",
-        description = "Let's set up your app to provide the best experience. We'll need a few permissions to enable all features.",
+        title = "You are carrying an instrument",
+        description = "For the next few days this phone is part of a measurement. It listens for " +
+            "small beacons in the room, and — for some sessions — sends a steady stream of test " +
+            "packets over the lab Wi-Fi. It never records audio, video, or where you are outside " +
+            "the room. The next few screens explain each permission and what is lost without it.",
         permission = null,
-        buttonText = "Get Started"
+        buttonText = "Get started",
     ),
     BLUETOOTH(
-        title = "Bluetooth Access",
-        description = "We use Bluetooth to scan for nearby BLE beacons and devices during quests. This enables location-based experiences and interactions.",
-        permission = Permission.BLUETOOTH_LE,
-        buttonText = "Allow Bluetooth"
+        title = LabPermission.BLUETOOTH.title,
+        description = LabPermission.BLUETOOTH.describe(),
+        permission = LabPermission.BLUETOOTH.permission,
+        buttonText = "Allow Bluetooth",
     ),
     LOCATION(
-        title = "Location Access",
-        description = "Location access is required for Bluetooth scanning to work properly and to provide location-based quest features.",
-        permission = Permission.LOCATION,
-        buttonText = "Allow Location"
+        title = LabPermission.LOCATION.title,
+        description = LabPermission.LOCATION.describe(),
+        permission = LabPermission.LOCATION.permission,
+        buttonText = "Allow Location",
+    ),
+    BACKGROUND_LOCATION(
+        title = LabPermission.BACKGROUND_LOCATION.title,
+        description = LabPermission.BACKGROUND_LOCATION.describe(),
+        permission = LabPermission.BACKGROUND_LOCATION.permission,
+        buttonText = "Allow Always",
     ),
     CAMERA(
-        title = "Camera Access",
-        description = "Camera access allows you to scan QR codes during quests and participate in augmented reality experiences.",
-        permission = Permission.CAMERA,
-        buttonText = "Allow Camera"
+        title = LabPermission.CAMERA.title,
+        description = LabPermission.CAMERA.describe(),
+        permission = LabPermission.CAMERA.permission,
+        buttonText = "Allow Camera",
     ),
     TERMS(
-        title = "Terms of Service",
-        description = "By continuing, you agree to our Terms of Service. This includes anonymous crash reporting to help us improve the app. We collect basic device info and error data when something goes wrong - no personal data is shared.",
+        title = "What is recorded",
+        description = "Your data is stored under a random participant code, never your name or " +
+            "e-mail. What leaves this phone: which beacons it heard and how strongly, which zone " +
+            "you scanned into and out of, and — during illuminator sessions — the timing of the " +
+            "test packets it sent. Continuing also enables anonymous crash reports.",
         permission = null,
-        buttonText = "I Agree"
+        buttonText = "I agree",
     ),
     COMPLETE(
-        title = "You're All Set!",
-        description = "Great! All permissions are configured. You can now enjoy the full Monad experience.",
+        title = "You're all set",
+        description = "Open the app at any time to check that it is still recording and which " +
+            "zone you are in. It works with the screen off — you do not need to keep it open.",
         permission = null,
-        buttonText = "Start Exploring"
-    )
+        buttonText = "Start",
+    ),
+    ;
+
+    companion object {
+        /** The steps that actually gate a permission, for the resume-time status refresh. */
+        val permissionSteps: List<OnboardingStep> get() = entries.filter { it.permission != null }
+    }
 }
+
+private fun LabPermission.describe(): String = "$why\n\nWithout it: $ifMissing"

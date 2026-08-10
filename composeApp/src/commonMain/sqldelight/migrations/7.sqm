@@ -1,0 +1,19 @@
+-- Migration 7: session continuity epoch + crash/kill recovery.
+--
+-- Two columns, one problem each.
+--
+-- `bootId` records the continuity epoch a session was opened in. `mono_ns` — the join key every
+-- stream is stamped with and the only one the pre-registration accepts — resets on reboot, and on
+-- iOS is re-based on process launch as well. Without the epoch on the row, a session found still
+-- `open` after a restart could be closed with a monotonic reading taken from a *different* clock,
+-- silently welding two timelines together. With it, recovery can refuse.
+--
+-- `interruptedReason` marks a session that never reached stop(). Such a session is still uploaded —
+-- a truncated recording is evidence — but a reader must be able to tell a session that ended from
+-- one that was killed, without inferring it from a missing tail.
+--
+-- Both are nullable, so rows written by earlier builds stay valid and read as "epoch unknown,
+-- ended cleanly", which is exactly what is known about them.
+ALTER TABLE LabSessionRecord ADD COLUMN bootId TEXT;
+
+ALTER TABLE LabSessionRecord ADD COLUMN interruptedReason TEXT;

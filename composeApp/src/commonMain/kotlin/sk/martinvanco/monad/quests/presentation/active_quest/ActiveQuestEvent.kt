@@ -6,6 +6,8 @@ sealed interface ActiveQuestEvent {
     data object SubmitQuest : ActiveQuestEvent
     data object RetryUpload : ActiveQuestEvent
     data object RetryLoad : ActiveQuestEvent
+    data object DismissInstrumentWarning : ActiveQuestEvent
+    data object RetryInstrument : ActiveQuestEvent
     data object DismissCompletionError : ActiveQuestEvent
     data object DismissSuccessAndNavigateHome : ActiveQuestEvent
     // End quest early events

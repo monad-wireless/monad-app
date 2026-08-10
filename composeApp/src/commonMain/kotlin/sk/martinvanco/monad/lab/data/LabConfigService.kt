@@ -2,6 +2,8 @@ package sk.martinvanco.monad.lab.data
 
 import io.github.aakira.napier.Napier
 import io.ktor.client.call.body
+import io.ktor.client.request.headers
+import io.ktor.http.HttpHeaders
 import io.ktor.client.request.get
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,9 +51,21 @@ class LabConfigService(
             }
     }
 
-    /** Fetch from the backend and cache on success. Falls back to whatever is already loaded. */
-    suspend fun refresh(): Result<LabConfig> = runCatching {
-        val fetched: LabConfig = KtorClient.client.get("/api/lab/config").body()
+    /**
+     * Fetch from the backend and cache on success. Falls back to whatever is already loaded.
+     *
+     * The bundle is an **authenticated** resource — it carries access-point credentials — so the
+     * bearer token is required. Without it the request 401s, which is exactly what used to happen:
+     * the call was issued unauthenticated, so the bundle could never be fetched by any path, and
+     * every session silently ran against [LabConfig.EMPTY].
+     */
+    suspend fun refresh(token: String?): Result<LabConfig> = runCatching {
+        if (token.isNullOrBlank()) {
+            error("no auth token; the lab bundle is authenticated")
+        }
+        val fetched: LabConfig = KtorClient.client.get("/api/lab/config") {
+            headers { append(HttpHeaders.Authorization, "Bearer $token") }
+        }.body()
         settings.setSetting(KEY_CONFIG, json.encodeToString(LabConfig.serializer(), fetched))
         _config.value = fetched
         _source.value = Source.NETWORK

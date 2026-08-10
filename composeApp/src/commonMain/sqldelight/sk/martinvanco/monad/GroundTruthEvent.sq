@@ -1,0 +1,101 @@
+-- Ground truth: the people channel.
+--
+-- Kept in its own table rather than folded into the marker stream for one reason. A marker belongs
+-- to the recording this phone is making; a ground-truth scan belongs to the *lab session* named by
+-- the code on the wall, which is shared across every participant and every phone, and which may
+-- well not be open on this device at all. Keying by labSessionId is what lets a participant who
+-- arrives early still be counted.
+--
+-- Rows are never deleted on upload. They are a few dozen per session, they are the only
+-- machine-readable record that a human was in the room, and the whole upload-then-delete rule
+-- exists to stop this app throwing away exactly this kind of evidence.
+CREATE TABLE IF NOT EXISTS GroundTruthEventRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    labSessionId TEXT NOT NULL,
+    recordingSessionId TEXT,
+    participantToken TEXT NOT NULL,
+    zoneId TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    site TEXT NOT NULL DEFAULT '',
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    -- Idempotency key. UNIQUE so a double-tap, a re-fired scanner callback, or a replayed insert
+    -- cannot turn one person into two.
+    scanNonce TEXT NOT NULL UNIQUE,
+    -- Acknowledged by S3 as part of the session's ground_truth.tsv. The authoritative artefact.
+    uploaded INTEGER NOT NULL DEFAULT 0,
+    -- Acknowledged by the server-side room aggregate (POST /api/lab/ground-truth). Tracked apart
+    -- from `uploaded` because the two destinations fail independently and one must never gate the
+    -- other: the TSV is the science, the aggregate is an operational convenience.
+    ingested INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_ground_truth_session ON GroundTruthEventRecord(labSessionId);
+CREATE INDEX IF NOT EXISTS idx_ground_truth_pending ON GroundTruthEventRecord(uploaded);
+CREATE INDEX IF NOT EXISTS idx_ground_truth_ingest ON GroundTruthEventRecord(ingested);
+
+insertEvent:
+INSERT OR IGNORE INTO GroundTruthEventRecord(
+    labSessionId, recordingSessionId, participantToken, zoneId, direction, site,
+    monoNs, wallMs, scanNonce
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+eventsForSession:
+SELECT * FROM GroundTruthEventRecord WHERE labSessionId = ? ORDER BY monoNs ASC, id ASC;
+
+eventsForSessionParticipant:
+SELECT * FROM GroundTruthEventRecord
+WHERE labSessionId = ? AND participantToken = ?
+ORDER BY monoNs ASC, id ASC;
+
+-- The participant's own most recent scan for a zone — the input to toggle resolution.
+lastEventForZone:
+SELECT * FROM GroundTruthEventRecord
+WHERE labSessionId = ? AND participantToken = ? AND zoneId = ?
+ORDER BY monoNs DESC, id DESC
+LIMIT 1;
+
+-- Every (session, participant) pair with something still to send. The pair is the S3 prefix, so it
+-- is also the natural unit of a flush.
+pendingKeys:
+SELECT DISTINCT labSessionId, participantToken FROM GroundTruthEventRecord WHERE uploaded = 0;
+
+pendingCount:
+SELECT COUNT(*) FROM GroundTruthEventRecord WHERE uploaded = 0;
+
+-- Rows in one (session, participant) upload unit, so a flush report can say how much went rather
+-- than only that something did.
+countForSessionParticipant:
+SELECT COUNT(*) FROM GroundTruthEventRecord
+WHERE labSessionId = ? AND participantToken = ?;
+
+markPairUploaded:
+UPDATE GroundTruthEventRecord SET uploaded = 1
+WHERE labSessionId = ? AND participantToken = ?;
+
+-- Aggregate ingest. Rows the server has not seen, oldest first: the batch is what gets POSTed and
+-- what gets marked, so a scan taken while a flush is in flight is simply not in this batch and
+-- goes up on the next one.
+eventsPendingIngest:
+SELECT * FROM GroundTruthEventRecord WHERE ingested = 0 ORDER BY monoNs ASC, id ASC;
+
+pendingIngestCount:
+SELECT COUNT(*) FROM GroundTruthEventRecord WHERE ingested = 0;
+
+-- Marked per nonce rather than per pair, so a concurrent scan cannot be marked as ingested on the
+-- strength of a batch that did not contain it.
+markIngestedByNonce:
+UPDATE GroundTruthEventRecord SET ingested = 1 WHERE scanNonce = ?;
+
+recentSessions:
+SELECT DISTINCT labSessionId FROM GroundTruthEventRecord ORDER BY labSessionId;
+
+-- The lab session this participant most recently scanned for, by their own clock.
+lastSessionForParticipant:
+SELECT * FROM GroundTruthEventRecord
+WHERE participantToken = ?
+ORDER BY monoNs DESC, id DESC
+LIMIT 1;
+
+deleteForSession:
+DELETE FROM GroundTruthEventRecord WHERE labSessionId = ?;

@@ -2,8 +2,8 @@ package sk.martinvanco.monad.quests.presentation.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import sk.martinvanco.monad.quests.domain.ActiveTaskDto
-import sk.martinvanco.monad.quests.domain.TaskType
+import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.TaskType
 import sk.martinvanco.monad.quests.presentation.components.steps.*
 
 /**
@@ -53,6 +53,15 @@ fun StepRouter(
 
         TaskType.TEXT_BOX, TaskType.START, TaskType.FINISH -> {
             TextBoxStep(
+                stepNumber = stepNumber,
+                task = task,
+                onComplete = onComplete,
+                modifier = modifier
+            )
+        }
+
+        TaskType.SENSOR_CAPTURE -> {
+            SensorCaptureStep(
                 stepNumber = stepNumber,
                 task = task,
                 onComplete = onComplete,

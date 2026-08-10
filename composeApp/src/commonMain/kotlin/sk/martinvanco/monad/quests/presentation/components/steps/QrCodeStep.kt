@@ -23,9 +23,9 @@ import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
 import kotlinx.coroutines.launch
 import qrscanner.CameraLens
 import qrscanner.QrScanner
-import sk.martinvanco.monad.quests.domain.ActiveTaskDto
-import sk.martinvanco.monad.quests.domain.QrCodeConfig
-import sk.martinvanco.monad.quests.domain.TaskConfigParser
+import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.QrCodeConfig
+import sk.martinvanco.monad.quests.data.dto.TaskConfigParser
 import sk.martinvanco.monad.core.config.isDebug
 import sk.martinvanco.monad.core.presentation.components.PermissionRequiredCard
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard

@@ -256,6 +256,43 @@ data class ActiveQuestScreen(
                             .padding(horizontal = 24.dp, vertical = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
+                        // Non-fatal instrument failure: the radio did not start, but the quest is
+                        // still walkable. Shown as a banner above the steps rather than instead of
+                        // them — replacing the list stranded the participant with no way forward.
+                        state.instrumentWarning?.let { warning ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFFEF3C7), RoundedCornerShape(8.dp))
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = warning,
+                                    color = Color(0xFF92400E),
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "You can still complete the steps — the radio " +
+                                        "measurement will be missing from this run.",
+                                    color = Color(0xFF92400E),
+                                    fontSize = 13.sp
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    TextButton(onClick = {
+                                        screenModel.onEvent(ActiveQuestEvent.DismissInstrumentWarning)
+                                    }) {
+                                        Text("Dismiss", color = Color(0xFF92400E))
+                                    }
+                                    TextButton(onClick = {
+                                        screenModel.onEvent(ActiveQuestEvent.RetryInstrument)
+                                    }) {
+                                        Text("Retry instrument", color = Color(0xFF92400E))
+                                    }
+                                }
+                            }
+                        }
+
                         state.tasks.forEachIndexed { index, task ->
                             StepRouter(
                                 stepNumber = index + 1,

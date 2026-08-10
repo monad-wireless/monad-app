@@ -5,11 +5,21 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 import sk.martinvanco.monad.Database
 import sk.martinvanco.monad.LabSessionRecord
+import sk.martinvanco.monad.core.config.AppConfig
 import sk.martinvanco.monad.lab.domain.BeaconObservation
 import sk.martinvanco.monad.lab.domain.ClockEstimate
 import sk.martinvanco.monad.lab.domain.SessionStatus
 import sk.martinvanco.monad.lab.domain.TrafficSample
+import sk.martinvanco.monad.lab.domain.LabArtefact
+import sk.martinvanco.monad.lab.domain.SessionCounts
+import sk.martinvanco.monad.lab.domain.SessionMarker
+import sk.martinvanco.monad.lab.domain.SessionRecorder
+import sk.martinvanco.monad.lab.domain.StreamHealthRecord
 import sk.martinvanco.monad.lab.domain.ZoneTransition
+import sk.martinvanco.monad.lab.domain.health.InstrumentHealth
+import sk.martinvanco.monad.lab.domain.upload.PendingArtefact
+import sk.martinvanco.monad.lab.domain.upload.PendingInventory
+import sk.martinvanco.monad.lab.domain.upload.PendingSession
 
 /**
  * Local store for lab sessions and their sample streams.
@@ -22,11 +32,11 @@ import sk.martinvanco.monad.lab.domain.ZoneTransition
  */
 class LabSessionRepository(
     private val database: Database,
-) {
+) : SessionRecorder {
     private val sessions = database.labSessionRecordQueries
     private val samples = database.labSampleQueries
 
-    suspend fun open(
+    override suspend fun open(
         sessionId: String,
         participantId: String,
         enrollmentId: String?,
@@ -38,6 +48,7 @@ class LabSessionRepository(
         startedMonotonicNanos: Long,
         boundInterface: String?,
         socketPinned: Boolean,
+        bootId: String,
     ) = withContext(Dispatchers.IO) {
         sessions.insertSession(
             sessionId = sessionId,
@@ -51,10 +62,43 @@ class LabSessionRepository(
             startedMonoNs = startedMonotonicNanos,
             boundInterface = boundInterface,
             socketPinned = if (socketPinned) 1L else 0L,
+            bootId = bootId,
+            // Stamped by the *recording* build at open, not by whoever assembles the sidecar. A
+            // session the OS kills is written up on a later launch that may be a different build
+            // entirely; recovery reads this column rather than asking the binary it is running in.
+            buildId = AppConfig.BUILD_ID,
         )
     }
 
-    suspend fun close(
+    /**
+     * Close a session that never reached `stop()`.
+     *
+     * [endedMonotonicNanos] is deliberately nullable and is expected to be null whenever the
+     * recovery runs in a different continuity epoch from the one the session opened in: `mono_ns`
+     * from the current epoch is not on the same timeline as the session's samples, and writing it
+     * would be worse than writing nothing.
+     */
+    suspend fun markInterrupted(
+        sessionId: String,
+        reason: String,
+        endedWallMillis: Long,
+        endedMonotonicNanos: Long?,
+        sidecarJson: String,
+    ) = withContext(Dispatchers.IO) {
+        sessions.markInterrupted(
+            endedWallMs = endedWallMillis,
+            endedMonoNs = endedMonotonicNanos,
+            sidecarJson = sidecarJson,
+            interruptedReason = reason,
+            sessionId = sessionId,
+        )
+    }
+
+    suspend fun interruptedSessions(): List<LabSessionRecord> = withContext(Dispatchers.IO) {
+        sessions.selectInterrupted().executeAsList()
+    }
+
+    override suspend fun close(
         sessionId: String,
         endedWallMillis: Long,
         endedMonotonicNanos: Long,
@@ -98,7 +142,7 @@ class LabSessionRepository(
 
     // ---- sample streams -----------------------------------------------------------------
 
-    suspend fun appendTraffic(sessionId: String, batch: List<TrafficSample>) =
+    override suspend fun appendTraffic(sessionId: String, batch: List<TrafficSample>) =
         withContext(Dispatchers.IO) {
             if (batch.isEmpty()) return@withContext
             samples.transaction {
@@ -114,7 +158,7 @@ class LabSessionRepository(
             }
         }
 
-    suspend fun appendBeacon(sessionId: String, observation: BeaconObservation) =
+    override suspend fun appendBeacon(sessionId: String, observation: BeaconObservation) =
         withContext(Dispatchers.IO) {
             samples.insertBeaconObservation(
                 sessionId = sessionId,
@@ -130,7 +174,7 @@ class LabSessionRepository(
             )
         }
 
-    suspend fun appendTransition(sessionId: String, transition: ZoneTransition) =
+    override suspend fun appendTransition(sessionId: String, transition: ZoneTransition) =
         withContext(Dispatchers.IO) {
             samples.insertZoneTransition(
                 sessionId = sessionId,
@@ -144,7 +188,7 @@ class LabSessionRepository(
             )
         }
 
-    suspend fun appendClock(sessionId: String, estimate: ClockEstimate) =
+    override suspend fun appendClock(sessionId: String, estimate: ClockEstimate) =
         withContext(Dispatchers.IO) {
             samples.insertClockSample(
                 sessionId = sessionId,
@@ -156,13 +200,178 @@ class LabSessionRepository(
             )
         }
 
-    suspend fun counts(sessionId: String): SessionCounts = withContext(Dispatchers.IO) {
+    /** Append a labelled point to the session timeline. See [SessionMarker]. */
+    override suspend fun appendMarker(sessionId: String, marker: SessionMarker) =
+        withContext(Dispatchers.IO) {
+            samples.insertMarker(
+                sessionId = sessionId,
+                kind = marker.kind.wire,
+                stepId = marker.stepId,
+                label = marker.label,
+                payload = marker.payload,
+                monoNs = marker.monotonicNanos,
+                wallMs = marker.wallMillis,
+            )
+        }
+
+    suspend fun markers(sessionId: String): List<SessionMarker> = withContext(Dispatchers.IO) {
+        samples.markersForSession(sessionId).executeAsList().map {
+            SessionMarker(
+                kind = SessionMarker.Kind.fromWire(it.kind),
+                label = it.label,
+                stepId = it.stepId,
+                payload = it.payload,
+                monotonicNanos = it.monoNs,
+                wallMillis = it.wallMs,
+            )
+        }
+    }
+
+    override suspend fun counts(sessionId: String): SessionCounts = withContext(Dispatchers.IO) {
         SessionCounts(
             traffic = samples.countTrafficBySession(sessionId).executeAsOne(),
             beacons = samples.countBeaconsBySession(sessionId).executeAsOne(),
             transitions = samples.countTransitionsBySession(sessionId).executeAsOne(),
+            // COUNT(*) rather than materialising the rows: a long session's marker list was being
+            // loaded into memory purely to take its size, on the close path, next to the sidecar
+            // render.
+            markers = samples.countMarkersBySession(sessionId).executeAsOne(),
+            blocks = samples.countBlockMarkersBySession(sessionId).executeAsOne(),
+            clock = samples.countClockBySession(sessionId).executeAsOne(),
+            health = samples.countHealthBySession(sessionId).executeAsOne(),
         )
     }
+
+    // ---- health checkpoints ---------------------------------------------------------------
+
+    /**
+     * Write one checkpoint: the whole health picture, one row per stream.
+     *
+     * Called from the instrument's existing heartbeat, throttled. It is a plain insert on the
+     * heartbeat's own coroutine — it never runs inside the emission loop, and the counters it
+     * records were already being polled for the display.
+     */
+    override suspend fun appendHealthCheckpoint(
+        sessionId: String,
+        monotonicNanos: Long,
+        wallMillis: Long,
+        health: InstrumentHealth,
+    ) = withContext(Dispatchers.IO) {
+        if (health.streams.isEmpty()) return@withContext
+        samples.transaction {
+            health.streams.forEach { stream ->
+                samples.insertHealthCheckpoint(
+                    sessionId = sessionId,
+                    monoNs = monotonicNanos,
+                    wallMs = wallMillis,
+                    stream = stream.stream.name.lowercase(),
+                    state = stream.state.wire,
+                    worst = stream.worstState.wire,
+                    events = stream.totalEvents,
+                    eventsPerSecond = stream.eventsPerSecond,
+                    expectedRateHz = stream.expectedRateHz,
+                    silenceMs = stream.silenceMillis,
+                    degradedMs = stream.millisDegraded,
+                    staleMs = stream.millisStale,
+                    deadMs = stream.millisDead,
+                    clockGateStatus = health.clockGate.status.wire,
+                    clockSamples = health.clockGate.sampleCount.toLong(),
+                    clockResidualMs = health.clockGate.maxFitResidualMillis,
+                )
+            }
+        }
+    }
+
+    /**
+     * The newest checkpoint, as sidecar records.
+     *
+     * The time-in-state columns are cumulative, so the last checkpoint alone reconstructs the
+     * history the in-memory tracker held — which is what makes "was it degraded for 42 minutes?"
+     * answerable for a session that never reached `stop()`.
+     */
+    suspend fun lastHealthCheckpoint(sessionId: String): HealthCheckpoint? =
+        withContext(Dispatchers.IO) {
+            val rows = samples.selectLastHealthCheckpoint(sessionId, sessionId).executeAsList()
+            if (rows.isEmpty()) return@withContext null
+            val head = rows.first()
+            HealthCheckpoint(
+                monotonicNanos = head.monoNs,
+                wallMillis = head.wallMs,
+                clockGateStatus = head.clockGateStatus,
+                clockSamples = head.clockSamples,
+                clockResidualMillis = head.clockResidualMs,
+                streams = rows.map {
+                    StreamHealthRecord(
+                        stream = it.stream,
+                        state = it.state,
+                        worst = it.worst,
+                        events = it.events,
+                        eventsPerSecond = it.eventsPerSecond,
+                        expectedRateHz = it.expectedRateHz,
+                        deliveredFraction = it.expectedRateHz
+                            ?.takeIf { rate -> rate > 0.0 }
+                            ?.let { rate -> it.eventsPerSecond / rate },
+                        silenceMillis = it.silenceMs,
+                        degradedMillis = it.degradedMs,
+                        staleMillis = it.staleMs,
+                        deadMillis = it.deadMs,
+                    )
+                },
+            )
+        }
+
+    /**
+     * Everything still waiting to leave this device, broken down per artefact.
+     *
+     * The breakdown is the point. "3 sessions pending" and "3 sessions pending — 412 000 traffic
+     * rows and 2 ground-truth scans" are different facts to somebody deciding whether to walk into
+     * Wi-Fi range now or after lunch.
+     */
+    suspend fun pendingInventory(
+        groundTruthRows: Long = 0,
+        groundTruthNotInTally: Long = 0,
+    ): PendingInventory =
+        withContext(Dispatchers.IO) {
+            val rows = sessions.selectPendingUpload().executeAsList().map { record ->
+                PendingSession(
+                    sessionId = record.sessionId,
+                    status = record.status,
+                    startedWallMillis = record.startedWallMs,
+                    uploadError = record.uploadError,
+                    artefacts = listOf(
+                        PendingArtefact(
+                            LabArtefact.TRAFFIC,
+                            samples.countTrafficBySession(record.sessionId).executeAsOne(),
+                        ),
+                        PendingArtefact(
+                            LabArtefact.BEACONS,
+                            samples.countBeaconsBySession(record.sessionId).executeAsOne(),
+                        ),
+                        PendingArtefact(
+                            LabArtefact.TRANSITIONS,
+                            samples.countTransitionsBySession(record.sessionId).executeAsOne(),
+                        ),
+                        PendingArtefact(
+                            LabArtefact.CLOCK,
+                            samples.countClockBySession(record.sessionId).executeAsOne(),
+                        ),
+                        PendingArtefact(
+                            LabArtefact.MARKERS,
+                            samples.countMarkersBySession(record.sessionId).executeAsOne(),
+                        ),
+                        PendingArtefact(
+                            LabArtefact.HEALTH,
+                            samples.countHealthBySession(record.sessionId).executeAsOne(),
+                        ),
+                    ),
+                )
+            }
+            PendingInventory(
+                sessions = rows,
+                groundTruthRows = groundTruthRows,
+                groundTruthNotInTally = groundTruthNotInTally,
+            )
+        }
 
     // ---- export -------------------------------------------------------------------------
 
@@ -219,6 +428,56 @@ class LabSessionRepository(
      * Delete a session and its samples. Refuses unless the session is already `uploaded` — the one
      * rule this whole class exists to enforce.
      */
+    /**
+     * Step boundaries as a stream, on the same monotonic clock as the samples.
+     *
+     * ``payload`` is the step's config JSON verbatim — occupancy, arrangement, posture — kept as
+     * one opaque column on purpose: a quest can add a field without this exporter, the schema, or
+     * the reader needing to change.
+     */
+    suspend fun markersTsv(sessionId: String): ByteArray = withContext(Dispatchers.IO) {
+        val rows = samples.markersForSession(sessionId).executeAsList()
+        buildString {
+            appendLine("mono_ns\twall_ms\tkind\tstep_id\tlabel\tpayload_json")
+            rows.forEach {
+                // Tabs and newlines inside a JSON payload would break the row; escaped rather than
+                // stripped so the payload stays parseable on the far side.
+                val payload = (it.payload ?: "")
+                    .replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n").replace("\r", "")
+                appendLine(
+                    "${it.monoNs}\t${it.wallMs}\t${it.kind}\t${it.stepId ?: ""}\t" +
+                        "${it.label}\t$payload"
+                )
+            }
+        }.encodeToByteArray()
+    }
+
+    /**
+     * Per-stream liveness through the session, on the same monotonic clock as the samples.
+     *
+     * One row per stream per checkpoint. `degraded_ms` / `stale_ms` / `dead_ms` are cumulative, so
+     * a reader can either take the last row (the whole-session figure) or difference consecutive
+     * rows to find *which* windows were bad.
+     */
+    suspend fun healthTsv(sessionId: String): ByteArray = withContext(Dispatchers.IO) {
+        val rows = samples.selectHealthBySession(sessionId).executeAsList()
+        buildString {
+            appendLine(
+                "mono_ns\twall_ms\tstream\tstate\tworst\tevents\tevents_per_second\t" +
+                    "expected_rate_hz\tsilence_ms\tdegraded_ms\tstale_ms\tdead_ms\t" +
+                    "clock_gate_status\tclock_samples\tclock_residual_ms"
+            )
+            rows.forEach {
+                appendLine(
+                    "${it.monoNs}\t${it.wallMs}\t${it.stream}\t${it.state}\t${it.worst}\t" +
+                        "${it.events}\t${it.eventsPerSecond}\t${it.expectedRateHz ?: ""}\t" +
+                        "${it.silenceMs}\t${it.degradedMs}\t${it.staleMs}\t${it.deadMs}\t" +
+                        "${it.clockGateStatus}\t${it.clockSamples}\t${it.clockResidualMs ?: ""}"
+                )
+            }
+        }.encodeToByteArray()
+    }
+
     suspend fun purgeUploaded(sessionId: String): Boolean = withContext(Dispatchers.IO) {
         val record = sessions.selectById(sessionId).executeAsOneOrNull() ?: return@withContext false
         if (SessionStatus.fromStorage(record.status) != SessionStatus.UPLOADED) return@withContext false
@@ -227,6 +486,8 @@ class LabSessionRepository(
             samples.deleteBeaconsBySession(sessionId)
             samples.deleteTransitionsBySession(sessionId)
             samples.deleteClockBySession(sessionId)
+            samples.deleteMarkersForSession(sessionId)
+            samples.deleteHealthBySession(sessionId)
         }
         sessions.deleteSession(sessionId)
         true
@@ -239,13 +500,24 @@ class LabSessionRepository(
             samples.deleteBeaconsBySession(sessionId)
             samples.deleteTransitionsBySession(sessionId)
             samples.deleteClockBySession(sessionId)
+            samples.deleteMarkersForSession(sessionId)
+            samples.deleteHealthBySession(sessionId)
         }
         sessions.deleteSession(sessionId)
     }
 }
 
-data class SessionCounts(
-    val traffic: Long,
-    val beacons: Long,
-    val transitions: Long,
+/**
+ * The newest persisted health checkpoint of a session.
+ *
+ * Exists so a session that never reached `stop()` still has a health story. Without it, recovery
+ * could reconstruct row counts and nothing about *when* those rows stopped keeping pace.
+ */
+data class HealthCheckpoint(
+    val monotonicNanos: Long,
+    val wallMillis: Long,
+    val clockGateStatus: String,
+    val clockSamples: Long,
+    val clockResidualMillis: Double?,
+    val streams: List<StreamHealthRecord>,
 )

@@ -32,9 +32,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import sk.martinvanco.monad.ble.domain.BleScanner
-import sk.martinvanco.monad.quests.domain.ActiveTaskDto
-import sk.martinvanco.monad.quests.domain.BleDeviceConfig
-import sk.martinvanco.monad.quests.domain.TaskConfigParser
+import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.BleDeviceConfig
+import sk.martinvanco.monad.quests.data.dto.TaskConfigParser
 import sk.martinvanco.monad.core.config.isDebug
 import sk.martinvanco.monad.core.presentation.components.PermissionRequiredCard
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
@@ -113,7 +113,7 @@ fun BleDeviceStep(
     // Handle BLE scanning lifecycle
     LaunchedEffect(task.status) {
         // Stop scanning when step is no longer active
-        if (task.status != sk.martinvanco.monad.quests.domain.TaskStatus.ACTIVE) {
+        if (task.status != sk.martinvanco.monad.quests.data.dto.TaskStatus.ACTIVE) {
             bleScanner.stopScanning()
         }
     }

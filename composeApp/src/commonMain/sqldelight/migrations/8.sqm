@@ -1,0 +1,14 @@
+-- Migration 8: ground truth has two destinations, so it needs two acknowledgements.
+--
+-- `uploaded` means the S3 TSV — the authoritative scientific artefact, whole-file replaced on every
+-- flush. `ingested` means the server-side room aggregate behind `POST /api/lab/ground-truth`, which
+-- is what lets the operator console show a room count instead of one handset's count.
+--
+-- One flag could not serve both. Marking a scan sent when only S3 succeeded would strand it from
+-- the aggregate forever; refusing to mark it until both succeeded would re-upload the TSV every
+-- flush for the sake of a convenience endpoint. The aggregate is operational, the TSV is the
+-- science, and the two are allowed to be out of step — but only visibly, which is what this column
+-- buys.
+ALTER TABLE GroundTruthEventRecord ADD COLUMN ingested INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_ground_truth_ingest ON GroundTruthEventRecord(ingested);

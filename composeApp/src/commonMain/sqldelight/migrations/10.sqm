@@ -1,0 +1,15 @@
+-- Migration 10: a session records the build that recorded it.
+--
+-- The sidecar carried a hand-maintained `app_version` string that no build system agreed with, so
+-- "which build produced this recording?" had no answer. That is now `build_id`, generated from the
+-- single `monad.version` property, and for a session that ends through stop() the running build can
+-- simply fill it in.
+--
+-- An *interrupted* session cannot: its sidecar is assembled by a later launch, which may be a
+-- different build entirely, and stamping the recovering build's identity onto the recording build's
+-- data would be a quiet lie about provenance. So the identity is persisted at open() instead, and
+-- recovery reads it back.
+--
+-- Additive and nullable: a row written by an earlier build simply has NULL here, which reads as
+-- "this build could not say" rather than as a wrong answer.
+ALTER TABLE LabSessionRecord ADD COLUMN buildId TEXT;
