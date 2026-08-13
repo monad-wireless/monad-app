@@ -2,3 +2,18 @@ TEAM_ID=
 BUNDLE_ID=sk.martinvanco.monad
 APP_NAME=Monad Scan
 OTHER_LDFLAGS = $(inherited) -lsqlite3
+
+// Signing profile — the lab build is the default.
+//
+// The lab build signs with the paid team, because the entitlements the experiment needs
+// (HotspotConfiguration to join the experiment AP, wifi-info to read back which AP it
+// joined) exist only under a paid membership. A free personal team cannot sign either, and
+// signing fails outright rather than degrading, so the choice has to be made at build time.
+//
+// A personal-account build overrides these three in Local.xcconfig, which is gitignored:
+// nobody else's phone, and nobody's CI, inherits a developer's private signing identity.
+SIGNING_TEAM = 3D6D8LQ6F2
+DEVICE_BUNDLE_ID = sk.jakubdubec.monad
+ENTITLEMENTS_FILE = iosApp/iosApp.entitlements
+
+#include? "Local.xcconfig"

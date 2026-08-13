@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Entitlements for a build signed with a free personal team.
+
+    Deliberately empty. A personal team can sign none of the three the lab build asks for —
+    HotspotConfiguration, wifi-info, aps-environment — and an entitlement a team cannot
+    grant is a signing failure, not a runtime one, so they are absent rather than requested.
+
+    What that costs, precisely: the app cannot join the experiment AP itself
+    (LabInstrument aborts an emit session that declares an accessPoint), and cannot read
+    back the SSID it is on, so the session sidecar records an empty ssid. Join the AP by
+    hand in Settings and leave accessPoint unset and the rest of the instrument is intact —
+    background residency, beacon witnessing, IP_BOUND_IF pinning, the paced emitter and the
+    clock exchange need no entitlement at all.
+
+    A session that has to prove which radio it was on needs the lab build. See Config.xcconfig.
+-->
+<plist version="1.0">
+<dict/>
+</plist>

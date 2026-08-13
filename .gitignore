@@ -20,6 +20,9 @@ captures
 # CocoaPods
 iosApp/Pods/
 
+# Per-developer iOS signing override (team, bundle id, entitlements variant)
+iosApp/Configuration/Local.xcconfig
+
 # Firebase config files
 google-services.json
 GoogleService-Info.plist
