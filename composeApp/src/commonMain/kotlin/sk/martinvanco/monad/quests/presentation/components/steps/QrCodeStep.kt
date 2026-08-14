@@ -94,6 +94,10 @@ fun QrCodeStep(
     }
 
     var isScanning by remember { mutableStateOf(false) }
+
+    // Latches for the lifetime of this step: a completed scan must not be
+    // re-delivered by a callback that was already in flight.
+    var hasCompleted by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     QuestStepCard(
@@ -108,10 +112,19 @@ fun QrCodeStep(
                 isScanning = isScanning,
                 errorMessage = errorMessage,
                 onScan = { scannedValue ->
+                    // IP-128 — re-entrancy guard. The scanner keeps firing its
+                    // callback for as long as the code stays in frame, so without
+                    // this `onComplete()` runs repeatedly and the step advances
+                    // several times from one physical scan. Setting `isScanning`
+                    // inside onSuccess is not enough: the callbacks already queued
+                    // arrive afterwards. The ground-truth scanner drops repeats the
+                    // same way (GroundTruthScanScreenModel).
+                    if (!isScanning || hasCompleted) return@QrCodeContent
                     handleQrCodeScanned(
                         scannedValue = scannedValue,
                         expectedValue = config?.expectedValue,
                         onSuccess = {
+                            hasCompleted = true
                             isScanning = false
                             errorMessage = null
                             onComplete()

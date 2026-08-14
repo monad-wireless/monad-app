@@ -14,6 +14,8 @@ import sk.martinvanco.monad.core.data.repository.SettingsRepository
 import sk.martinvanco.monad.core.domain.wifi.WifiConnectionService
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
+import sk.martinvanco.monad.device.data.api.DeviceService
+import sk.martinvanco.monad.device.presentation.DeviceScreenModel
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.presentation.HomeScreenModel
 import sk.martinvanco.monad.lab.data.GroundTruthRepository
@@ -69,6 +71,7 @@ val appModule = module {
     single { KtorClient }
     single { AuthService(get()) }
     single { QuestsService(get()) }
+    single { DeviceService(get()) }  // IP-128 — public device read behind a scanned label
     single { StorageService(get()) }
 
     // Repositories
@@ -149,6 +152,8 @@ val appModule = module {
     factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { QuestsScreenModel() }
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), questId) }
+    // IP-128 — device landing. questId is the optional `?q=` from the deep link.
+    factory { (slug: String, questId: String?) -> DeviceScreenModel(get(), get(), slug, questId) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), questId) }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }

@@ -56,6 +56,19 @@ struct iOSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // IP-128 — a scanned device label arrives here.
+                //
+                // Parked rather than routed: Koin is started inside the Compose
+                // root's `remember` block, so on a cold start nothing injectable
+                // exists yet, and the NavigationManager's SharedFlow (replay = 0)
+                // would drop a command emitted before the Navigator's collector
+                // is running. The shared UI drains this once it is ready.
+                //
+                // Covers both entry points — a cold launch delivers the URL here
+                // too, so no separate `launchOptions` handling is needed.
+                .onOpenURL { url in
+                    PendingDeepLink.shared.parkUrl(url: url.absoluteString)
+                }
         }
     }
 }

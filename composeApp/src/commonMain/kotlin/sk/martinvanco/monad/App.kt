@@ -17,7 +17,10 @@ import sk.martinvanco.monad.auth.presentation.splash.SplashScreen
 import sk.martinvanco.monad.core.di.appModule
 import sk.martinvanco.monad.core.di.platformModule
 import sk.martinvanco.monad.core.navigation.CustomScreenTransition
+import sk.martinvanco.monad.core.deeplink.DeepLink
+import sk.martinvanco.monad.core.deeplink.PendingDeepLink
 import sk.martinvanco.monad.core.navigation.NavigationCommand
+import sk.martinvanco.monad.device.presentation.DeviceScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.core.util.Logger
@@ -95,6 +98,29 @@ fun App() {
                             is NavigationCommand.Back -> navigator.pop()
                             is NavigationCommand.Replace -> navigator.replace(command.screen)
                             is NavigationCommand.ReplaceAll -> navigator.replaceAll(command.screen)
+                        }
+                    }
+                }
+
+                // IP-128 — drain a deep link parked by the platform entry point.
+                //
+                // This is the ONLY safe place to do it. The link is captured in
+                // MainActivity.onCreate / .onOpenURL, both of which run before
+                // Koin is started (inside App()'s `remember`, above) and before
+                // this Navigator exists — so it cannot be emitted as a
+                // NavigationCommand at capture time: the SharedFlow has
+                // replay = 0 and its only collector is the effect above, so the
+                // command would be dropped silently on a cold start.
+                //
+                // Keyed on Unit and take-once: a link must not re-fire on
+                // recomposition or on return from background, which would yank a
+                // participant out of a running quest.
+                LaunchedEffect(Unit) {
+                    PendingDeepLink.consume()?.let { link ->
+                        when (link) {
+                            is DeepLink.Device -> navigator.push(
+                                DeviceScreen(slug = link.slug, questId = link.questId),
+                            )
                         }
                     }
                 }

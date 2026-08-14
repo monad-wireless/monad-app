@@ -8,5 +8,24 @@
 	<true/>
 	<key>aps-environment</key>
 	<string>development</string>
+	<!--
+	  IP-128 — Universal Links for fleet device labels (https://monad.dubec.dev/d/*).
+
+	  Paid-team entitlement, like HotspotConfiguration above: the free-personal-team
+	  build path signs iosApp-personal.entitlements (an intentionally empty dict) and
+	  therefore has NO Universal Links. On a personal build a scanned sticker opens
+	  Safari instead — correct behaviour, and the reason the web page must stand on
+	  its own rather than being a stub that says "open the app".
+
+	  The claim only takes effect once monad.dubec.dev serves
+	  /.well-known/apple-app-site-association listing this build's <TEAMID>.<bundle-id>.
+	  Since iOS 14 the file is fetched by an Apple-managed CDN, not by the device, so
+	  a change can take up to 24h to be picked up and installed apps re-check roughly
+	  weekly. Append ?mode=developer while bringing this up.
+	-->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:monad.dubec.dev</string>
+	</array>
 </dict>
 </plist>

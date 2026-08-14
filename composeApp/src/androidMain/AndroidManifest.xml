@@ -49,8 +49,16 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:networkSecurityConfig="@xml/network_security_config"
         tools:replace="android:name">
+        <!--
+            launchMode=singleTask is load-bearing for deep links (IP-128). With the
+            default `standard`, a VIEW intent delivered while the app is already
+            running spawns a SECOND MainActivity with a brand-new Voyager stack
+            instead of calling onNewIntent — so scanning a sticker mid-session
+            would silently restart the app over the top of a running quest.
+        -->
         <activity
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:screenOrientation="portrait"
             android:name=".MainActivity">
@@ -58,6 +66,31 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                Android App Links for fleet device labels (IP-128).
+
+                android:pathPrefix is NOT redundant with the server-side
+                `dynamic_app_link_components` in assetlinks.json: those are Android
+                15+ (API 35) only. Android 14 and earlier ignore them and fall back
+                to THIS scope, so without the prefix an older phone with the app
+                installed would capture every URL on monad.dubec.dev — the whole
+                research site — and then fail to route most of them.
+
+                Verification requires assetlinks.json to carry the SHA-256 of the
+                certificate the installed build was signed with. Debug-signed
+                builds will NOT verify against a Play App Signing fingerprint;
+                check with `adb shell pm get-app-links sk.martinvanco.monad`.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="monad.dubec.dev"
+                    android:pathPrefix="/d/" />
             </intent-filter>
         </activity>
 
