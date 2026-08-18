@@ -20,6 +20,7 @@ data class LabConfig(
     val collector: CollectorEndpoint = CollectorEndpoint(),
     @SerialName("access_points") val accessPoints: List<ApProfile> = emptyList(),
     val beacons: BeaconPlan = BeaconPlan(),
+    val advertise: AdvertisePlan = AdvertisePlan(),
     @SerialName("traffic_profiles") val trafficProfiles: List<TrafficProfile> = emptyList(),
     @SerialName("clock_sync") val clockSync: ClockSyncPolicy = ClockSyncPolicy(),
 ) {
@@ -98,6 +99,25 @@ data class BeaconZone(
     val y: Double? = null,
     val floor: String = "",
 )
+
+/**
+ * The identity-broadcast plan (the broadcaster role, [IdentityBroadcaster]).
+ *
+ * [namespaceUuid] is the base of the advertised 128-bit service UUID; the phone replaces its last
+ * four bytes with the participant and session keys (see [AdvertiseIdentity]), so keep those bytes
+ * zero in the bundle. The fleet's scanner matches on the first twelve. An empty namespace means
+ * broadcasting is not configured on this deployment.
+ */
+@Serializable
+data class AdvertisePlan(
+    @SerialName("namespace_uuid") val namespaceUuid: String = "",
+    /** Commanded interval — Android rounds it onto a bucket, iOS cannot set one at all. */
+    @SerialName("interval_ms") val intervalMs: Int = 250,
+    /** `ultra_low` | `low` | `medium` | `high`. Android only. */
+    @SerialName("tx_power") val txPower: String = "medium",
+) {
+    val isConfigured: Boolean get() = namespaceUuid.isNotBlank()
+}
 
 /**
  * A commanded emission profile. `rateHz` is the *commanded* pace — the whole point of the

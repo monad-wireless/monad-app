@@ -125,6 +125,11 @@ data class SessionRadio(
     @SerialName("bound_interface") val boundInterface: String = "",
     @SerialName("socket_pinned") val socketPinned: Boolean = false,
     @SerialName("beacon_uuid") val beaconUuid: String = "",
+    /** What the identity broadcast actually put on air; empty/null when the role never ran. */
+    @SerialName("advertise_uuid") val advertiseUuid: String = "",
+    @SerialName("advertise_interval") val advertiseInterval: String = "",
+    @SerialName("advertise_tx_power") val advertiseTxPower: String = "",
+    @SerialName("advertise_foreground_only") val advertiseForegroundOnly: Boolean? = null,
 )
 
 @Serializable

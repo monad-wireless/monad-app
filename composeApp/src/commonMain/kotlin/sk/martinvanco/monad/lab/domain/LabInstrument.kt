@@ -50,6 +50,7 @@ class LabInstrument(
     private val clockSync: ClockSyncService,
     private val trafficGenerator: TrafficGenerator,
     private val beaconWitness: BeaconWitness,
+    private val broadcaster: IdentityBroadcaster,
     private val residency: BackgroundResidency,
     private val wifi: WifiConnectionService,
     private val repository: SessionRecorder,
@@ -62,6 +63,9 @@ class LabInstrument(
     private var resyncJob: Job? = null
     private var heartbeatJob: Job? = null
     private var zoneTracker: ZoneTracker? = null
+    private var broadcastStopJob: Job? = null
+    private var broadcastReport: BroadcastReport? = null
+    private var broadcastActive: Boolean = false
 
     private val _state = MutableStateFlow(LabInstrumentState.IDLE)
     val state: StateFlow<LabInstrumentState> = _state.asStateFlow()
@@ -90,6 +94,9 @@ class LabInstrument(
 
     val trafficStats: StateFlow<TrafficStats> get() = trafficGenerator.stats
     val clockEstimate: StateFlow<ClockEstimate> get() = clockSync.estimate
+
+    /** Live broadcast state, for the console and the quest step that drives the role. */
+    val isBroadcasting get() = broadcaster.isBroadcasting
 
     private var sessionEvents = mutableListOf<SessionEvent>()
     private val pendingTraffic = mutableListOf<TrafficSample>()
@@ -139,6 +146,9 @@ class LabInstrument(
         groundTruthCount = 0
         healthCheckpoints = 0
         lastCheckpointMillis = 0
+        broadcastReport = null
+        broadcastActive = false
+        broadcastStopJob = null
         _blocks.value = BlockSessionState.EMPTY
         // Captured once, at the top, and carried on the session row. Every sample in this session
         // is stamped on the monotonic clock of this epoch and on no other; recovery after a restart
@@ -301,6 +311,15 @@ class LabInstrument(
             }
         }
 
+        // 5b — broadcasting, when the session plays the role for its whole length. A refusal is
+        // recorded and the session continues: a walk with no identity frame is still a walk.
+        if (request.broadcast) {
+            startBroadcast().onFailure {
+                note("broadcast refused: ${it.message}")
+                event("broadcast_failed", it.message ?: "")
+            }
+        }
+
         // 6 — emission.
         if (request.emit) {
             val profile = request.trafficProfile
@@ -372,6 +391,75 @@ class LabInstrument(
         runCatching { repository.appendMarker(sessionId, marker) }
             .onFailure { Napier.w("[lab] marker dropped: ${it.message}") }
         note("mark ${kind.wire}: $label")
+    }
+
+    // ---- identity broadcast -----------------------------------------------------------------
+
+    /**
+     * Put the session's identity frame on air (the broadcaster role, [LabRole.BROADCASTER]).
+     *
+     * Callable mid-session — a `ble_advertise` quest step scopes the broadcast to itself — or from
+     * [start] when the request plays the role for the whole session. The advertised UUID is derived
+     * here, from the bundle's namespace plus the *running* session's identity, so a quest config
+     * can never carry an identity and two sessions can never share a frame.
+     *
+     * The marker and the sidecar record the platform's **accepted** values, not the commanded ones.
+     */
+    suspend fun startBroadcast(
+        durationSeconds: Int? = null,
+        intervalMs: Int? = null,
+        txPower: String? = null,
+    ): Result<BroadcastReport> {
+        val sessionId = _state.value.sessionId?.takeIf { it.isNotEmpty() }
+            ?: return Result.failure(IllegalStateException("no running session to identify"))
+        val request = _state.value.request
+            ?: return Result.failure(IllegalStateException("no session request"))
+        if (broadcastActive) {
+            return broadcastReport?.let { Result.success(it) }
+                ?: Result.failure(IllegalStateException("broadcast already starting"))
+        }
+        val plan = request.advertise
+        if (!plan.isConfigured) {
+            return Result.failure(IllegalStateException("bundle has no advertise namespace"))
+        }
+        val uuid = AdvertiseIdentity.serviceUuid(plan.namespaceUuid, request.participantId, sessionId)
+            ?: return Result.failure(IllegalArgumentException("malformed advertise namespace: ${plan.namespaceUuid}"))
+
+        val started = broadcaster.start(
+            BroadcastRequest(
+                serviceUuid = uuid,
+                intervalMs = intervalMs ?: plan.intervalMs,
+                txPower = txPower ?: plan.txPower,
+            )
+        )
+        return started
+            .onSuccess { report ->
+                broadcastActive = true
+                broadcastReport = report
+                event("broadcast_started", report.serviceUuid)
+                mark(
+                    kind = SessionMarker.Kind.BROADCAST_START,
+                    label = "identity broadcast on air",
+                    payload = json.encodeToString(BroadcastReport.serializer(), report),
+                )
+                if (durationSeconds != null && durationSeconds > 0) {
+                    broadcastStopJob = scope?.launch {
+                        delay(durationSeconds * 1_000L)
+                        stopBroadcast("duration elapsed (${durationSeconds}s)")
+                    }
+                }
+            }
+    }
+
+    /** Take the identity frame off the air. Safe to call when nothing is broadcasting. */
+    suspend fun stopBroadcast(reason: String = "operator") {
+        if (!broadcastActive) return
+        broadcastActive = false
+        broadcastStopJob?.cancel()
+        broadcastStopJob = null
+        broadcaster.stop()
+        event("broadcast_stopped", reason)
+        mark(kind = SessionMarker.Kind.BROADCAST_STOP, label = reason)
     }
 
     // ---- experimental blocks ----------------------------------------------------------------
@@ -545,6 +633,11 @@ class LabInstrument(
             stopBlock(reason = BlockStopReason.SESSION_END)
         }
 
+        // A broadcast still on air gets its closing edge before the marker stream closes, for the
+        // same reason as the block above: an open interval at the end can only be resolved by
+        // guessing, and the guess would land on the fleet-side join.
+        stopBroadcast("session end")
+
         // One last heartbeat *before* the generators are told to stop, so the health record
         // describes the session as it ran rather than the instant after everything was shut down.
         val finalHealth = healthMonitor?.tick(
@@ -601,6 +694,9 @@ class LabInstrument(
                 roles = buildList {
                     if (request?.emit == true) add(LabRole.ILLUMINATOR.name.lowercase())
                     if (request?.witness == true) add(LabRole.WITNESS.name.lowercase())
+                    // Recorded when the role actually went on air, not when it was merely asked
+                    // for — a refused broadcast must not read as a broadcasting session.
+                    if (broadcastReport != null) add(LabRole.BROADCASTER.name.lowercase())
                     add(LabRole.SUBJECT.name.lowercase())
                 },
             ),
@@ -614,6 +710,10 @@ class LabInstrument(
                 boundInterface = _state.value.boundInterface,
                 socketPinned = _state.value.socketPinned,
                 beaconUuid = request?.beacons?.uuid ?: "",
+                advertiseUuid = broadcastReport?.serviceUuid ?: "",
+                advertiseInterval = broadcastReport?.acceptedInterval ?: "",
+                advertiseTxPower = broadcastReport?.txPower ?: "",
+                advertiseForegroundOnly = broadcastReport?.foregroundOnly,
             ),
             environment = SessionEnvironment(
                 platform = environment.platform,
@@ -845,6 +945,10 @@ class LabInstrument(
         event("start_failed", message)
         trafficGenerator.stop()
         beaconWitness.stop()
+        broadcaster.stop()
+        broadcastActive = false
+        broadcastStopJob?.cancel()
+        broadcastStopJob = null
         heartbeatJob?.cancel()
         heartbeatJob = null
         healthMonitor = null

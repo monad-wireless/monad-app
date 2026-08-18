@@ -69,6 +69,15 @@ fun StepRouter(
             )
         }
 
+        TaskType.BLE_ADVERTISE -> {
+            BleAdvertiseStep(
+                stepNumber = stepNumber,
+                task = task,
+                onComplete = onComplete,
+                modifier = modifier
+            )
+        }
+
         TaskType.CONNECT_TO_AP, TaskType.WALK_TO, TaskType.INFO -> {
             TextBoxStep(
                 stepNumber = stepNumber,

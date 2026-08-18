@@ -78,6 +78,10 @@ enum class StepType {
     @SerialName("sensor_capture")
     SENSOR_CAPTURE,
 
+    /** Broadcast the lab identity frame for the step's duration; gated by `ble.advertise`. */
+    @SerialName("ble_advertise")
+    BLE_ADVERTISE,
+
     @SerialName("finish")
     FINISH,
 
@@ -94,6 +98,7 @@ enum class StepType {
             WALK_TO -> "walk_to"
             FIND_BLE_DEVICE -> "find_ble_device"
             SENSOR_CAPTURE -> "sensor_capture"
+            BLE_ADVERTISE -> "ble_advertise"
             FINISH -> "finish"
             UNKNOWN -> "unknown"
         }

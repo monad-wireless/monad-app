@@ -24,6 +24,10 @@ data class SessionRequest(
     val emit: Boolean = true,
     /** Play the witness role: monitor and range the anchors. */
     val witness: Boolean = true,
+    /** Play the broadcaster role for the whole session: advertise the session identity frame. */
+    val broadcast: Boolean = false,
+    /** The bundle's advertise plan; the broadcaster refuses when it is not configured. */
+    val advertise: AdvertisePlan = AdvertisePlan(),
 )
 
 enum class Phase { IDLE, STARTING, ASSOCIATING, BINDING, SYNCING, RUNNING }

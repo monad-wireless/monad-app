@@ -412,6 +412,7 @@ class LabConsoleScreenModel(
                     configVersion = config.version,
                     emit = state.selectedProfileId != null && config.isIlluminationReady,
                     witness = config.beacons.isConfigured,
+                    advertise = config.advertise,
                 )
                 instrument.start(request)
                     .onSuccess { message("session $it started") }

@@ -27,9 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>This app requires Bluetooth access to scan for nearby BLE devices and collect advertisement packets.</string>
+	<string>Bluetooth is used to find lab beacons and, during a measurement walk you start yourself, to broadcast an anonymous session code the lab sensors can hear.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>This app requires Bluetooth access to scan for nearby BLE devices and collect advertisement packets.</string>
+	<string>Bluetooth is used to find lab beacons and, during a measurement walk you start yourself, to broadcast an anonymous session code the lab sensors can hear.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires camera access to scan QR codes.</string>
 	<key>NSLocalNetworkUsageDescription</key>
@@ -49,6 +49,10 @@
 	<array>
 		<string>location</string>
 		<string>bluetooth-central</string>
+		<!-- Keeps CBPeripheralManager alive across a brief app switch. It does NOT make the
+		     broadcast readable from the background: iOS moves the service UUID into its overflow
+		     area there, which the fleet's raw scanner cannot see — see IdentityBroadcaster.ios.kt. -->
+		<string>bluetooth-peripheral</string>
 		<string>remote-notification</string>
 	</array>
 	<key>UILaunchScreen</key>

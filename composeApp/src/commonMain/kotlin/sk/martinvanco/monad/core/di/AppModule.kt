@@ -32,6 +32,7 @@ import sk.martinvanco.monad.lab.domain.BeaconWitness
 import sk.martinvanco.monad.lab.domain.ClockSyncService
 import sk.martinvanco.monad.lab.domain.GroundTruthRecorder
 import sk.martinvanco.monad.lab.domain.GroundTruthStore
+import sk.martinvanco.monad.lab.domain.IdentityBroadcaster
 import sk.martinvanco.monad.lab.domain.LabDatagramSocket
 import sk.martinvanco.monad.lab.domain.LabEnvironment
 import sk.martinvanco.monad.lab.domain.LabInstrument
@@ -93,6 +94,7 @@ val appModule = module {
     single { ClockSyncService(get()) }
     single { TrafficGenerator(get()) }
     single { BeaconWitness(get()) }
+    single { IdentityBroadcaster() }
     single { BackgroundResidency() }
     single { LabSessionRepository(get()) }
     single { LabConfigService(get()) }
@@ -126,6 +128,7 @@ val appModule = module {
             clockSync = get(),
             trafficGenerator = get(),
             beaconWitness = get(),
+            broadcaster = get(),
             residency = get(),
             wifi = get(),
             repository = get(),

@@ -22,6 +22,10 @@ actual suspend fun detectCapabilities(): DeviceCapabilities {
         // A CoreLocation beacon session is both the witness and the background residency, so on
         // iOS these two are the same capability and are reported together.
         Capability.BLE_WITNESS,
+        // Every supported iPhone can play the peripheral role. The honest caveat — the frame is
+        // readable by the fleet only while the app is foregrounded — is behavioural, enforced and
+        // recorded by IdentityBroadcaster rather than hidden behind a withheld token.
+        Capability.BLE_ADVERTISE,
         Capability.BACKGROUND_RESIDENCY,
         Capability.CAMERA_QR,
         Capability.BAROMETER,

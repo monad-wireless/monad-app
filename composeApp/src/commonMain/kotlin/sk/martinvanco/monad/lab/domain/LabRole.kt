@@ -31,6 +31,14 @@ enum class LabRole {
     ANCHOR,
 
     /**
+     * Advertise a **moving, session-scoped** identity so the fleet's passive BLE scan can observe
+     * this handset. Unlike [ANCHOR] the position is the unknown, not the datum — the fleet's
+     * per-node RSSI on this frame is what localises it. Phone implementation:
+     * [IdentityBroadcaster]; on iOS honest only in the foreground.
+     */
+    BROADCASTER,
+
+    /**
      * Observe anchors and report `{anchor_id, rssi, t}` and zone transitions **without being in
      * the foreground**. Phone implementation: [BeaconWitness].
      */

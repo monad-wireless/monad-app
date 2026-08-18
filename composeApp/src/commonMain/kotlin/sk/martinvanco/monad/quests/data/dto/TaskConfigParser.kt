@@ -27,6 +27,7 @@ object TaskConfigParser {
             // Sensor config is module-defined and deliberately untyped here: adding a sensor must
             // not require a new config class and an app release.
             TaskType.SENSOR_CAPTURE -> null
+            TaskType.BLE_ADVERTISE -> json.decodeFromJsonElement(BleAdvertiseConfig.serializer(), configJson)
             TaskType.INFO -> null
         }
     }
@@ -49,6 +50,12 @@ object TaskConfigParser {
     fun getWaitConfig(task: ActiveTaskDto): WaitConfig? {
         return if (task.type == TaskType.WAIT) {
             parseConfig(task.type, task.config) as? WaitConfig
+        } else null
+    }
+
+    fun getBleAdvertiseConfig(task: ActiveTaskDto): BleAdvertiseConfig? {
+        return if (task.type == TaskType.BLE_ADVERTISE) {
+            runCatching { parseConfig(task.type, task.config) as? BleAdvertiseConfig }.getOrNull()
         } else null
     }
 }

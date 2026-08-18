@@ -103,6 +103,9 @@ class QuestSessionCoordinator(
                 questId = questId,
                 emit = emit,
                 witness = config.beacons.isConfigured,
+                // Session-scoped broadcasting stays off: a quest turns the frame on and off through
+                // its own ble_advertise steps, so the on-air interval is exactly the labelled one.
+                advertise = config.advertise,
             )
         )
     }

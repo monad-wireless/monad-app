@@ -45,6 +45,13 @@ object Capability {
     /** Can observe iBeacon anchors, including from the background. */
     const val BLE_WITNESS = "ble.witness"
 
+    /**
+     * Can advertise the lab identity frame (a 128-bit service UUID). On iOS this is honest only
+     * for the foreground — a backgrounded broadcast moves into Apple's overflow area, which the
+     * fleet's raw scanner cannot read — so a quest requiring it must keep the participant in-app.
+     */
+    const val BLE_ADVERTISE = "ble.advertise"
+
     /** Can hold background runtime for the length of a session. */
     const val BACKGROUND_RESIDENCY = "background.residency"
 

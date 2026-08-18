@@ -26,6 +26,11 @@ actual suspend fun detectCapabilities(): DeviceCapabilities {
 
     if (pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
         tokens += Capability.BLE_WITNESS
+        // Advertising is claimed with the LE feature rather than probed through the adapter: the
+        // adapter's advertiser handle is null whenever Bluetooth is merely switched off, and a
+        // toggled radio must not demote the handset out of every broadcast quest. A genuinely
+        // advertise-less chipset surfaces at start() as a loud refusal instead.
+        tokens += Capability.BLE_ADVERTISE
     }
     if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
         tokens += Capability.CAMERA_QR

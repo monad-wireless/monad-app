@@ -100,6 +100,10 @@ enum class TaskType {
     @SerialName("sensor_capture")
     SENSOR_CAPTURE,
 
+    /** Broadcast the lab identity frame for the step's duration. Gated by `ble.advertise`. */
+    @SerialName("ble_advertise")
+    BLE_ADVERTISE,
+
     @SerialName("finish")
     FINISH,
 
@@ -118,6 +122,7 @@ enum class TaskType {
             CONNECT_TO_AP -> "connect_to_ap"
             WALK_TO -> "walk_to"
             SENSOR_CAPTURE -> "sensor_capture"
+            BLE_ADVERTISE -> "ble_advertise"
             FINISH -> "finish"
             INFO -> "info"
         }
@@ -132,6 +137,7 @@ enum class TaskType {
                 StepType.WALK_TO -> WALK_TO
                 StepType.FIND_BLE_DEVICE -> FIND_BLE_DEVICE
                 StepType.SENSOR_CAPTURE -> SENSOR_CAPTURE
+                StepType.BLE_ADVERTISE -> BLE_ADVERTISE
                 StepType.FINISH -> FINISH
                 // A step type this build predates: shown as a plain instruction card so the
                 // participant can still walk the quest.
@@ -175,6 +181,20 @@ data class BleDeviceConfig(
 @Serializable
 data class WaitConfig(
     @SerialName("timeout_seconds") val timeoutSeconds: Int
+) : TaskConfig
+
+/**
+ * Configuration for the identity-broadcast task. The identity itself is deliberately absent: it is
+ * derived on the phone from the lab bundle's namespace and the running session, never authored
+ * into a quest a participant can read.
+ */
+@Serializable
+data class BleAdvertiseConfig(
+    @SerialName("duration_seconds") val durationSeconds: Int,
+    /** Commanded interval; Android rounds it onto a bucket, iOS ignores it. Null = bundle default. */
+    @SerialName("adv_interval_ms") val advIntervalMs: Int? = null,
+    /** `ultra_low` | `low` | `medium` | `high`; Android only. Null = bundle default. */
+    @SerialName("tx_power") val txPower: String? = null,
 ) : TaskConfig
 
 // ============================================================================

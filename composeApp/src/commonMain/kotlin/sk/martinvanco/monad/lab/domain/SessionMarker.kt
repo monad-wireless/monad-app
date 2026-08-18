@@ -64,6 +64,16 @@ data class SessionMarker(
 
         /** An experimental block closed. Payload adds duration, stop reason and budget verdict. */
         BLOCK_STOP,
+
+        /**
+         * The identity broadcast went on air. The payload is the [BroadcastReport] — the accepted
+         * values, not the commanded ones — so the fleet-side join reads what was actually
+         * transmitted. Windows outside a start/stop pair must not be blamed on a silent radio.
+         */
+        BROADCAST_START,
+
+        /** The identity broadcast left the air (step end, session end, or platform refusal). */
+        BROADCAST_STOP,
         ;
 
         val wire: String
@@ -74,6 +84,8 @@ data class SessionMarker(
                 CLOCK_SYNC -> "clock_sync"
                 BLOCK_START -> "block_start"
                 BLOCK_STOP -> "block_stop"
+                BROADCAST_START -> "broadcast_start"
+                BROADCAST_STOP -> "broadcast_stop"
             }
 
         /** True for the two kinds that carry a [BlockMarkerPayload]. */
@@ -86,6 +98,8 @@ data class SessionMarker(
                 "clock_sync" -> CLOCK_SYNC
                 "block_start" -> BLOCK_START
                 "block_stop" -> BLOCK_STOP
+                "broadcast_start" -> BROADCAST_START
+                "broadcast_stop" -> BROADCAST_STOP
                 else -> ANNOTATION
             }
         }
