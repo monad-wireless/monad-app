@@ -410,7 +410,11 @@ sqldelight {
             //     for a session the OS killed and not only for one that reached stop()
             // 10 — LabSessionRecord.buildId, so an interrupted session's sidecar names the build
             //      that *recorded* it rather than the build that later recovered it
-            version = 11
+            // 11 — PoseSampleRecord: the walk's own trajectory, so a fingerprint has a place to be
+            //      a mapping *from*. Additive; an upgrading device gains an empty table.
+            // 12 — MeshObservationRecord + SessionBlobRecord: the room's geometry on the shared clock,
+            //      and the first place this app has ever had to put a binary artefact
+            version = 13
         }
     }
 }

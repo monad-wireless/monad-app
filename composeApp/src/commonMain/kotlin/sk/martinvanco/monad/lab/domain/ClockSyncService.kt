@@ -92,6 +92,49 @@ class ClockSyncService(
     }
 
     /**
+     * Run a burst against a [ReferenceClock] instead of the collector socket.
+     *
+     * Reduced by the **same** minimum-delay filter and folded into the **same** history, so gate G4 is
+     * evaluated identically whichever path produced the samples. That identity is the point: a walk and
+     * an illuminator session must be judged by one rule, and a second estimator would drift from the
+     * first the moment either was touched.
+     *
+     * What differs is only the precision, which the caller records — see [ReferenceClock] for what HTTP
+     * is honestly worth against G4a and G4b.
+     */
+    suspend fun runReferenceBurst(
+        clock: ReferenceClock,
+        policy: ClockSyncPolicy = ClockSyncPolicy(),
+    ): Result<ClockEstimate> = withContext(Dispatchers.IO) {
+        val exchanges = mutableListOf<ClockExchange>()
+        repeat(policy.burstSize) { index ->
+            clock.exchange()
+                .onSuccess { exchanges += it }
+                .onFailure { _lastError.value = "${clock.source}: ${it.message}" }
+            // Spacing between exchanges, not before the first: an HTTP burst is already slow enough that
+            // a leading delay would be felt at session start for nothing.
+            if (policy.burstSpacingMs > 0 && index < policy.burstSize - 1) delay(policy.burstSpacingMs)
+        }
+
+        val previous = _estimate.value.takeIf { it.samples > 0 }
+        val reduced = ClockEstimator.fromBurst(exchanges, previous)
+            ?: return@withContext Result.failure(
+                IllegalStateException(
+                    "${clock.source} burst produced no usable exchange (${policy.burstSize} attempted)"
+                )
+            )
+
+        _estimate.value = reduced
+        _history.value = (_history.value + reduced).takeLast(MAX_HISTORY)
+        _lastError.value = null
+        Napier.i(
+            "[lab] ${clock.source} offset=${reduced.offsetMillis} ms delay=${reduced.delayMillis} ms " +
+                "skew=${reduced.skewPpm} ppm from ${reduced.samples} exchanges"
+        )
+        Result.success(reduced)
+    }
+
+    /**
      * Fold a collector acknowledgement of a *data* packet into the estimate. The paced stream is
      * itself a stream of `t1` stamps, so when the collector echoes one back the exchange is free —
      * this is how drift stays observable between bursts without extra traffic.

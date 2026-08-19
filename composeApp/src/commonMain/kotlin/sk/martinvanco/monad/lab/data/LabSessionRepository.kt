@@ -11,6 +11,11 @@ import sk.martinvanco.monad.lab.domain.ClockEstimate
 import sk.martinvanco.monad.lab.domain.SessionStatus
 import sk.martinvanco.monad.lab.domain.TrafficSample
 import sk.martinvanco.monad.lab.domain.LabArtefact
+import sk.martinvanco.monad.lab.domain.MeshObservation
+import sk.martinvanco.monad.lab.domain.MeshSpan
+import sk.martinvanco.monad.lab.domain.PoseSample
+import sk.martinvanco.monad.lab.domain.PoseTrackSummary
+import sk.martinvanco.monad.lab.domain.TrackingQuality
 import sk.martinvanco.monad.lab.domain.SessionCounts
 import sk.martinvanco.monad.lab.domain.SessionMarker
 import sk.martinvanco.monad.lab.domain.SessionRecorder
@@ -188,6 +193,105 @@ class LabSessionRepository(
             )
         }
 
+    /**
+     * Append a batch of poses in one transaction.
+     *
+     * One transaction per batch, not per row: at 10 Hz a per-row commit would fsync ten times a
+     * second for the whole walk, and the sampler shares a device with the write. The batch is what
+     * keeps the pose stream's phase off the disk's critical path.
+     */
+    override suspend fun appendPose(sessionId: String, batch: List<PoseSample>) =
+        withContext(Dispatchers.IO) {
+            if (batch.isEmpty()) return@withContext
+            samples.transaction {
+                batch.forEach {
+                    samples.insertPoseSample(
+                        sessionId = sessionId,
+                        monoNs = it.monotonicNanos,
+                        wallMs = it.wallMillis,
+                        x = it.x.toDouble(),
+                        y = it.y.toDouble(),
+                        z = it.z.toDouble(),
+                        qx = it.qx.toDouble(),
+                        qy = it.qy.toDouble(),
+                        qz = it.qz.toDouble(),
+                        qw = it.qw.toDouble(),
+                        quality = it.quality.wire,
+                        reason = it.reason,
+                    )
+                }
+            }
+        }
+
+    /** Append mesh change-log rows. One transaction per batch, as for poses. */
+    override suspend fun appendMesh(sessionId: String, batch: List<MeshObservation>) =
+        withContext(Dispatchers.IO) {
+            if (batch.isEmpty()) return@withContext
+            samples.transaction {
+                batch.forEach {
+                    samples.insertMeshObservation(
+                        sessionId = sessionId,
+                        monoNs = it.monotonicNanos,
+                        wallMs = it.wallMillis,
+                        anchorId = it.anchorId,
+                        revision = it.revision.toLong(),
+                        vertices = it.vertices,
+                        faces = it.faces,
+                        classified = if (it.classified) 1L else 0L,
+                        x = it.x.toDouble(),
+                        y = it.y.toDouble(),
+                        z = it.z.toDouble(),
+                    )
+                }
+            }
+        }
+
+    override suspend fun putBlob(
+        sessionId: String,
+        name: String,
+        contentType: String,
+        monotonicNanos: Long,
+        wallMillis: Long,
+        bytes: ByteArray,
+    ) = withContext(Dispatchers.IO) {
+        samples.insertBlob(
+            sessionId = sessionId,
+            name = name,
+            contentType = contentType,
+            monoNs = monotonicNanos,
+            wallMs = wallMillis,
+            bytes = bytes,
+            sizeBytes = bytes.size.toLong(),
+        )
+    }
+
+    /** Stored artefacts for a session, **without** their bytes. See `selectBlobMetaBySession`. */
+    suspend fun blobs(sessionId: String): List<StoredBlob> = withContext(Dispatchers.IO) {
+        samples.selectBlobMetaBySession(sessionId).executeAsList().map {
+            StoredBlob(
+                name = it.name,
+                contentType = it.contentType,
+                monotonicNanos = it.monoNs,
+                wallMillis = it.wallMs,
+                sizeBytes = it.sizeBytes,
+            )
+        }
+    }
+
+    /** One artefact's bytes, loaded on demand — the upload path's only reason to hold a mesh. */
+    suspend fun blobBytes(sessionId: String, name: String): ByteArray? = withContext(Dispatchers.IO) {
+        samples.selectBlobBytes(sessionId, name).executeAsOneOrNull()
+    }
+
+    override suspend fun meshSpan(sessionId: String): MeshSpan = withContext(Dispatchers.IO) {
+        val row = samples.meshSpanBySession(sessionId).executeAsOne()
+        MeshSpan(
+            anchors = row.anchors.toInt(),
+            firstMonotonicNanos = row.firstMonoNs,
+            lastMonotonicNanos = row.lastMonoNs,
+        )
+    }
+
     override suspend fun appendClock(sessionId: String, estimate: ClockEstimate) =
         withContext(Dispatchers.IO) {
             samples.insertClockSample(
@@ -237,9 +341,48 @@ class LabSessionRepository(
             // render.
             markers = samples.countMarkersBySession(sessionId).executeAsOne(),
             blocks = samples.countBlockMarkersBySession(sessionId).executeAsOne(),
+            waypoints = samples.countWaypointMarkersBySession(sessionId).executeAsOne(),
             clock = samples.countClockBySession(sessionId).executeAsOne(),
             health = samples.countHealthBySession(sessionId).executeAsOne(),
+            pose = samples.countPoseBySession(sessionId).executeAsOne(),
+            poseNormal = samples.countPoseNormalBySession(sessionId).executeAsOne(),
+            mesh = samples.countMeshBySession(sessionId).executeAsOne(),
+            blobs = samples.countBlobsBySession(sessionId).executeAsOne(),
+            blobBytes = samples.blobBytesBySession(sessionId).executeAsOne(),
         )
+    }
+
+    /**
+     * The whole pose track, reduced.
+     *
+     * Materialises the rows, unlike [counts] — path length is a running sum over consecutive
+     * displacements and there is no way to get it from SQL aggregates. Called once, at close, on the
+     * same path that renders the sidecar. A three-hour walk at 10 Hz is a hundred thousand rows of
+     * twelve numbers, which is a few megabytes for one pass.
+     */
+    override suspend fun poseSummary(sessionId: String): PoseTrackSummary = withContext(Dispatchers.IO) {
+        PoseTrackSummary.of(
+            samples.selectPoseBySession(sessionId).executeAsList().map {
+                PoseSample(
+                    monotonicNanos = it.monoNs,
+                    wallMillis = it.wallMs,
+                    x = it.x.toFloat(),
+                    y = it.y.toFloat(),
+                    z = it.z.toFloat(),
+                    qx = it.qx.toFloat(),
+                    qy = it.qy.toFloat(),
+                    qz = it.qz.toFloat(),
+                    qw = it.qw.toFloat(),
+                    quality = TrackingQuality.fromWire(it.quality),
+                    reason = it.reason,
+                )
+            }
+        )
+    }
+
+    /** `waypoint` marker rows — surveyed correspondences the trajectory fit can use. */
+    suspend fun waypointCount(sessionId: String): Long = withContext(Dispatchers.IO) {
+        samples.countWaypointMarkersBySession(sessionId).executeAsOne()
     }
 
     // ---- health checkpoints ---------------------------------------------------------------
@@ -363,6 +506,14 @@ class LabSessionRepository(
                             LabArtefact.HEALTH,
                             samples.countHealthBySession(record.sessionId).executeAsOne(),
                         ),
+                        PendingArtefact(
+                            LabArtefact.POSE,
+                            samples.countPoseBySession(record.sessionId).executeAsOne(),
+                        ),
+                        PendingArtefact(
+                            LabArtefact.MESH_LOG,
+                            samples.countMeshBySession(record.sessionId).executeAsOne(),
+                        ),
                     ),
                 )
             }
@@ -478,6 +629,57 @@ class LabSessionRepository(
         }.encodeToByteArray()
     }
 
+    /**
+     * The pose track as TSV.
+     *
+     * Unrounded, deliberately. Rounding to millimetres would be defensible for the position and
+     * wrong for the quaternion, where a truncated component is a rotation error that grows with
+     * distance from the origin. Kotlin's default rendering round-trips a double exactly, so the text
+     * carries what was stored and no reader has to know the renderer's precision policy.
+     *
+     * `quality` and `reason` are columns rather than a filtered-out prefix: the analysis has to be
+     * able to drop the untrusted windows itself, and a renderer that dropped them here would leave a
+     * track with unexplained gaps.
+     */
+    suspend fun poseTsv(sessionId: String): ByteArray = withContext(Dispatchers.IO) {
+        val rows = samples.selectPoseBySession(sessionId).executeAsList()
+        buildString {
+            appendLine("mono_ns\twall_ms\tx_m\ty_m\tz_m\tqx\tqy\tqz\tqw\tquality\treason")
+            rows.forEach {
+                appendLine(
+                    "${it.monoNs}\t${it.wallMs}\t${it.x}\t${it.y}\t${it.z}\t" +
+                        "${it.qx}\t${it.qy}\t${it.qz}\t${it.qw}\t" +
+                        "${it.quality}\t${it.reason ?: ""}"
+                )
+            }
+        }.encodeToByteArray()
+    }
+
+    /**
+     * The mesh change log as TSV.
+     *
+     * `mono_ns` first, like every other stream, because that is the column the analysis joins on — and
+     * joining is the entire purpose of this file. The geometry lives in `mesh.ply`; this says *when*
+     * each block became what that file contains, which is what lets a mesh be placed on a CSI window
+     * instead of merely accompanying it.
+     */
+    suspend fun meshTsv(sessionId: String): ByteArray = withContext(Dispatchers.IO) {
+        val rows = samples.selectMeshBySession(sessionId).executeAsList()
+        buildString {
+            appendLine(
+                "mono_ns\twall_ms\tanchor_id\trevision\tvertices\tfaces\tclassified\t" +
+                    "x_m\ty_m\tz_m"
+            )
+            rows.forEach {
+                appendLine(
+                    "${it.monoNs}\t${it.wallMs}\t${it.anchorId}\t${it.revision}\t" +
+                        "${it.vertices}\t${it.faces}\t${it.classified}\t" +
+                        "${it.x}\t${it.y}\t${it.z}"
+                )
+            }
+        }.encodeToByteArray()
+    }
+
     suspend fun purgeUploaded(sessionId: String): Boolean = withContext(Dispatchers.IO) {
         val record = sessions.selectById(sessionId).executeAsOneOrNull() ?: return@withContext false
         if (SessionStatus.fromStorage(record.status) != SessionStatus.UPLOADED) return@withContext false
@@ -488,6 +690,9 @@ class LabSessionRepository(
             samples.deleteClockBySession(sessionId)
             samples.deleteMarkersForSession(sessionId)
             samples.deleteHealthBySession(sessionId)
+            samples.deletePoseBySession(sessionId)
+            samples.deleteMeshBySession(sessionId)
+            samples.deleteBlobsBySession(sessionId)
         }
         sessions.deleteSession(sessionId)
         true
@@ -502,6 +707,9 @@ class LabSessionRepository(
             samples.deleteClockBySession(sessionId)
             samples.deleteMarkersForSession(sessionId)
             samples.deleteHealthBySession(sessionId)
+            samples.deletePoseBySession(sessionId)
+            samples.deleteMeshBySession(sessionId)
+            samples.deleteBlobsBySession(sessionId)
         }
         sessions.deleteSession(sessionId)
     }
@@ -520,4 +728,19 @@ data class HealthCheckpoint(
     val clockSamples: Long,
     val clockResidualMillis: Double?,
     val streams: List<StreamHealthRecord>,
+)
+
+/**
+ * A stored binary artefact, described without loading it.
+ *
+ * The size matters on its own: a mesh is the largest thing this app uploads by an order of magnitude,
+ * and an operator deciding whether to upload now or after lunch is deciding about megabytes rather than
+ * about row counts.
+ */
+data class StoredBlob(
+    val name: String,
+    val contentType: String,
+    val monotonicNanos: Long,
+    val wallMillis: Long,
+    val sizeBytes: Long,
 )

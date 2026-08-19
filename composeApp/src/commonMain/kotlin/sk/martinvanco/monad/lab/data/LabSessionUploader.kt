@@ -248,13 +248,18 @@ class LabSessionUploader(
          * traffic rows, and materialising all five TSVs before sending any of them would put tens
          * of megabytes on the heap of a backgrounded phone for no reason.
          */
-        suspend fun step(artefact: String, rows: Long, render: suspend () -> ByteArray): Boolean {
+        suspend fun step(
+            artefact: String,
+            rows: Long,
+            contentType: String = TSV,
+            render: suspend () -> ByteArray,
+        ): Boolean {
             val outcome = attempt(
                 sessionId = sessionId,
                 artefact = artefact,
                 rows = rows,
                 content = render(),
-                contentType = TSV,
+                contentType = contentType,
                 token = token,
                 participantId = record.participantId,
             )
@@ -276,6 +281,23 @@ class LabSessionUploader(
         if (!step(LabArtefact.CLOCK, counts.clock) { repository.clockTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.MARKERS, counts.markers) { repository.markersTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.HEALTH, counts.health) { repository.healthTsv(sessionId) }) return outcomes
+        if (!step(LabArtefact.POSE, counts.pose) { repository.poseTsv(sessionId) }) return outcomes
+        if (!step(LabArtefact.MESH_LOG, counts.mesh) { repository.meshTsv(sessionId) }) return outcomes
+
+        // Binary artefacts, after the streams and before the sidecar. Same rule and the same reason: the
+        // sidecar's presence is what marks the prefix complete, so anything it describes must already be
+        // there. The mesh is the largest thing this app uploads by an order of magnitude, which makes it
+        // the most likely single point to fail — and failing here retains it rather than losing it.
+        //
+        // `rows = 1`: a PLY is one artefact, not a row count. Reporting its size as rows would put a
+        // vertex count into a column that every other line uses for records.
+        for (blob in repository.blobs(sessionId)) {
+            val sent = step(blob.name, rows = 1, contentType = blob.contentType) {
+                repository.blobBytes(sessionId, blob.name)
+                    ?: throw IllegalStateException("blob ${blob.name} vanished between listing and read")
+            }
+            if (!sent) return outcomes
+        }
 
         val sidecarOutcome = attempt(
             sessionId = sessionId,

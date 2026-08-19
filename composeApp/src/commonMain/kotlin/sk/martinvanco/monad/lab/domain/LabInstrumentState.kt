@@ -28,6 +28,19 @@ data class SessionRequest(
     val broadcast: Boolean = false,
     /** The bundle's advertise plan; the broadcaster refuses when it is not configured. */
     val advertise: AdvertisePlan = AdvertisePlan(),
+    /**
+     * Record the phone's own trajectory for the length of the session (visual-inertial odometry).
+     *
+     * Off by default, because it costs the camera, keeps the screen awake, and is meaningless for a
+     * pocketed witness-only participant. On for a fingerprinting walk, where it is the point.
+     */
+    val track: Boolean = false,
+    /**
+     * Commanded pose rate. 10 Hz by default: a walking body covers about 14 cm between samples at
+     * that rate, which is finer than the position error odometry accumulates over a room, and one
+     * sixth of the rows the camera's own frame rate would produce.
+     */
+    val trackRateHz: Double = 10.0,
 )
 
 enum class Phase { IDLE, STARTING, ASSOCIATING, BINDING, SYNCING, RUNNING }

@@ -33,6 +33,16 @@ enum class LabStream(val artefact: String, val label: String) {
 
     /** Collector time exchanges — `clock.tsv`. Gate G4 depends on this one existing at all. */
     CLOCK("clock.tsv", "Clock sync"),
+
+    /**
+     * The pose track — `pose.tsv`. The second stream with a *commanded* rate to fall short of.
+     *
+     * Watched for the same reason as the illuminator, and it is the more insidious of the two.
+     * Odometry does not stop when it fails, it degrades: the platform keeps returning positions
+     * while it is lost, so a walk can look recorded end to end and be geometrically worthless. A
+     * commanded rate turns that into a number.
+     */
+    POSE("pose.tsv", "Pose track"),
 }
 
 /**
@@ -156,6 +166,24 @@ object StreamPolicies {
         deadAfterMillis = 600_000,
         silenceIsFailure = false,
     )
+
+    /**
+     * Pose track. Silence for ten commanded periods is stale, sixty is dead.
+     *
+     * Tighter than the illuminator's twenty and a hundred, because a pose gap is not recoverable by
+     * analysis the way a dropped datagram is: the datagram had no information the next one lacks,
+     * whereas the missing metres of a trajectory cannot be reconstructed from the metres either side
+     * unless the walk happened to be straight. So this stream is judged sooner, while the operator
+     * is still holding the phone and can restart it.
+     */
+    fun pose(commandedRateHz: Double): StreamPolicy {
+        val periodMillis = if (commandedRateHz > 0.0) (1000.0 / commandedRateHz).toLong() else 1000L
+        return StreamPolicy(
+            expectedRateHz = commandedRateHz.takeIf { it > 0.0 },
+            staleAfterMillis = (periodMillis * 10).coerceIn(2_000L, 15_000L),
+            deadAfterMillis = (periodMillis * 60).coerceIn(10_000L, 60_000L),
+        )
+    }
 
     /**
      * Clock bursts. One and a half resync periods of silence is stale, three is dead — a missed

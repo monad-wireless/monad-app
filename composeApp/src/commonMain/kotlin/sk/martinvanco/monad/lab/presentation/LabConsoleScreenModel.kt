@@ -2,56 +2,53 @@ package sk.martinvanco.monad.lab.presentation
 
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import io.github.aakira.napier.Napier
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import sk.martinvanco.monad.auth.data.repository.UserRepository
-import sk.martinvanco.monad.core.util.currentTimeMillis
-import sk.martinvanco.monad.lab.data.GroundTruthRepository
 import sk.martinvanco.monad.lab.data.LabConfigService
 import sk.martinvanco.monad.lab.data.LabSessionRepository
 import sk.martinvanco.monad.lab.data.LabSessionUploader
 import sk.martinvanco.monad.lab.data.PreflightService
-import sk.martinvanco.monad.lab.data.RoomTallyGateway
 import sk.martinvanco.monad.lab.domain.BackgroundResidency
-import sk.martinvanco.monad.lab.domain.BeaconWitness
-import sk.martinvanco.monad.lab.domain.BlockCommandResult
-import sk.martinvanco.monad.lab.domain.BlockGuards
-import sk.martinvanco.monad.lab.domain.BlockStartRequest
-import sk.martinvanco.monad.lab.domain.CollectorEndpoint
-import sk.martinvanco.monad.lab.domain.GroundTruthQr
-import sk.martinvanco.monad.lab.domain.GroundTruthTicket
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.SessionMarker
 import sk.martinvanco.monad.lab.domain.SessionRequest
-import sk.martinvanco.monad.lab.domain.LabZones
 import sk.martinvanco.monad.lab.domain.SessionStatus
+import sk.martinvanco.monad.lab.domain.TrackingQuality
+import sk.martinvanco.monad.lab.domain.WaypointMarkerPayload
 import sk.martinvanco.monad.lab.domain.monotonicNanos
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
+import sk.martinvanco.monad.lab.domain.preflight.SessionIntent
 
 /**
  * Drives the lab console.
  *
- * Sessions started here are *bench* sessions: no quest, no enrolment, and an explicit AP/profile
- * choice by the operator. That is the mode the EXP-P3 gates are measured in — one phone, one rig,
- * a rate ladder — and it deliberately shares the same [LabInstrument] and the same session records
- * as a field run, so what is measured on the bench is what runs in the field.
+ * Sessions started here are **walks**: the phone advertises a session identity the fleet's passive BLE
+ * scan can hear, records its own trajectory while it does, and the operator marks surveyed waypoints
+ * that tie the two coordinate frames together. See [LabConsoleState] for why the illuminator half of
+ * the old console is gone.
+ *
+ * One deliberate difference from what this model used to do: it sets `broadcast = true` on the session
+ * request. The previous version never did — `SessionRequest.broadcast` defaults to false and nothing
+ * here overrode it — so a console-started session put nothing on air, and a phone could only advertise
+ * inside a quest with a `ble_advertise` step. That was the single reason a bench walk produced no
+ * identity frame, and it looked like a working session while it did.
  */
-@OptIn(ExperimentalUuidApi::class)
 class LabConsoleScreenModel(
     private val instrument: LabInstrument,
     private val configService: LabConfigService,
     private val sessions: LabSessionRepository,
     private val uploader: LabSessionUploader,
     private val residency: BackgroundResidency,
-    private val witness: BeaconWitness,
     private val users: UserRepository,
-    private val groundTruth: GroundTruthRepository,
-    private val roomTally: RoomTallyGateway,
     private val preflight: PreflightService,
 ) : StateScreenModel<LabConsoleState>(LabConsoleState()) {
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     init {
         observe()
@@ -60,85 +57,24 @@ class LabConsoleScreenModel(
             configService.refresh(users.getCurrentUser()?.token)
             refreshSessions()
             refreshDiagnostics()
-            refreshGroundTruth()
+            refreshWaypoints()
         }
-        pollRoomTally()
-        tickBlockClock()
+        tickDisplayClock()
     }
 
     /**
-     * A one-second display tick for the running block.
+     * A one-second display tick.
      *
-     * Separate from the instrument's health heartbeat on purpose: this is a *view* clock, it must
-     * stop when the console closes, and the instrument must not gain work on behalf of a screen.
-     * It reads `monotonicNanos()` and recomputes the pure over-budget guard — nothing else.
+     * Separate from the instrument's health heartbeat on purpose: this is a *view* clock, it stops when
+     * the console closes, and the instrument must not gain work on behalf of a screen. It reads
+     * `monotonicNanos()` and nothing else.
      */
-    private fun tickBlockClock() {
+    private fun tickDisplayClock() {
         screenModelScope.launch {
             while (isActive) {
-                val now = monotonicNanos()
-                val active = mutableState.value.blocks.active
-                mutableState.value = mutableState.value.copy(
-                    blockNowMonotonicNanos = now,
-                    blockLiveWarnings = active?.let { BlockGuards.whileRunning(it, now) }.orEmpty(),
-                )
-                delay(BLOCK_TICK_MILLIS)
+                mutableState.value = mutableState.value.copy(nowMonotonicNanos = monotonicNanos())
+                delay(DISPLAY_TICK_MILLIS)
             }
-        }
-    }
-
-    /**
-     * Poll the server-side room tally for as long as the console is open.
-     *
-     * A loop rather than a refresh-on-event, because the number it fetches changes without this
-     * device doing anything — that is the entire point of it. The cadence is fast enough that the
-     * operator sees a participant appear a second or two after they scan, and trivial for the
-     * backend: the aggregate is two indexed reads over a few hundred rows.
-     *
-     * The clock is advanced on **every** tick, including failures, so the displayed age keeps
-     * growing while the backend is unreachable instead of freezing at the last success and looking
-     * fresh.
-     */
-    private fun pollRoomTally() {
-        screenModelScope.launch {
-            while (isActive) {
-                fetchRoomTally()
-                delay(ROOM_TALLY_POLL_MILLIS)
-            }
-        }
-    }
-
-    private suspend fun fetchRoomTally() {
-        val sessionId = mutableState.value.instrument.sessionId
-        val now = currentTimeMillis()
-
-        if (sessionId.isNullOrBlank()) {
-            // No session, no room: the printed code is anchored to the instrument's session, so
-            // there is nothing for participants to have scanned into yet.
-            mutableState.value = mutableState.value.copy(
-                roomTally = null,
-                roomTallyAtMillis = null,
-                roomTallyNowMillis = now,
-                roomTallyError = null,
-            )
-            return
-        }
-
-        val fetched = roomTally.tally(sessionId, users.getCurrentUser()?.token)
-        mutableState.value = if (fetched != null) {
-            mutableState.value.copy(
-                roomTally = fetched,
-                roomTallyAtMillis = now,
-                roomTallyNowMillis = now,
-                roomTallyError = null,
-            )
-        } else {
-            // Keep the last good snapshot and let it age. Blanking it would discard the only
-            // room-wide number the operator has over a single dropped request.
-            mutableState.value.copy(
-                roomTallyNowMillis = now,
-                roomTallyError = "backend unreachable",
-            )
         }
     }
 
@@ -147,22 +83,13 @@ class LabConsoleScreenModel(
             .onEach { config ->
                 mutableState.value = mutableState.value.copy(
                     config = config,
-                    selectedApId = mutableState.value.selectedApId ?: config.accessPoints.firstOrNull()?.id,
-                    selectedProfileId = mutableState.value.selectedProfileId
-                        ?: config.trafficProfiles.firstOrNull()?.id,
-                    manualHost = mutableState.value.manualHost.ifBlank { config.collector.host },
-                    manualBeaconUuid = mutableState.value.manualBeaconUuid.ifBlank { config.beacons.uuid },
-                    groundTruthZoneId = mutableState.value.groundTruthZoneId
-                        .ifBlank { config.beacons.zones.firstOrNull()?.cellId.orEmpty() },
-                    // Block and ground-truth zones share one vocabulary on purpose: `zone_id` in
-                    // `markers.tsv` and `zone_id` in `ground_truth.tsv` are joined directly by the
-                    // analysis, and two vocabularies would need a lookup table nobody would write.
-                    blockZoneId = mutableState.value.blockZoneId.ifBlank {
-                        config.beacons.zones.firstOrNull()?.cellId
-                            ?: LabZones.DEFAULT.first()
-                    },
+                    manualAdvertiseNamespace = mutableState.value.manualAdvertiseNamespace
+                        .ifBlank { config.advertise.namespaceUuid },
+                    // Witnessing follows the bundle rather than a remembered preference: a toggle left
+                    // on from a deployment that had anchors would arm a stream that cannot produce a
+                    // row, and the health monitor would then watch it fail.
+                    witnessEnabled = mutableState.value.witnessEnabled && config.beacons.isConfigured,
                 )
-                regenerateGroundTruthQr()
             }
             .launchIn(screenModelScope)
 
@@ -172,17 +99,27 @@ class LabConsoleScreenModel(
 
         instrument.state
             .onEach {
-                mutableState.value = mutableState.value.copy(instrument = it)
-                // The code is anchored to the running session, so it appears when a session starts
-                // and disappears when it stops. There is no window in which the console offers a
-                // code that scans into nothing.
-                regenerateGroundTruthQr()
-                refreshGroundTruth()
+                mutableState.value = mutableState.value.copy(
+                    instrument = it,
+                    poseReport = instrument.poseTrackReport,
+                    broadcastReport = instrument.broadcast,
+                )
+                refreshWaypoints()
             }
             .launchIn(screenModelScope)
 
-        instrument.trafficStats
-            .onEach { mutableState.value = mutableState.value.copy(traffic = it) }
+        instrument.isBroadcasting
+            .onEach { mutableState.value = mutableState.value.copy(isBroadcasting = it) }
+            .launchIn(screenModelScope)
+
+        // Held by the instrument, not accumulated here, so backing out of the console mid-walk and
+        // coming back does not show a trajectory that reset to zero metres.
+        instrument.poseProgress
+            .onEach { mutableState.value = mutableState.value.copy(poseProgress = it) }
+            .launchIn(screenModelScope)
+
+        instrument.meshProgress
+            .onEach { mutableState.value = mutableState.value.copy(mesh = it) }
             .launchIn(screenModelScope)
 
         instrument.clockEstimate
@@ -193,14 +130,8 @@ class LabConsoleScreenModel(
             .onEach { mutableState.value = mutableState.value.copy(log = it) }
             .launchIn(screenModelScope)
 
-        // Health carries the clock gate, and the clock gate is what says whether a block boundary
-        // lands inside G4b's 250 ms. The operator has to see that while it can still be fixed.
         instrument.health
             .onEach { mutableState.value = mutableState.value.copy(health = it) }
-            .launchIn(screenModelScope)
-
-        instrument.blocks
-            .onEach { mutableState.value = mutableState.value.copy(blocks = it) }
             .launchIn(screenModelScope)
 
         uploader.lastReport
@@ -218,10 +149,6 @@ class LabConsoleScreenModel(
             LabConsoleEvent.StartSession -> startSession()
             LabConsoleEvent.StopSession -> stopSession()
 
-            LabConsoleEvent.RunClockBurst -> screenModelScope.launch {
-                message("clock burst runs as part of session start; start a session to measure")
-            }
-
             LabConsoleEvent.RequestPrerequisites -> screenModelScope.launch {
                 residency.requestPrerequisites()
                 refreshDiagnostics()
@@ -237,143 +164,156 @@ class LabConsoleScreenModel(
 
             LabConsoleEvent.ClearLog -> instrument.clearLog()
 
-            LabConsoleEvent.ApplyManualCollector -> screenModelScope.launch {
-                val port = mutableState.value.manualPort.toIntOrNull()
-                if (mutableState.value.manualHost.isBlank() || port == null || port !in 1..65535) {
-                    message("host/port invalid")
-                    return@launch
-                }
-                val current = mutableState.value.config
-                configService.overrideLocally(
-                    current.copy(
-                        collector = CollectorEndpoint(
-                            host = mutableState.value.manualHost.trim(),
-                            udpPort = port,
-                        ),
-                        beacons = current.beacons.copy(
-                            uuid = mutableState.value.manualBeaconUuid.trim().ifBlank { current.beacons.uuid }
-                        ),
-                    )
-                )
-                message("local override applied")
-            }
-
-            is LabConsoleEvent.SelectAp ->
-                mutableState.value = mutableState.value.copy(selectedApId = event.apId)
-
-            is LabConsoleEvent.SelectProfile ->
-                mutableState.value = mutableState.value.copy(selectedProfileId = event.profileId)
-
-            is LabConsoleEvent.UpdateManualHost ->
-                mutableState.value = mutableState.value.copy(manualHost = event.value)
-
-            is LabConsoleEvent.UpdateManualPort ->
-                mutableState.value = mutableState.value.copy(
-                    manualPort = event.value.filter { it.isDigit() }.take(5)
-                )
-
-            is LabConsoleEvent.UpdateManualBeaconUuid ->
-                mutableState.value = mutableState.value.copy(manualBeaconUuid = event.value)
-
             is LabConsoleEvent.DeleteSession -> screenModelScope.launch {
                 sessions.forceDelete(event.sessionId)
                 refreshSessions()
                 message("session deleted locally")
             }
 
-            is LabConsoleEvent.SelectGroundTruthZone -> screenModelScope.launch {
-                mutableState.value = mutableState.value.copy(groundTruthZoneId = event.zoneId)
-                regenerateGroundTruthQr()
-                refreshGroundTruth()
+            is LabConsoleEvent.ToggleBroadcast ->
+                mutableState.value = mutableState.value.copy(broadcastEnabled = event.enabled)
+
+            is LabConsoleEvent.ToggleTrack ->
+                mutableState.value = mutableState.value.copy(trackEnabled = event.enabled)
+
+            is LabConsoleEvent.ToggleWitness ->
+                mutableState.value = mutableState.value.copy(
+                    witnessEnabled = event.enabled && mutableState.value.witnessAvailable
+                )
+
+            is LabConsoleEvent.SelectTrackRate ->
+                mutableState.value = mutableState.value.copy(trackRateHz = event.rateHz)
+
+            LabConsoleEvent.StartBroadcast -> screenModelScope.launch {
+                instrument.startBroadcast()
+                    .onSuccess { message("on air as ${it.serviceUuid}") }
+                    .onFailure { message("broadcast refused: ${it.message}") }
+                mutableState.value = mutableState.value.copy(broadcastReport = instrument.broadcast)
             }
 
-            LabConsoleEvent.RefreshGroundTruth -> screenModelScope.launch {
-                refreshGroundTruth()
-                fetchRoomTally()
+            LabConsoleEvent.StopBroadcast -> screenModelScope.launch {
+                instrument.stopBroadcast("operator")
+                message("off air")
             }
 
-            LabConsoleEvent.RefreshRoomTally -> screenModelScope.launch { fetchRoomTally() }
+            is LabConsoleEvent.SelectWaypointPoint ->
+                mutableState.value = mutableState.value.copy(
+                    waypointPoint = event.point
+                        .coerceIn(1, LabConsoleState.FINGERPRINT_CARD_COUNT),
+                    // Selecting from the numbered pool clears a typed code, so the button never shows
+                    // one card and records another.
+                    waypointCode = "",
+                )
 
-            LabConsoleEvent.FlushGroundTruth -> screenModelScope.launch {
-                busy {
-                    val sent = uploader.flushGroundTruth()
-                    message("ground truth flushed for $sent session/participant pair(s)")
-                    refreshGroundTruth()
-                    // The room number is what the operator will look at next, and the flush just
-                    // changed it.
-                    fetchRoomTally()
+            is LabConsoleEvent.UpdateWaypointCode ->
+                mutableState.value = mutableState.value.copy(waypointCode = event.value)
+
+            is LabConsoleEvent.MarkWaypoint -> screenModelScope.launch {
+                markWaypoint(event.code ?: mutableState.value.pendingWaypointCode)
+            }
+
+            LabConsoleEvent.StartWaypointScan -> {
+                // Refused rather than silently allowed while the tracker holds the camera. Opening a
+                // second capture session interrupts one of the two, and the one that loses is decided
+                // by the OS — so the trajectory could develop a hole at the exact instant the waypoint
+                // is meant to anchor it.
+                if (mutableState.value.poseReport != null) {
+                    message("the camera is tracking — type or tap the card code instead")
+                } else {
+                    mutableState.value = mutableState.value.copy(isScanning = true)
                 }
             }
 
-            is LabConsoleEvent.SelectBlockZone ->
-                mutableState.value = mutableState.value.copy(blockZoneId = event.zoneId)
+            LabConsoleEvent.StopWaypointScan ->
+                mutableState.value = mutableState.value.copy(isScanning = false)
 
-            is LabConsoleEvent.SelectBlockLevel ->
-                mutableState.value = mutableState.value.copy(blockLevel = event.level)
-
-            is LabConsoleEvent.SelectBlockSubCondition ->
-                mutableState.value = mutableState.value.copy(blockSubCondition = event.subCondition)
-
-            is LabConsoleEvent.SelectBlockKind ->
-                mutableState.value = mutableState.value.copy(blockKind = event.kind)
-
-            LabConsoleEvent.StartBlock -> screenModelScope.launch { startBlock() }
-            LabConsoleEvent.StopBlock -> screenModelScope.launch { stopBlock() }
+            is LabConsoleEvent.WaypointScanned -> screenModelScope.launch {
+                mutableState.value = mutableState.value.copy(isScanning = false)
+                markWaypoint(LabConsoleState.waypointCodeFrom(event.raw))
+            }
 
             LabConsoleEvent.RunPreflight -> screenModelScope.launch { runPreflight() }
+
+            is LabConsoleEvent.UpdateAdvertiseNamespace ->
+                mutableState.value = mutableState.value.copy(manualAdvertiseNamespace = event.value)
+
+            LabConsoleEvent.ApplyAdvertiseNamespace -> screenModelScope.launch {
+                applyAdvertiseNamespace()
+            }
         }
     }
 
-    // ---- block control ---------------------------------------------------------------------
+    // ---- waypoints -------------------------------------------------------------------------
 
-    private suspend fun startBlock() {
-        val state = mutableState.value
-        val zoneId = state.blockZoneId.ifBlank { state.blockZoneOptions.firstOrNull().orEmpty() }
-        val result = instrument.startBlock(
-            request = BlockStartRequest(
-                // Globally unique and generated once, at the tap, so both edges of the block and
-                // every analysis join agree on one identifier.
-                blockId = Uuid.random().toString(),
-                zoneId = zoneId,
-                level = state.blockLevel,
-                subCondition = state.blockSubCondition,
-                kind = state.blockKind,
-            ),
-            tally = state.blockTally,
-        )
-        applyBlockResult(result)
-    }
-
-    private suspend fun stopBlock() {
-        applyBlockResult(instrument.stopBlock(tally = mutableState.value.blockTally))
-    }
-
-    private fun applyBlockResult(result: BlockCommandResult) {
-        when (result) {
-            is BlockCommandResult.Rejected -> {
-                mutableState.value = mutableState.value.copy(blockLastWarnings = emptyList())
-                message(result.reason.message)
-            }
-
-            is BlockCommandResult.Applied -> {
-                mutableState.value = mutableState.value.copy(blockLastWarnings = result.warnings)
+    private suspend fun markWaypoint(code: String) {
+        instrument.markWaypoint(code)
+            .onSuccess { payload ->
                 message(
-                    result.marks.lastOrNull()?.label?.let { "block $it" }
-                        ?: "block command applied"
+                    if (payload.pose == null) {
+                        "waypoint ${payload.code} — no pose (nothing is tracking)"
+                    } else {
+                        "waypoint ${payload.code} recorded"
+                    }
                 )
+                refreshWaypoints()
             }
+            .onFailure { message("waypoint refused: ${it.message}") }
+    }
+
+    /**
+     * Read the session's waypoints back out of the marker stream.
+     *
+     * From storage rather than from an in-memory list, deliberately. The markers are what the analysis
+     * will read, so a console list built any other way could disagree with the artefact — and the one
+     * question this list answers is "did the waypoint I just tapped actually get written?".
+     */
+    private suspend fun refreshWaypoints() {
+        val sessionId = mutableState.value.instrument.sessionId?.takeIf { it.isNotEmpty() }
+        if (sessionId == null) {
+            mutableState.value = mutableState.value.copy(waypoints = emptyList())
+            return
         }
+        val rows = runCatching { sessions.markers(sessionId) }
+            .getOrDefault(emptyList())
+            .filter { it.kind == SessionMarker.Kind.WAYPOINT }
+            .mapNotNull { marker -> marker.toWaypointRow() }
+            .sortedByDescending { it.wallMillis }
+        mutableState.value = mutableState.value.copy(waypoints = rows)
+    }
+
+    /**
+     * A waypoint marker as a console row.
+     *
+     * Falls back to the marker's own label when the payload will not parse, rather than dropping the
+     * row: a waypoint written by an older build, or with a payload this build cannot read, is still a
+     * waypoint that happened, and hiding it would make the console disagree with the artefact in the
+     * one direction that matters.
+     */
+    private fun SessionMarker.toWaypointRow(): WaypointRow? {
+        val decoded = payload?.let {
+            runCatching { json.decodeFromString(WaypointMarkerPayload.serializer(), it) }
+                .onFailure { error -> Napier.d("[lab] unreadable waypoint payload: ${error.message}") }
+                .getOrNull()
+        }
+        val code = decoded?.code ?: label.takeIf { it.isNotBlank() } ?: return null
+        return WaypointRow(
+            code = code,
+            wallMillis = wallMillis,
+            x = decoded?.pose?.x,
+            z = decoded?.pose?.z,
+            quality = TrackingQuality.fromWire(decoded?.pose?.quality),
+        )
     }
 
     // ---- pre-flight ------------------------------------------------------------------------
 
     /**
-     * Run the readiness check.
+     * Run the readiness check for the walk that is about to run.
      *
-     * Deliberately explicit rather than automatic on screen open: it takes the datagram socket for
-     * a few seconds, and an operator who did not ask for that would find the console mysteriously
-     * busy. It is a button, and the answer it gives — "this phone will fail the clock gate" — is
-     * the one worth having *before* ten people are standing in a room.
+     * Judged as a walk, not as an illuminator session, and that is the whole reason it is worth
+     * pressing. Before the intent existed this always reported at least three hard blockers — no
+     * collector, no access point, no clock samples — none of which a walk needs, and a readiness
+     * display that is permanently red is one the operator stops reading.
      */
     private suspend fun runPreflight() {
         val state = mutableState.value
@@ -381,10 +321,10 @@ class LabConsoleScreenModel(
         val report = runCatching {
             preflight.run(
                 config = state.config,
-                commandedRateHz = state.selectedProfileId
-                    ?.let { state.config.trafficProfile(it)?.rateHz }
-                    ?: 0.0,
+                commandedRateHz = 0.0,
                 sessionRunning = state.isRunning,
+                intent = SessionIntent.WALK,
+                trackRequested = state.trackEnabled,
             )
         }.getOrNull()
         mutableState.value = mutableState.value.copy(
@@ -394,6 +334,8 @@ class LabConsoleScreenModel(
         message(report?.headline ?: "pre-flight could not run")
         refreshDiagnostics()
     }
+
+    // ---- session ---------------------------------------------------------------------------
 
     private fun startSession() {
         val state = mutableState.value
@@ -405,20 +347,25 @@ class LabConsoleScreenModel(
                     participantId = user?.backendId ?: user?.id?.toString() ?: "bench",
                     collector = config.collector,
                     beacons = config.beacons,
-                    accessPoint = state.selectedApId?.let { config.accessPoint(it) },
-                    trafficProfile = state.selectedProfileId?.let { config.trafficProfile(it) },
                     clockSync = config.clockSync,
                     site = config.site,
                     configVersion = config.version,
-                    emit = state.selectedProfileId != null && config.isIlluminationReady,
-                    witness = config.beacons.isConfigured,
+                    // No illumination from this console. There is no access point on this deployment
+                    // to associate to, so an emit=true request would fail at the socket and abort the
+                    // walk — which is a worse outcome than not offering the role at all.
+                    emit = false,
+                    witness = state.witnessEnabled && config.beacons.isConfigured,
+                    broadcast = state.broadcastEnabled,
                     advertise = config.advertise,
+                    track = state.trackEnabled,
+                    trackRateHz = state.trackRateHz,
                 )
                 instrument.start(request)
-                    .onSuccess { message("session $it started") }
+                    .onSuccess { message("walk $it started") }
                     .onFailure { message("start refused: ${it.message}") }
                 refreshDiagnostics()
                 refreshSessions()
+                refreshWaypoints()
             }
         }
     }
@@ -427,12 +374,38 @@ class LabConsoleScreenModel(
         screenModelScope.launch {
             busy {
                 instrument.stop()
-                    .onSuccess { message("session $it closed — uploading") }
+                    .onSuccess { message("walk $it closed — uploading") }
                     .onFailure { message("stop failed: ${it.message}") }
                 uploader.uploadPending(purgeAfter = true)
                 refreshSessions()
             }
         }
+    }
+
+    /**
+     * Override the advertise namespace locally.
+     *
+     * Validated against the identity codec rather than by shape, because a namespace that parses but
+     * carries non-zero identity bytes would collide with another handset's frame — and the fleet would
+     * attribute two phones' sightings to one.
+     */
+    private suspend fun applyAdvertiseNamespace() {
+        val typed = mutableState.value.manualAdvertiseNamespace.trim()
+        if (typed.isBlank()) {
+            message("namespace is empty")
+            return
+        }
+        val current = mutableState.value.config
+        val probe = sk.martinvanco.monad.lab.domain.AdvertiseIdentity
+            .serviceUuid(typed, "probe", "probe")
+        if (probe == null) {
+            message("that is not a 128-bit UUID")
+            return
+        }
+        configService.overrideLocally(
+            current.copy(advertise = current.advertise.copy(namespaceUuid = typed))
+        )
+        message("advertise namespace applied locally")
     }
 
     private suspend fun refreshSessions() {
@@ -453,48 +426,13 @@ class LabConsoleScreenModel(
         )
     }
 
-    /**
-     * Rebuild the check-in code from the running session, the selected zone, and the site.
-     *
-     * The session id is the *instrument's* — the operator's own recording is what defines the lab
-     * session, and every participant's scan then keys to it. No session, no code: a code naming a
-     * session that does not exist produces scans nothing can be joined to, which is strictly worse
-     * than an operator noticing there is nothing to display.
-     */
-    private fun regenerateGroundTruthQr() {
-        val state = mutableState.value
-        val sessionId = state.instrument.sessionId?.takeIf { it.isNotEmpty() && state.isRunning }
-        val zoneId = state.groundTruthZoneId
-        mutableState.value = state.copy(
-            groundTruthQrPayload = if (sessionId != null && zoneId.isNotBlank()) {
-                GroundTruthQr.encode(
-                    GroundTruthTicket(
-                        labSessionId = sessionId,
-                        zoneId = zoneId,
-                        site = state.config.site,
-                        // Toggle: one printed code per doorway, and each participant's own history
-                        // decides which way it counts them.
-                        declaredDirection = null,
-                    )
-                )
-            } else {
-                null
-            }
-        )
-    }
-
-    private suspend fun refreshGroundTruth() {
-        val sessionId = mutableState.value.instrument.sessionId
-        mutableState.value = mutableState.value.copy(
-            groundTruthCheckedIn = sessionId?.let { groundTruth.checkedIn(it) } ?: emptyList(),
-            groundTruthPending = groundTruth.pendingCount(),
-        )
-    }
-
     private fun refreshDiagnostics() {
         mutableState.value = mutableState.value.copy(
             residency = residency.diagnostics(),
-            witnessDiagnostics = witness.residencyDiagnostics(),
+            trackerDiagnostics = runCatching { instrument.poseDiagnostics() }
+                .getOrDefault(emptyList()),
+            broadcastDiagnostics = runCatching { instrument.broadcastDiagnostics() }
+                .getOrDefault(emptyList()),
         )
     }
 
@@ -512,15 +450,20 @@ class LabConsoleScreenModel(
     }
 
     private companion object {
-        /** Display tick for the running block's elapsed time and its over-budget guard. */
-        const val BLOCK_TICK_MILLIS = 1_000L
+        /** Display tick for elapsed time. One second is the resolution a person reads a timer at. */
+        const val DISPLAY_TICK_MILLIS = 1_000L
+    }
+}
 
-        /**
-         * Room-tally poll cadence.
-         *
-         * Fast enough that a participant appears on the console a moment after they scan, and well
-         * inside the 15 s staleness bound so a single dropped request does not flap the label.
-         */
-        const val ROOM_TALLY_POLL_MILLIS = 4_000L
+/** Milliseconds as `mm:ss`, or `h:mm:ss` past the hour. Shared by the console's two timers. */
+internal fun formatElapsed(millis: Long): String {
+    val totalSeconds = millis / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "$hours:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+    } else {
+        "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
     }
 }

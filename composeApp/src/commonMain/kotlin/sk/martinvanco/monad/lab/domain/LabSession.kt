@@ -52,8 +52,19 @@ data class LabSessionSidecar(
          * so it identified nothing; from v4 it is the marketing version of the actual build, and
          * `build_id` identifies the binary. A reader must not treat a v3 `app_version` and a v4
          * `app_version` as the same kind of value, which is exactly what the version bump says.
+         *
+         * v5 is the walk: `summary.pose_track`, `summary.pose_tracker`, `summary.waypoints` and
+         * `summary.mesh`, alongside three new artefacts (`pose.tsv`, `mesh.tsv`, `mesh.ply`). The version
+         * is bumped rather than the fields quietly added because their **absence changes meaning**: a v5
+         * sidecar with `pose_track = null` says the session deliberately recorded no trajectory, while a
+         * v4 sidecar says nothing at all about trajectories because the build could not produce one. A
+         * reader that treats the two alike counts every pre-v5 walk as a walk that failed to track.
+         *
+         * One version rather than two for the trajectory and the geometry, because they are one fact:
+         * `mesh.ply` is in the frame `pose.tsv` defines and `mesh.tsv` is on the clock `pose.tsv` uses, so
+         * a reader that can handle one and not the other cannot use either.
          */
-        const val SCHEMA = "monad-app/session-sidecar/v4"
+        const val SCHEMA = "monad-app/session-sidecar/v5"
     }
 }
 
@@ -237,6 +248,26 @@ data class SessionSummary(
     @SerialName("clock_offset_ms") val clockOffsetMillis: Double = 0.0,
     @SerialName("clock_delay_ms") val clockDelayMillis: Double = 0.0,
     @SerialName("clock_skew_ppm") val clockSkewPpm: Double = 0.0,
+    /**
+     * What the pose track amounts to, or null when the session did not track.
+     *
+     * Null and a zero-sample summary are different facts, and the distinction is the point: null
+     * says "this walk never asked for a trajectory", zero says "it asked and got nothing". The
+     * second is a broken tracker and the first is a design choice.
+     */
+    @SerialName("pose_track") val poseTrack: PoseTrackSummary? = null,
+    /** What the platform accepted when tracking started, or null when it never did. */
+    @SerialName("pose_tracker") val poseTracker: PoseTrackReport? = null,
+    /** `waypoint` rows within [markers] — surveyed correspondences for the trajectory fit. */
+    @SerialName("waypoints") val waypoints: Long = 0,
+    /**
+     * The exported geometry, or null when the session produced none.
+     *
+     * Null covers three different situations and the summary's own fields distinguish them: the session
+     * did not track at all, the device has no LiDAR, or scene reconstruction ran and ARKit held no
+     * anchors. All three are honest; a zero-triangle summary would not be.
+     */
+    @SerialName("mesh") val mesh: MeshSummary? = null,
 )
 
 @Serializable
@@ -321,5 +352,33 @@ object LabArtefact {
      */
     const val HEALTH = "health.tsv"
 
-    val ALL = listOf(SIDECAR, TRAFFIC, BEACONS, TRANSITIONS, CLOCK, MARKERS, HEALTH, GROUND_TRUTH)
+    /**
+     * The walk's own trajectory — where the phone was, in a session-local frame.
+     *
+     * The other half of a fingerprint. Without it the fleet's per-node RSSI on this handset's
+     * identity frame is a signal with no place attached, which is a measurement of nothing.
+     */
+    const val POSE = "pose.tsv"
+
+    /**
+     * When each mesh block became what `mesh.ply` contains.
+     *
+     * The mesh's other half. Geometry with no timestamps is a map that cannot be laid on a CSI capture:
+     * this is the file that puts the room on the same `mono_ns` clock as the trajectory and the radio.
+     */
+    const val MESH_LOG = "mesh.tsv"
+
+    /**
+     * The room, as triangles — binary PLY, in the session-local frame `pose.tsv` uses.
+     *
+     * A blob rather than a stream, and the first artefact in this app that is not a TSV. Carries
+     * per-face ARKit semantic labels when the device supplied them, because the ray-traced channel
+     * simulator wants materials rather than surfaces.
+     */
+    const val MESH = "mesh.ply"
+
+    val ALL = listOf(
+        SIDECAR, TRAFFIC, BEACONS, TRANSITIONS, CLOCK, MARKERS, HEALTH, POSE, MESH_LOG, MESH,
+        GROUND_TRUTH,
+    )
 }

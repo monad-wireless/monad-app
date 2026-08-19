@@ -1,0 +1,30 @@
+-- Migration 11: the pose track — where the phone was, sampled.
+--
+-- A fingerprint is a mapping from a place to a signal, and until now this app recorded only the
+-- signal half. Anchor witnessing gives a zone, which is a room-sized label, and a scanned marker
+-- gives one surveyed point at one instant. A walk needs the line between the points, and
+-- visual-inertial odometry is the only thing on a phone that can supply it.
+--
+-- `quality` is a column rather than a session-level flag on purpose. Odometry does not fail loudly:
+-- it keeps returning a plausible position while it is lost. Per-sample trust is what lets the
+-- analysis drop the windows where the position was a guess instead of dropping the whole walk.
+--
+-- Purely additive: a device upgrading from schema 11 gains an empty table, and every existing
+-- session reads as a session with no pose track — which is what it was.
+CREATE TABLE IF NOT EXISTS PoseSampleRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL,
+    qx REAL NOT NULL,
+    qy REAL NOT NULL,
+    qz REAL NOT NULL,
+    qw REAL NOT NULL,
+    quality TEXT NOT NULL,
+    reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pose_session ON PoseSampleRecord(sessionId, monoNs);

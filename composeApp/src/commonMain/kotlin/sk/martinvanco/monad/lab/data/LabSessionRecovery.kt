@@ -79,6 +79,14 @@ class LabSessionRecovery(
                     "since, so this session's end is recorded in wall time only"
             }
             val counts = repository.counts(record.sessionId)
+            // Only when rows survived. A session that never tracked and one whose track was lost are
+            // different facts, and reducing an empty table would report the second as the first — a
+            // zero-metre walk rather than no walk at all.
+            val poseTrack = if (counts.pose > 0) {
+                runCatching { repository.poseSummary(record.sessionId) }.getOrNull()
+            } else {
+                null
+            }
             val checkpoint = runCatching { repository.lastHealthCheckpoint(record.sessionId) }
                 .getOrNull()
             val recoveredAtWall = currentTimeMillis()
@@ -150,6 +158,12 @@ class LabSessionRecovery(
                     markers = counts.markers,
                     blocks = counts.blocks,
                     healthCheckpoints = counts.health,
+                    poseTrack = poseTrack,
+                    waypoints = counts.waypoints,
+                    // `poseTracker` stays null on purpose. What the platform *accepted* at start was
+                    // held in the process that died, and nothing on disk records it. Inventing a
+                    // plausible report — the default rate, depth guessed from the device — would put
+                    // a fabricated radio configuration into a published artefact.
                 ),
                 /*
                  * Health, reconstructed from the last persisted checkpoint.
@@ -202,7 +216,7 @@ class LabSessionRecovery(
                 reason = reason,
                 monotonicContinuous = false,
                 rows = counts.traffic + counts.beacons + counts.transitions + counts.markers +
-                    counts.clock + counts.health,
+                    counts.clock + counts.health + counts.pose,
                 startedWallMillis = record.startedWallMs,
                 healthCheckpoints = counts.health,
                 /*

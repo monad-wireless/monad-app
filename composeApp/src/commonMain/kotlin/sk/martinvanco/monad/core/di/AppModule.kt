@@ -24,6 +24,7 @@ import sk.martinvanco.monad.lab.data.LabConfigService
 import sk.martinvanco.monad.lab.data.LabSessionRecovery
 import sk.martinvanco.monad.lab.data.LabSessionRepository
 import sk.martinvanco.monad.lab.data.LabSessionUploader
+import sk.martinvanco.monad.lab.data.LabTimeGateway
 import sk.martinvanco.monad.lab.data.PreflightService
 import sk.martinvanco.monad.lab.data.RoomTallyGateway
 import sk.martinvanco.monad.lab.data.StorageArtefactSink
@@ -35,7 +36,10 @@ import sk.martinvanco.monad.lab.domain.GroundTruthStore
 import sk.martinvanco.monad.lab.domain.IdentityBroadcaster
 import sk.martinvanco.monad.lab.domain.LabDatagramSocket
 import sk.martinvanco.monad.lab.domain.LabEnvironment
+import sk.martinvanco.monad.lab.domain.ForegroundWake
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.ReferenceClock
+import sk.martinvanco.monad.lab.domain.PoseTracker
 import sk.martinvanco.monad.lab.domain.SessionRecorder
 import sk.martinvanco.monad.lab.domain.TrafficGenerator
 import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
@@ -92,9 +96,18 @@ val appModule = module {
     single { LabEnvironment() }
     single { LabDatagramSocket() }
     single { ClockSyncService(get()) }
+    // The clock path for a session with no collector. Named as the port, not the gateway: the instrument
+    // asks for "a clock I can measure against", and which one it gets is a deployment fact.
+    single<ReferenceClock> { LabTimeGateway(get()) }
     single { TrafficGenerator(get()) }
     single { BeaconWitness(get()) }
     single { IdentityBroadcaster() }
+    // Visual-inertial odometry. A singleton for the same reason the socket is: a phone has one
+    // camera, and two AR sessions on one device is a refusal, not a second track.
+    single { PoseTracker() }
+    // Keeps the screen awake for a walk. On iOS both advertising and odometry stop when the phone
+    // locks, and neither says so — see ForegroundWake.
+    single { ForegroundWake() }
     single { BackgroundResidency() }
     single { LabSessionRepository(get()) }
     single { LabConfigService(get()) }
@@ -118,7 +131,7 @@ val appModule = module {
     single { LabSessionUploader(get(), get(), get(), get(), get()) }
     // Pre-flight readiness. Holds the same singleton socket the instrument uses, so it refuses to
     // probe while a session is live and always resets the clock service afterwards.
-    single { PreflightService(get(), get(), get(), get(), get(), get()) }
+    single { PreflightService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // Crash / kill / reboot recovery. A session left `open` is invisible to every upload path, so
     // this runs before anything else can read the backlog.
     single { LabSessionRecovery(get()) }
@@ -129,6 +142,9 @@ val appModule = module {
             trafficGenerator = get(),
             beaconWitness = get(),
             broadcaster = get(),
+            poseTracker = get(),
+            referenceClock = get(),
+            wake = get(),
             residency = get(),
             wifi = get(),
             repository = get(),
@@ -161,7 +177,7 @@ val appModule = module {
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }
-    factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get()) }
     factory { GroundTruthScanScreenModel(get(), get(), get(), get()) }
     // "Am I recording?" — the participant surface for a backgrounded session.
     factory { SessionStatusScreenModel(get(), get(), get(), get(), get(), get()) }

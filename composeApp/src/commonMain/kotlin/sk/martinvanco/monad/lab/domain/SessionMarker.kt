@@ -74,6 +74,23 @@ data class SessionMarker(
 
         /** The identity broadcast left the air (step end, session end, or platform refusal). */
         BROADCAST_STOP,
+
+        /**
+         * A surveyed marker was scanned during a walk — the correspondence that turns a
+         * session-local pose track into a trajectory in the site's frame.
+         *
+         * This is a *different fact* from a ground-truth check-in, which is why it is a marker and
+         * not a `GroundTruthEvent`. A check-in says "a person crossed into this zone" and feeds the
+         * people count. A waypoint says "the phone was at this printed point at this instant" and
+         * feeds geometry. Recording one as the other would put a position fix into the occupancy
+         * tally, and the tally is the quantity the whole calibration rests on.
+         *
+         * `step_id` carries the scanned payload verbatim, because that string *is* the identity of
+         * the physical card. The payload is a [WaypointMarkerPayload]: the code plus the pose the
+         * tracker held at the moment of the scan, so the correspondence is self-contained even if
+         * `pose.tsv` and `markers.tsv` are read apart.
+         */
+        WAYPOINT,
         ;
 
         val wire: String
@@ -86,6 +103,7 @@ data class SessionMarker(
                 BLOCK_STOP -> "block_stop"
                 BROADCAST_START -> "broadcast_start"
                 BROADCAST_STOP -> "broadcast_stop"
+                WAYPOINT -> "waypoint"
             }
 
         /** True for the two kinds that carry a [BlockMarkerPayload]. */
@@ -100,6 +118,7 @@ data class SessionMarker(
                 "block_stop" -> BLOCK_STOP
                 "broadcast_start" -> BROADCAST_START
                 "broadcast_stop" -> BROADCAST_STOP
+                "waypoint" -> WAYPOINT
                 else -> ANNOTATION
             }
         }

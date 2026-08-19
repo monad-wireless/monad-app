@@ -15,6 +15,7 @@ data class StreamCounters(
     val transitions: Long = 0,
     val groundTruth: Long = 0,
     val clock: Long = 0,
+    val pose: Long = 0,
 ) {
     fun of(stream: LabStream): Long = when (stream) {
         LabStream.ILLUMINATOR -> illuminator
@@ -22,6 +23,7 @@ data class StreamCounters(
         LabStream.TRANSITIONS -> transitions
         LabStream.GROUND_TRUTH -> groundTruth
         LabStream.CLOCK -> clock
+        LabStream.POSE -> pose
     }
 }
 
@@ -108,12 +110,25 @@ class SessionHealthMonitor(
             witnessing: Boolean,
             resyncSeconds: Int,
             startedAtMillis: Long,
+            tracking: Boolean = false,
+            poseRateHz: Double = 0.0,
+            /**
+             * The session disciplines its clock at all — over the collector's socket, or over the
+             * reference-clock path a session with no collector uses.
+             *
+             * Split out of [emitting] because they stopped being the same question. A walk has no
+             * collector and still produces `clock.tsv`, and reporting that stream as NOT_APPLICABLE
+             * would put it in the one state that cannot fail — so a walk whose sync had quietly stopped
+             * would be indistinguishable from a walk that never needed one, which is precisely the
+             * silent failure this module exists for.
+             */
+            clockDisciplined: Boolean = emitting,
         ): SessionHealthMonitor {
             val policies = buildMap {
                 if (emitting) {
                     put(LabStream.ILLUMINATOR, StreamPolicies.illuminator(commandedRateHz))
-                    put(LabStream.CLOCK, StreamPolicies.clock(resyncSeconds))
                 }
+                if (clockDisciplined) put(LabStream.CLOCK, StreamPolicies.clock(resyncSeconds))
                 if (witnessing) {
                     put(LabStream.WITNESS, StreamPolicies.witness())
                     put(LabStream.TRANSITIONS, StreamPolicies.transitions())
@@ -121,6 +136,10 @@ class SessionHealthMonitor(
                 // Ground truth is always applicable: a participant can scan a doorway code whether
                 // or not this phone happens to be instrumenting, and that is the point of it.
                 put(LabStream.GROUND_TRUTH, StreamPolicies.groundTruth())
+                // Pose only when the session asked for it. A walk on a handset with no odometry must
+                // read as a session that does not play the role, not as one whose track is dead —
+                // NOT_APPLICABLE and DEAD are different sentences and only one of them is a fault.
+                if (tracking) put(LabStream.POSE, StreamPolicies.pose(poseRateHz))
             }
             return SessionHealthMonitor(policies, startedAtMillis)
         }

@@ -1,0 +1,47 @@
+-- Migration 12: the room's geometry, and a place to put binary artefacts at all.
+--
+-- Two tables, one for each half of "a mesh you can actually use".
+--
+-- `MeshObservationRecord` is the **time** half. A mesh with no timestamps is a map that cannot be laid
+-- on a CSI capture: ARKit publishes no revision counter, so a change has to be detected and written
+-- down against the same `mono_ns` clock every other stream uses. It is a change log rather than a
+-- periodic dump, because the rows that matter — a block that changed after the walk had already passed
+-- it, meaning the room moved — would otherwise be buried under thousands of identical ones.
+--
+-- `SessionBlobRecord` is the **bytes** half, and it closes a gap older than the mesh: `SensorCapture`
+-- has carried an optional `payload: ByteArray` since the sensor modules were written, with nowhere to
+-- put it, so a room scan or a UWB range log had no path off the device. Persisted rather than held in
+-- memory because the house rule is upload-then-delete, and an artefact that lives only in the process
+-- is lost the first time an upload fails — which is the normal case on an experiment network.
+--
+-- Purely additive. A device upgrading from schema 12 gains two empty tables, and every existing
+-- session reads as a session with no geometry, which is what it was.
+CREATE TABLE IF NOT EXISTS MeshObservationRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    anchorId TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    vertices INTEGER NOT NULL,
+    faces INTEGER NOT NULL,
+    classified INTEGER NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mesh_session ON MeshObservationRecord(sessionId, monoNs);
+
+CREATE TABLE IF NOT EXISTS SessionBlobRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    contentType TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    bytes BLOB NOT NULL,
+    sizeBytes INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_blob_session_name ON SessionBlobRecord(sessionId, name);

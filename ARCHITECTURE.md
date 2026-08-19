@@ -6,11 +6,12 @@ the MonadCount wireless-sensing programme. iOS is the first-class target; Androi
 ## The idea
 
 The lab is described role-first: an experiment is an assignment of roles to devices plus a
-schedule. A phone is the one device that holds three roles at once.
+schedule. A phone is the one device that holds several roles at once.
 
 | Role | Contract | Implementation |
 |---|---|---|
 | **Illuminator** | Emit frames at a *commanded* pace and report the pace actually delivered | `TrafficGenerator` over a `LabDatagramSocket` pinned to the experiment AP |
+| **Broadcaster** | Advertise a *moving*, session-scoped identity the fleet's passive BLE scan can observe. Unlike an anchor the position is the unknown, and the fleet's per-node RSSI on the frame is what localises it | `IdentityBroadcaster` — a legacy advertisement carrying one 128-bit service UUID, the only shape every platform can emit and every raw scanner can read |
 | **Witness** | Observe surveyed anchors and report RSSI + zone transitions, *without being in the foreground* | `BeaconWitness` — CoreLocation on iOS, BLE scan + `IBeaconParser` on Android |
 | **Subject** | A body in the room | the participant carrying it |
 
@@ -18,12 +19,87 @@ Two facts shape everything:
 
 1. **The phone never captures CSI.** No mobile OS exposes it. CSI comes from the `csid` fleet
    nodes; the phone's job is to be a well-characterised *transmitter* and *reporter*.
-2. **The app is never in the foreground during a session.** A field session is a phone in a pocket,
-   screen off. Anything measured in the foreground measures a condition that will never occur.
+2. **A session has one of two postures, and they are opposites.** A *field* session is a phone in a
+   pocket with the screen off, and anything measured in the foreground measures a condition that will
+   never occur. A *walk* is the reverse: it is somebody holding a phone, deliberately, because both
+   of its roles are foreground-only on iOS — advertising moves into an overflow area no raw scanner
+   can parse when backgrounded, and ARKit pauses outright. Neither reports it when it happens, which
+   is why `ForegroundWake` holds the screen for the length of a walk. The auto-lock timer would
+   otherwise end every walk about thirty seconds in, silently.
 
-On iOS those combine into one mechanism: a CoreLocation beacon session both witnesses the anchors
-*and* buys the process the background runtime the emitter needs. Residency and witnessing are not
-two features.
+On iOS the pocketed posture combines into one mechanism: a CoreLocation beacon session both witnesses
+the anchors *and* buys the process the background runtime the emitter needs. Residency and witnessing
+are not two features.
+
+### The walk
+
+The session shape a fingerprinting corpus needs, and the one the lab console drives. The phone
+advertises a session identity, records **where it was** while it did, and the operator marks surveyed
+waypoints that tie the two coordinate frames together.
+
+| Piece | What it is | Why it is not something simpler |
+|---|---|---|
+| `PoseTracker` | Visual-inertial odometry, sampled at a *commanded* rate. ARKit world tracking on iOS, polling `session.currentFrame` — no view controller, because a pose needs no rendering. Not implemented on Android: ARCore's `session.update()` is only legal on the thread holding the camera texture, so it needs a GL Activity | A zone label from an anchor is room-sized. A scanned marker is one point at one instant. A fingerprint is a mapping from a *place* to a signal, so it needs the line between the points |
+| `pose.tsv` | Position, orientation quaternion, and a **per-sample** tracking-quality column | Odometry does not fail loudly — it keeps returning plausible positions while lost. Without per-sample trust, a track's bad segments are indistinguishable from its good ones and the whole walk has to be discarded |
+| `waypoint` markers | A scanned card code plus the pose held at the instant of the scan | Three correspondences determine the transform into the site frame *and* bound the drift between them. Storing only the code would leave a reader interpolating `pose.tsv`, discarding the one moment both frames were observed together |
+| `LabStream.POSE` | The pose stream in the health monitor, with a commanded rate | The second stream with a rate to fall short of, and the more insidious one. A thermally throttled phone delivers fewer poses; a commanded rate is what turns that into a number instead of a slightly sparser file |
+| `mesh.ply` | The room as triangles — binary PLY, in the pose frame, with per-face ARKit semantic labels when the device supplies them | OBJ cannot carry a per-face label at all, which would mean shipping the classification as a side-car array whose row order silently has to match the face order. The labels are the point: the ray-traced channel simulator wants **materials**, and an unlabelled mesh gives every wall and every seat the same permittivity |
+| `mesh.tsv` | A **change log**: when each block first appeared and each time its geometry changed | ARKit publishes no timestamps and no revision counter, so a mesh has no history unless one is written down. A periodic dump would bury the rows that matter under thousands of identical ones. A block that changed *after* the walk passed it means the room moved, and the exported mesh is then valid only for the window after that change |
+| `SessionBlobRecord` | A place to persist a binary artefact at all | Closes a gap older than the mesh: `SensorCapture` has carried an optional `payload: ByteArray` since the sensor modules were written, with nowhere to put it. Persisted rather than held in memory because the rule is upload-then-delete, and an artefact that lives only in the process is lost the first time an upload fails — the normal case on an experiment network |
+| `ReferenceClock` → `LabTimeGateway` | Four-timestamp clock discipline over `GET /api/lab/time` | The endpoint had existed on the backend since the lab stack was written and **the app never called it**. Without it a walk had no `clock.tsv` at all, because the only other path is the collector's UDP socket and a walk has no collector |
+
+#### How a triangle reaches a CSI record
+
+This is the chain the whole session shape exists to close, and every link is a file:
+
+```
+vertex in mesh.ply ─┐
+pose in pose.tsv   ─┼─ one frame: session-local, gravity-aligned, origin where tracking started
+waypoint pose      ─┘        │
+                             │  waypoint markers: printed card ⋈ pose at the scan
+                             ▼
+                        site frame (PostGIS) ── three fixes determine it and bound the drift
+
+mono_ns on every row ── clock.tsv ──▶ Unix epoch ──▶ csid capture window ──▶ CSI record
+                                          ▲
+                          the fleet's chrony-disciplined clock
+```
+
+Break any link and the geometry is decoration. A mesh in anchor space needs transforms the reader does
+not have; a mesh with no timestamps cannot be attributed to a window; a walk with no clock sample is a
+map of nowhen. So the mesh is transformed into the pose frame on the device, `mesh.tsv` puts it on the
+shared monotonic clock, and `clock.tsv` puts that clock on the epoch the fleet shares.
+
+Three constraints are worth stating because they are not obvious:
+
+* **The two clocks.** `ARFrame.timestamp` is on `CLOCK_UPTIME_RAW`, which stops while the device
+  sleeps. Every other stream is on `CLOCK_MONOTONIC_RAW`, which does not. The offset between them is
+  read at every sample and applied, so a pose carries the instant its frame was captured rather than
+  the instant it was polled, and the two bases are never mixed.
+* **The camera is not shareable.** ARKit holds the capture session for the whole walk, so the QR
+  scanner is refused while tracking — pausing the tracker to scan would put a hole in the trajectory
+  at exactly the instant the waypoint is meant to anchor it. Waypoints are typed or tapped instead.
+* **The mesh is exported before the tracker is stopped, and the frame is retained before the session is
+  paused.** Pausing discards nothing the export holds, but reading a *running* session's Metal buffers
+  means reading memory ARKit may be rebuilding on its own queue as an anchor is refined. So
+  `snapshotMesh` takes the frame, pauses, then reads. Reading after `stop()` would return an empty room
+  every time; reading before the pause would race.
+
+#### What the HTTP clock is honestly worth
+
+`GET /api/lab/time` is coarser than the collector's UDP exchange and the backend's own documentation
+says so — TLS and keep-alive jitter that the minimum-delay filter cannot remove. Against the
+pre-registered budgets: **G4a (6 s)** is cleared by two orders of magnitude, and **G4b (250 ms)** is
+cleared on a local network but without the margin the UDP path has. For attributing a half-second CSI
+window to a position it is far inside the noise — a body at 1.4 m/s moves 1.4 cm in 10 ms. It is
+sufficient for a walk and is **not** a substitute for the collector exchange in a session that has one;
+the estimate records which path produced it and the sidecar carries that.
+
+The illuminator role has **no operator panel** on this deployment, and that is a hardware fact rather
+than a decision about the app: the fleet's AX210 cannot enter AP mode (the Intel LAR firmware limit),
+so there is nothing for a phone to associate to, therefore no collector, no pinned socket and no UDP
+clock exchange. `TrafficGenerator` and `ClockSyncService` are untouched and still reachable from a
+quest; the console simply stopped offering four panels that described an impossible session.
 
 ## Start-up order (`LabInstrument.start`)
 
@@ -31,6 +107,8 @@ The order is the order of the experiment's gates, and a failure at any step abor
 rather than degrading silently:
 
 1. **Residency** — background session acquired first; without it nothing is worth measuring.
+1b. **Screen hold** — for a session playing a foreground-only role (broadcast or track). See
+   `ForegroundWake`.
 2. **Association** — join the commanded AP.
 3. **Pinning** — open the socket bound to *that* interface, and record whether pinning took.
    An unpinned socket is the worst failure mode in the system: the UI says connected, the datagrams
@@ -124,13 +202,16 @@ counted. And the identity is the same opaque pseudonym the sidecar carries — t
 
 ## Data
 
-Sessions record to SQLite (`LabSessionRecord` + three narrow sample streams), export as TSV plus a
-`metadata.json` sidecar mirroring the CSIQ session block, and upload to
-`datasets/monad-app-sessions/<participant>/<session>/`.
+Sessions record to SQLite (`LabSessionRecord` + narrow per-stream tables: traffic, beacons, zone
+transitions, clock, markers, health checkpoints, pose, mesh observations, and a blob store for binary
+artefacts), export as TSV plus a `metadata.json` sidecar
+mirroring the CSIQ session block, and upload to
+`datasets/monad-app-sessions/<participant>/<session>/`. Streams go up before the sidecar, always: the
+sidecar's presence is the contract the reader side uses to detect a partial upload.
 
 ### Which build produced this recording
 
-The sidecar is `monad-app/session-sidecar/v4`. `environment.app_version` is the marketing version
+The sidecar is `monad-app/session-sidecar/v5`. `environment.app_version` is the marketing version
 (`1.2.0`) and `environment.build_id` identifies the binary:
 
 ```

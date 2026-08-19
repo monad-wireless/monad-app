@@ -36,10 +36,13 @@ class LabSessionSidecarWireTest {
 
     @Test
     fun theSchemaVersionSaysWhichContractThisIs() {
-        // v4 is not cosmetic: it is what tells a reader that `app_version` means the version of the
-        // actual build rather than the hand-maintained string v3 and earlier carried.
-        assertEquals("monad-app/session-sidecar/v4", LabSessionSidecar.SCHEMA)
-        assertTrue(encode(sidecar()).contains("\"schema\":\"monad-app/session-sidecar/v4\""))
+        // The version is not cosmetic. v4 told a reader that `app_version` means the version of the
+        // actual build rather than the hand-maintained string v3 carried. v5 is the walk: a null
+        // `pose_track` or `mesh` means "this session deliberately recorded none" — a v4 sidecar says
+        // nothing at all about trajectories or geometry, and treating the two alike counts every older
+        // walk as a walk whose tracker failed.
+        assertEquals("monad-app/session-sidecar/v5", LabSessionSidecar.SCHEMA)
+        assertTrue(encode(sidecar()).contains("\"schema\":\"monad-app/session-sidecar/v5\""))
     }
 
     @Test

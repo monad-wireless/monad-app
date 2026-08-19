@@ -31,7 +31,7 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Bluetooth is used to find lab beacons and, during a measurement walk you start yourself, to broadcast an anonymous session code the lab sensors can hear.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>This app requires camera access to scan QR codes.</string>
+	<string>The camera reads the printed codes on lab markers, and during a measurement walk you start yourself it also tracks the phone's own movement through the room so the recording knows where it was. No photographs or video are saved.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app sends UDP packets to devices on your local network for research data collection.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

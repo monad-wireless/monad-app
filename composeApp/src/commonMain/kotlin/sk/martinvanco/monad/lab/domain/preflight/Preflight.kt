@@ -77,17 +77,45 @@ object Preflight {
         return rows * BYTES_PER_TRAFFIC_ROW + FIXED_SESSION_BYTES
     }
 
+    /**
+     * Judge readiness for the session the operator is about to run.
+     *
+     * **The intent is load-bearing, not cosmetic.** Before it existed every check ran on every
+     * session, so a fingerprinting walk — which needs no access point, no collector and no UDP clock
+     * exchange, because the fleet's AX210 cannot run AP mode at all — reported three hard blockers
+     * and a "NOT READY" headline every single time. A readiness display that is always red is not a
+     * readiness display, it is noise the operator learns to tap past, and the one genuine blocker
+     * hiding among the three would go past with it.
+     *
+     * So the checks a mode cannot pass are not softened, they are **not asked**. An omitted check is
+     * visible as an omission: the report carries only what applies, and the intent is named on it.
+     */
     fun evaluate(inputs: PreflightInputs): PreflightReport {
-        val checks = listOf(
-            permissions(inputs),
-            residency(inputs),
-            config(inputs),
-            collector(inputs),
-            clockGate(inputs),
-            storage(inputs),
-            backlog(inputs),
+        val checks = buildList {
+            add(permissions(inputs))
+            add(residency(inputs))
+            add(config(inputs))
+            if (inputs.intent == SessionIntent.ILLUMINATE) {
+                add(collector(inputs))
+                add(clockGate(inputs))
+            }
+            if (inputs.intent == SessionIntent.WALK) {
+                add(advertise(inputs))
+                add(tracker(inputs))
+                // Asked for a walk too, because a walk that cannot be placed on the fleet's timeline is
+                // a trajectory and a mesh of nowhen. It was not asked before the reference-clock path
+                // existed, and the omission was invisible: the session simply recorded no clock samples
+                // and nothing said the corpus could not be joined.
+                add(clockGate(inputs))
+            }
+            add(storage(inputs))
+            add(backlog(inputs))
+        }
+        return PreflightReport(
+            checks = checks,
+            atWallMillis = inputs.atWallMillis,
+            intent = inputs.intent,
         )
-        return PreflightReport(checks = checks, atWallMillis = inputs.atWallMillis)
     }
 
     private fun permissions(inputs: PreflightInputs): PreflightCheck {
@@ -150,6 +178,25 @@ object Preflight {
 
     private fun config(inputs: PreflightInputs): PreflightCheck {
         val config = inputs.config
+        if (inputs.intent == SessionIntent.WALK) {
+            // A walk needs one thing from the bundle: an advertise namespace, so the frame the fleet
+            // scans for has a deployment prefix to match on. Access points, traffic profiles and the
+            // collector are all illuminator machinery and are not asked about here.
+            return if (config.advertise.isConfigured) {
+                PreflightCheck(
+                    PreflightCheckId.CONFIG,
+                    PreflightSeverity.PASS,
+                    "bundle v${config.version}, site ${config.site.ifBlank { "unset" }}",
+                )
+            } else {
+                PreflightCheck(
+                    PreflightCheckId.CONFIG,
+                    PreflightSeverity.WARN,
+                    "bundle v${config.version} has no advertise namespace",
+                    "set one by hand from the broadcast panel, or refetch the bundle",
+                )
+            }
+        }
         if (!config.isIlluminationReady) {
             return PreflightCheck(
                 PreflightCheckId.CONFIG,
@@ -226,7 +273,10 @@ object Preflight {
      * light that costs a session.
      */
     private fun clockGate(inputs: PreflightInputs): PreflightCheck {
-        val probe = inputs.collector
+        val probe = when (inputs.intent) {
+            SessionIntent.WALK -> inputs.referenceClock
+            SessionIntent.ILLUMINATE -> inputs.collector
+        }
         if (!probe.attempted) {
             return PreflightCheck(
                 PreflightCheckId.CLOCK_GATE,
@@ -235,14 +285,21 @@ object Preflight {
             )
         }
         val report = ClockGate.evaluate(probe.estimates)
-        val span = "over a ${(probe.spanMillis / 1000.0).roundTo(1)} s probe"
+        val via = probe.source.ifBlank { "unknown path" }
+        val span = "over a ${(probe.spanMillis / 1000.0).roundTo(1)} s probe via $via"
         return when {
             report.status == ClockGateStatus.NO_SAMPLES -> PreflightCheck(
                 PreflightCheckId.CLOCK_GATE,
                 PreflightSeverity.FAIL,
-                "no clock exchange succeeded — every fold from this phone would be excluded",
-                "the socket reaches the collector for data but not for time, or the collector is " +
-                    "not answering TIME_REQUEST",
+                "no clock exchange succeeded over $via — nothing this session records can be placed " +
+                    "on the fleet timeline",
+                if (inputs.intent == SessionIntent.WALK) {
+                    "the phone has no route to the backend, or is not signed in — the trajectory and " +
+                        "the mesh would be a map of nowhen"
+                } else {
+                    "the socket reaches the collector for data but not for time, or the collector is " +
+                        "not answering TIME_REQUEST"
+                },
             )
 
             report.status == ClockGateStatus.OFFSET_ONLY -> PreflightCheck(
@@ -275,6 +332,83 @@ object Preflight {
                     "offset; it does not prove long-term skew.",
             )
         }
+    }
+
+    /**
+     * Can this phone put an identity frame on air that the fleet can read?
+     *
+     * The interesting failure is not "Bluetooth is off" — that is loud. It is iOS backgrounding: the
+     * service UUID moves into Apple's proprietary overflow area, which a raw HCI scanner cannot
+     * parse, so a backgrounded iPhone advertises something no node in the room can hear. The session
+     * looks perfect from the phone. This is where that gets said out loud, before the walk.
+     */
+    private fun advertise(inputs: PreflightInputs): PreflightCheck {
+        val probe = inputs.broadcast
+        if (!probe.configured) {
+            return PreflightCheck(
+                PreflightCheckId.ADVERTISE,
+                PreflightSeverity.FAIL,
+                "no advertise namespace — there is no identity frame to put on air",
+                "the fleet's scanner matches on the namespace prefix; without one nothing it hears " +
+                    "can be attributed to this handset",
+            )
+        }
+        if (probe.available == false) {
+            return PreflightCheck(
+                PreflightCheckId.ADVERTISE,
+                PreflightSeverity.FAIL,
+                probe.detail ?: "the platform will not advertise",
+                "check Bluetooth is on and the advertise permission is granted",
+            )
+        }
+        return if (probe.foregroundOnly) {
+            PreflightCheck(
+                PreflightCheckId.ADVERTISE,
+                PreflightSeverity.WARN,
+                "will advertise, but foreground-only on this platform",
+                "keep the app on screen for the whole walk — backgrounded, the frame moves into an " +
+                    "overflow area the fleet's scanner cannot read, and the phone cannot tell",
+            )
+        } else {
+            PreflightCheck(
+                PreflightCheckId.ADVERTISE,
+                PreflightSeverity.PASS,
+                probe.detail ?: "advertising available",
+            )
+        }
+    }
+
+    /**
+     * Will there be a trajectory?
+     *
+     * A warning and not a blocker. A walk with no track still carries its scanned waypoints, which is
+     * discrete rather than continuous ground truth — weaker, not worthless — and an operator who
+     * knows that is making a choice rather than losing data.
+     */
+    private fun tracker(inputs: PreflightInputs): PreflightCheck {
+        val probe = inputs.tracker
+        if (!probe.requested) {
+            return PreflightCheck(
+                PreflightCheckId.POSE_TRACKER,
+                PreflightSeverity.WARN,
+                "tracking is switched off — this walk records waypoints but no trajectory",
+                "the fingerprint will have the points you scanned and no line between them",
+            )
+        }
+        if (!probe.available) {
+            return PreflightCheck(
+                PreflightCheckId.POSE_TRACKER,
+                PreflightSeverity.WARN,
+                probe.detail ?: "no pose tracking on this device",
+                "scan a waypoint at every point you want in the fingerprint — there will be no " +
+                    "trajectory to interpolate between them",
+            )
+        }
+        return PreflightCheck(
+            PreflightCheckId.POSE_TRACKER,
+            PreflightSeverity.PASS,
+            probe.detail ?: "pose tracking available",
+        )
     }
 
     private fun storage(inputs: PreflightInputs): PreflightCheck {
@@ -331,10 +465,21 @@ object Preflight {
 
 /** Everything the evaluation reads. Gathered by `PreflightService`, never by [Preflight] itself. */
 data class PreflightInputs(
+    /** Which mode of session is about to run. Decides which checks are asked at all. */
+    val intent: SessionIntent = SessionIntent.ILLUMINATE,
     val residency: List<ResidencyCheck> = emptyList(),
     val permissions: List<PermissionStatus> = emptyList(),
     val config: LabConfig = LabConfig.EMPTY,
     val collector: CollectorProbe = CollectorProbe.NOT_ATTEMPTED,
+    /**
+     * The clock path a session with no collector uses. See `ReferenceClock`.
+     *
+     * A separate field rather than a reused one so the report can say which transport it judged, and so
+     * an illuminator session cannot accidentally be graded on an HTTP probe's precision.
+     */
+    val referenceClock: ClockProbe = ClockProbe.NOT_ATTEMPTED,
+    val broadcast: BroadcastProbe = BroadcastProbe.UNKNOWN,
+    val tracker: TrackerProbe = TrackerProbe.NOT_REQUESTED,
     val storage: StorageProbe = StorageProbe.UNKNOWN,
     val backlogSessions: Long = 0,
     val backlogScans: Long = 0,
@@ -344,29 +489,92 @@ data class PreflightInputs(
 )
 
 /**
- * What a short live exchange with the collector produced.
+ * What a short live clock exchange produced, over whichever path the mode uses.
  *
  * Several bursts rather than one, because a single burst yields a single [ClockEstimate] and gate
  * G4 needs two before the affine fit is identifiable at all. Detecting "this phone would be
  * downgraded to offset-only" is one of the two things this probe is for.
+ *
+ * One type for both transports, deliberately. The four timestamps and the minimum-delay reduction are
+ * identical whether they came over the collector's UDP socket or over `GET /api/lab/time`; only the
+ * precision differs, and [source] records which so a reader knows which budget applies. Two types
+ * would mean two copies of the G4 evaluation, and they would drift.
  */
-data class CollectorProbe(
+data class ClockProbe(
     val attempted: Boolean,
     val reachable: Boolean,
+    /** Which path produced these samples, e.g. `udp/collector` or `http/api-lab-time`. */
+    val source: String = "",
     val estimates: List<ClockEstimate> = emptyList(),
     /** Monotonic span the bursts were spread over. States what the residual is evidence about. */
     val spanMillis: Long = 0,
     val error: String? = null,
 ) {
     companion object {
-        val NOT_ATTEMPTED = CollectorProbe(attempted = false, reachable = false)
+        val NOT_ATTEMPTED = ClockProbe(attempted = false, reachable = false)
     }
 }
+
+/** The collector path's probe. See [ClockProbe] for why there is only one shape. */
+typealias CollectorProbe = ClockProbe
 
 data class StorageProbe(val availableBytes: Long, val totalBytes: Long) {
     companion object {
         val UNKNOWN = StorageProbe(0, 0)
     }
+}
+
+/**
+ * What the platform says about advertising, before a walk.
+ *
+ * [available] is nullable because "the platform did not say" is a third answer. A build that cannot
+ * interrogate its own advertiser must warn rather than pass, and must not fail — a false blocker
+ * teaches the operator to ignore blockers.
+ */
+data class BroadcastProbe(
+    val configured: Boolean,
+    val available: Boolean? = null,
+    val foregroundOnly: Boolean = false,
+    val detail: String? = null,
+) {
+    companion object {
+        val UNKNOWN = BroadcastProbe(configured = false)
+    }
+}
+
+/** What the platform says about odometry, and whether this walk asked for it. */
+data class TrackerProbe(
+    val requested: Boolean,
+    val available: Boolean = false,
+    val detail: String? = null,
+) {
+    companion object {
+        val NOT_REQUESTED = TrackerProbe(requested = false)
+    }
+}
+
+/**
+ * What kind of session is about to run.
+ *
+ * Two modes, because the phone has two genuinely different jobs and they share almost no
+ * prerequisites. Naming them is what lets the readiness check be honest instead of uniformly red.
+ */
+enum class SessionIntent(val label: String) {
+    /**
+     * A fingerprinting walk: advertise an identity the fleet can hear, and record where the handset
+     * was while it did. Needs no access point, so it needs no collector and no UDP clock exchange.
+     */
+    WALK("walk"),
+
+    /**
+     * The illuminator role: associate to an access point, pin a socket, discipline the clock, emit
+     * at a commanded rate. Requires infrastructure this deployment does not currently have — the
+     * fleet's AX210 cannot run AP mode.
+     */
+    ILLUMINATE("illuminate"),
+    ;
+
+    val wire: String get() = name.lowercase()
 }
 
 enum class PreflightSeverity { PASS, WARN, FAIL }
@@ -377,6 +585,10 @@ enum class PreflightCheckId(val wire: String, val title: String) {
     CONFIG("config", "Config bundle"),
     COLLECTOR("collector", "Collector reachable"),
     CLOCK_GATE("clock_gate", "Clock gate G4"),
+    /** Can the fleet hear this handset's identity frame? Asked for a walk. */
+    ADVERTISE("advertise", "Identity frame"),
+    /** Will there be a trajectory? Asked for a walk. */
+    POSE_TRACKER("pose_tracker", "Pose tracking"),
     STORAGE("storage", "Storage headroom"),
     BACKLOG("backlog", "Upload backlog"),
 }
@@ -392,6 +604,14 @@ data class PreflightCheck(
 data class PreflightReport(
     val checks: List<PreflightCheck>,
     val atWallMillis: Long,
+    /**
+     * Which mode was judged.
+     *
+     * On the report and not only in the inputs, because a report is read after the fact — and "READY"
+     * is meaningless without knowing ready *for what*. A walk that passed says nothing about whether
+     * the same phone could illuminate.
+     */
+    val intent: SessionIntent = SessionIntent.ILLUMINATE,
 ) {
     val blockers: List<PreflightCheck> get() = checks.filter { it.severity == PreflightSeverity.FAIL }
     val warnings: List<PreflightCheck> get() = checks.filter { it.severity == PreflightSeverity.WARN }
@@ -402,10 +622,10 @@ data class PreflightReport(
     val headline: String
         get() = when {
             blockers.isNotEmpty() ->
-                "NOT READY — ${blockers.size} blocker(s): " +
+                "NOT READY to ${intent.label} — ${blockers.size} blocker(s): " +
                     blockers.joinToString(", ") { it.id.title }
 
-            warnings.isNotEmpty() -> "READY with ${warnings.size} warning(s)"
-            else -> "READY — every check passed"
+            warnings.isNotEmpty() -> "READY to ${intent.label} with ${warnings.size} warning(s)"
+            else -> "READY to ${intent.label} — every check passed"
         }
 }
