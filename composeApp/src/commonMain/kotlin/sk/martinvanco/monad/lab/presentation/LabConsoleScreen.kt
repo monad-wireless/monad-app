@@ -57,6 +57,7 @@ import qrscanner.CameraLens
 import qrscanner.QrScanner
 import sk.martinvanco.monad.core.presentation.components.PermissionRequiredCard
 import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
+import sk.martinvanco.monad.lab.data.LabConfigService
 import sk.martinvanco.monad.lab.domain.TrackingQuality
 import sk.martinvanco.monad.lab.domain.health.LabStream
 import sk.martinvanco.monad.lab.domain.preflight.PreflightSeverity
@@ -273,8 +274,33 @@ private fun WalkPanel(state: LabConsoleState, model: LabConsoleScreenModel) = Pa
             warn = !state.clockSynced,
         )
     } else {
-        KeyValue("bundle", "v${state.config.version} (${state.configSource.name.lowercase()})")
-        KeyValue("site", state.config.site.ifBlank { "unset" })
+        // Was `bundle  v0 (cache)` — three pieces of jargon in nine characters. `v0` is the
+        // backend never having set a version, `cache` is a raw enum name, and neither says
+        // the thing an operator needs before starting a walk: is this config USABLE, and is
+        // it the current one. Now the row answers that in words, and keeps the version for
+        // when someone needs to compare against the server.
+        KeyValue(
+            "config",
+            configSummary(state.config.version, state.configSource),
+            warn = state.configSource == LabConfigService.Source.NONE,
+        )
+        KeyValue(
+            "site",
+            state.config.site.ifBlank { "unset — walks cannot be placed on a floor" },
+            warn = state.config.site.isBlank(),
+        )
+        // Whether this walk will be visible on the dashboard while it runs. Silence from a
+        // handset is indistinguishable from a handset that is fine, so an operator about to
+        // walk out of the room should know which of the two they are about to be.
+        KeyValue(
+            "telemetry",
+            if (state.config.telemetry.isConfigured) {
+                "live — health streams to the lab collector"
+            } else {
+                "off — this walk will be invisible until it uploads"
+            },
+            warn = !state.config.telemetry.isConfigured,
+        )
     }
 
     // Setup is an idle activity. Mid-walk these rows are all disabled — six lines of grey that
@@ -342,10 +368,14 @@ private fun WalkPanel(state: LabConsoleState, model: LabConsoleScreenModel) = Pa
                 enabled = !state.isBusy,
             ) { Text("Start walk") }
         }
+        // "Reload config", not "Bundle". The button performs an ACTION — refetch
+        // GET /api/lab/config — and naming it after the internal artefact it fetches told
+        // the operator nothing about what pressing it would do. The two rows below report
+        // WHICH config is loaded; this is how you go and get a newer one.
         OutlinedButton(
             onClick = { model.onEvent(LabConsoleEvent.RefreshConfig) },
             enabled = !state.isBusy,
-        ) { Text("Bundle") }
+        ) { Text("Reload config") }
     }
     if (!state.isRunning) {
         Note(
@@ -885,4 +915,32 @@ private fun format(value: Double): String {
     val whole = scaled / 1000
     val fraction = (if (scaled < 0) -scaled else scaled) % 1000
     return "$whole.${fraction.toString().padStart(3, '0')}"
+}
+
+/**
+ * What config this handset is running, in words an operator can act on.
+ *
+ * The four sources are not four shades of the same thing — they are four different
+ * situations, and only one of them is "you are ready to walk":
+ *
+ *   NONE    nothing was ever fetched. Every session runs against LabConfig.EMPTY, so
+ *           there is no site, no telemetry sink and no anchor plan. This is a blocker.
+ *   CACHE   the last good copy from disk. Correct and expected once the phone has
+ *           joined an AP with no route out — but it may be stale, and only the server
+ *           knows.
+ *   NETWORK fetched from the backend this launch. The one unambiguous good state.
+ *   MANUAL  an operator typed it in on the bench.
+ *
+ * The version is kept because it is what you compare against the server, but it is no
+ * longer the headline: `v0` means the backend never set one, which reads as an error
+ * and is not.
+ */
+private fun configSummary(version: Int, source: LabConfigService.Source): String {
+    val versioned = if (version > 0) " (v$version)" else ""
+    return when (source) {
+        LabConfigService.Source.NONE -> "NOT LOADED — press Reload config"
+        LabConfigService.Source.CACHE -> "cached$versioned — may be stale"
+        LabConfigService.Source.NETWORK -> "from server$versioned"
+        LabConfigService.Source.MANUAL -> "set by hand$versioned"
+    }
 }

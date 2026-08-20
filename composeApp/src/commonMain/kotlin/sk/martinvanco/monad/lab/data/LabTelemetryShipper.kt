@@ -178,6 +178,26 @@ class LabTelemetryShipper(
             recording = health.isRecording,
             clockGate = health.clockGate.status.wire,
             streams = health.streams.map { it.toWire() },
+            // Read straight off the instrument's own live readouts. Both are StateFlows it already
+            // maintains for the console, so observing them adds no work to the measurement path.
+            pose = instrument.poseProgress.value.takeIf { it.samples > 0 }?.let {
+                TelemetryPose(
+                    samples = it.samples,
+                    normalFraction = it.normalFraction,
+                    pathMetres = it.pathLengthMetres,
+                    rejectedJumps = it.rejectedJumps,
+                    pitchDegrees = it.pitchDegrees,
+                    quality = it.quality.name.lowercase(),
+                )
+            },
+            clock = instrument.clockEstimate.value.takeIf { it.samples > 0 }?.let {
+                TelemetryClock(
+                    offsetMillis = it.offsetMillis,
+                    delayMillis = it.delayMillis,
+                    skewPpm = it.skewPpm,
+                    samples = it.samples,
+                )
+            },
         )
 
         lock.withLock {
@@ -323,6 +343,57 @@ internal data class TelemetrySample(
     @SerialName("recording") val recording: Boolean,
     @SerialName("clock_gate") val clockGate: String,
     @SerialName("streams") val streams: List<TelemetryStream>,
+    /**
+     * Capture QUALITY, as opposed to capture liveness.
+     *
+     * The stream list answers "is data arriving at the commanded pace". These answer "is the data
+     * any good", and they are different questions with different failure modes: odometry does not
+     * stop when it fails, it degrades, so a pose stream can be perfectly ALIVE at 10 Hz while every
+     * sample it produces is geometrically worthless. Null when the session does not play the role.
+     */
+    @SerialName("pose") val pose: TelemetryPose? = null,
+    @SerialName("clock") val clock: TelemetryClock? = null,
+)
+
+/**
+ * Pose-track quality. Every field is one the instrument already maintains for the console
+ * (`PoseTrackProgress`) — this ships them, it does not compute anything new.
+ */
+@Serializable
+internal data class TelemetryPose(
+    @SerialName("samples") val samples: Long,
+    /**
+     * Fraction of samples the platform itself called NORMAL. The single best answer to "is this
+     * walk usable"; null before the first sample, which is not the same as zero.
+     */
+    @SerialName("normal_fraction") val normalFraction: Double?,
+    @SerialName("path_metres") val pathMetres: Double,
+    /**
+     * Relocalisation jumps rejected from the path length. `PoseTrackProgress` calls a rising count
+     * "the live signal that the tracker is not holding, which is actionable while the operator is
+     * still in the room" — so it is exactly what belongs on a dashboard during a walk.
+     */
+    @SerialName("rejected_jumps") val rejectedJumps: Long,
+    /**
+     * Smoothed camera pitch, degrees. Carried because pitch EXPLAINS tracking quality rather than
+     * merely correlating with it: a phone held pointing at the floor starves ARKit of features, and
+     * the 2026-08-19 sessions differed by −39° versus −14°.
+     */
+    @SerialName("pitch_degrees") val pitchDegrees: Double?,
+    @SerialName("quality") val quality: String,
+)
+
+/**
+ * Clock discipline. The gate that decides whether anything else this session recorded can be
+ * joined to a fleet capture at all — a walk with no clock sample is a trajectory on a device-local
+ * timeline nobody else shares.
+ */
+@Serializable
+internal data class TelemetryClock(
+    @SerialName("offset_ms") val offsetMillis: Double,
+    @SerialName("delay_ms") val delayMillis: Double,
+    @SerialName("skew_ppm") val skewPpm: Double,
+    @SerialName("samples") val samples: Int,
 )
 
 @Serializable

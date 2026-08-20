@@ -43,6 +43,19 @@ internal object TelemetryEncoder {
     const val SESSION_ELAPSED_MS = "monad.lab.session.elapsed_ms"
     const val DROPPED = "monad.lab.telemetry.dropped"
 
+    // ── Capture quality, as distinct from capture liveness ───────────────────────
+    // The stream metrics above say data is arriving at the commanded pace. These say
+    // whether it is worth anything. A pose stream ALIVE at 10 Hz whose normal-fraction
+    // is 0.2 is the exact failure this pair exists to make visible.
+    const val POSE_NORMAL_FRACTION = "monad.lab.pose.normal_fraction"
+    const val POSE_REJECTED_JUMPS = "monad.lab.pose.rejected_jumps"
+    const val POSE_PATH_METRES = "monad.lab.pose.path_metres"
+    const val POSE_PITCH_DEGREES = "monad.lab.pose.pitch_degrees"
+    const val CLOCK_OFFSET_MS = "monad.lab.clock.offset_ms"
+    const val CLOCK_DELAY_MS = "monad.lab.clock.delay_ms"
+    const val CLOCK_SKEW_PPM = "monad.lab.clock.skew_ppm"
+    const val CLOCK_SAMPLES = "monad.lab.clock.samples"
+
     /**
      * Every metric name this app may emit.
      *
@@ -53,6 +66,8 @@ internal object TelemetryEncoder {
     val METRIC_NAMES: Set<String> = setOf(
         RATE_HZ, DELIVERED, SEVERITY, SILENCE_MS, TROUBLE_MS, EVENTS,
         SESSION_SEVERITY, SESSION_RECORDING, SESSION_ELAPSED_MS, DROPPED,
+        POSE_NORMAL_FRACTION, POSE_REJECTED_JUMPS, POSE_PATH_METRES, POSE_PITCH_DEGREES,
+        CLOCK_OFFSET_MS, CLOCK_DELAY_MS, CLOCK_SKEW_PPM, CLOCK_SAMPLES,
     )
 
     fun metrics(batch: TelemetryBatch): OtlpMetricsRequest {
@@ -74,6 +89,14 @@ internal object TelemetryEncoder {
         val sessionSeverity = mutableListOf<OtlpNumberDataPoint>()
         val sessionRecording = mutableListOf<OtlpNumberDataPoint>()
         val sessionElapsed = mutableListOf<OtlpNumberDataPoint>()
+        val poseNormal = mutableListOf<OtlpNumberDataPoint>()
+        val poseJumps = mutableListOf<OtlpNumberDataPoint>()
+        val posePath = mutableListOf<OtlpNumberDataPoint>()
+        val posePitch = mutableListOf<OtlpNumberDataPoint>()
+        val clockOffset = mutableListOf<OtlpNumberDataPoint>()
+        val clockDelay = mutableListOf<OtlpNumberDataPoint>()
+        val clockSkew = mutableListOf<OtlpNumberDataPoint>()
+        val clockSamples = mutableListOf<OtlpNumberDataPoint>()
 
         for (sample in batch.samples) {
             val at = Otlp.nanosOf(sample.wallMs)
@@ -81,6 +104,24 @@ internal object TelemetryEncoder {
             sessionSeverity += OtlpNumberDataPoint(at, severityOf(sample.overall), scope)
             sessionRecording += OtlpNumberDataPoint(at, if (sample.recording) 1.0 else 0.0, scope)
             sessionElapsed += OtlpNumberDataPoint(at, sample.elapsedMs.toDouble(), scope)
+
+            // Quality blocks are absent when the session does not play the role, and absent is not
+            // zero: a witness-only participant has no pose track, and reporting normal_fraction 0
+            // for them would be a broken tracker that does not exist.
+            sample.pose?.let { pose ->
+                pose.normalFraction?.let { poseNormal += OtlpNumberDataPoint(at, it, scope) }
+                pose.pitchDegrees?.let { posePitch += OtlpNumberDataPoint(at, it, scope) }
+                poseJumps += OtlpNumberDataPoint(at, pose.rejectedJumps.toDouble(), scope)
+                posePath += OtlpNumberDataPoint(at, pose.pathMetres, scope)
+            }
+            sample.clock?.let { clock ->
+                // Absolute offset: the gate is on magnitude, and a dashboard threshold at 100 ms
+                // would otherwise be passed by a −400 ms sample.
+                clockOffset += OtlpNumberDataPoint(at, kotlin.math.abs(clock.offsetMillis), scope)
+                clockDelay += OtlpNumberDataPoint(at, clock.delayMillis, scope)
+                clockSkew += OtlpNumberDataPoint(at, clock.skewPpm, scope)
+                clockSamples += OtlpNumberDataPoint(at, clock.samples.toDouble(), scope)
+            }
 
             for (stream in sample.streams) {
                 val attributes = scope + Otlp.attribute("stream", stream.stream)
@@ -116,6 +157,14 @@ internal object TelemetryEncoder {
             gauge(SESSION_RECORDING, "1", sessionRecording),
             gauge(SESSION_ELAPSED_MS, "ms", sessionElapsed),
             gauge(DROPPED, "samples", dropped),
+            gauge(POSE_NORMAL_FRACTION, "1", poseNormal),
+            gauge(POSE_REJECTED_JUMPS, "jumps", poseJumps),
+            gauge(POSE_PATH_METRES, "m", posePath),
+            gauge(POSE_PITCH_DEGREES, "deg", posePitch),
+            gauge(CLOCK_OFFSET_MS, "ms", clockOffset),
+            gauge(CLOCK_DELAY_MS, "ms", clockDelay),
+            gauge(CLOCK_SKEW_PPM, "ppm", clockSkew),
+            gauge(CLOCK_SAMPLES, "samples", clockSamples),
         )
 
         return OtlpMetricsRequest(

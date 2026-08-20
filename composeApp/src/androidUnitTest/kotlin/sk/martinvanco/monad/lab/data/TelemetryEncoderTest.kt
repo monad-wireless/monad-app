@@ -48,6 +48,8 @@ class TelemetryEncoderTest {
         monoNs: Long = 918_273_645_000,
         overall: String = "degraded",
         streams: List<TelemetryStream> = listOf(stream()),
+        pose: TelemetryPose? = null,
+        clock: TelemetryClock? = null,
     ) = TelemetrySample(
         monoNs = monoNs,
         wallMs = wallMs,
@@ -57,6 +59,8 @@ class TelemetryEncoderTest {
         recording = true,
         clockGate = "ok",
         streams = streams,
+        pose = pose,
+        clock = clock,
     )
 
     private fun batch(
@@ -234,6 +238,54 @@ class TelemetryEncoderTest {
     }
 
     // ── resource identity ────────────────────────────────────────────────────────
+
+    /**
+     * Capture QUALITY, the half that liveness cannot see. A pose stream ALIVE at 10 Hz whose
+     * normal-fraction is 0.2 is a walk that looks recorded and is geometrically worthless.
+     */
+    @Test
+    fun `pose and clock quality are emitted when the session plays those roles`() {
+        val encoded = TelemetryEncoder.metrics(batch(listOf(sample(
+            pose = TelemetryPose(
+                samples = 380, normalFraction = 0.62, pathMetres = 41.3,
+                rejectedJumps = 2, pitchDegrees = -39.0, quality = "limited",
+            ),
+            clock = TelemetryClock(offsetMillis = -12.5, delayMillis = 7.0, skewPpm = 1.4, samples = 9),
+        ))))
+
+        assertEquals(0.62, encoded.metric(TelemetryEncoder.POSE_NORMAL_FRACTION)!!.gauge.dataPoints.single().asDouble)
+        assertEquals(-39.0, encoded.metric(TelemetryEncoder.POSE_PITCH_DEGREES)!!.gauge.dataPoints.single().asDouble)
+        assertEquals(2.0, encoded.metric(TelemetryEncoder.POSE_REJECTED_JUMPS)!!.gauge.dataPoints.single().asDouble)
+        assertEquals(41.3, encoded.metric(TelemetryEncoder.POSE_PATH_METRES)!!.gauge.dataPoints.single().asDouble)
+        // ABSOLUTE offset: a dashboard threshold at 100 ms must not be passed by -400 ms.
+        assertEquals(12.5, encoded.metric(TelemetryEncoder.CLOCK_OFFSET_MS)!!.gauge.dataPoints.single().asDouble)
+        assertEquals(9.0, encoded.metric(TelemetryEncoder.CLOCK_SAMPLES)!!.gauge.dataPoints.single().asDouble)
+    }
+
+    /**
+     * Absent is not zero. A witness-only participant has no pose track, and reporting
+     * normal_fraction 0 would be a broken tracker that does not exist.
+     */
+    @Test
+    fun `a session with no pose or clock emits neither, rather than zeros`() {
+        val encoded = TelemetryEncoder.metrics(batch(listOf(sample())))
+
+        assertNull(encoded.metric(TelemetryEncoder.POSE_NORMAL_FRACTION))
+        assertNull(encoded.metric(TelemetryEncoder.POSE_PITCH_DEGREES))
+        assertNull(encoded.metric(TelemetryEncoder.CLOCK_OFFSET_MS))
+    }
+
+    @Test
+    fun `an unknown pose normal fraction is omitted rather than sent as zero`() {
+        val encoded = TelemetryEncoder.metrics(batch(listOf(sample(
+            pose = TelemetryPose(0, null, 0.0, 0, null, "unavailable"),
+        ))))
+
+        assertNull(encoded.metric(TelemetryEncoder.POSE_NORMAL_FRACTION))
+        assertNull(encoded.metric(TelemetryEncoder.POSE_PITCH_DEGREES))
+        // The counts are known even when the fractions are not.
+        assertEquals(0.0, encoded.metric(TelemetryEncoder.POSE_REJECTED_JUMPS)!!.gauge.dataPoints.single().asDouble)
+    }
 
     @Test
     fun `the resource names the service so it lands beside csid and api`() {

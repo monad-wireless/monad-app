@@ -98,3 +98,23 @@ Analysis-side: `walk_info` lists the dwell windows; the co-validation selects CS
 - `walk_register` — registers `mesh.ply` against a committed floor bundle (2-D trimmed ICP) and
   returns the session→site transform **with its RMS residual**. Quote the residual with any
   position it produces.
+
+## The config row and the "Reload config" button
+
+Renamed 2026-08-20. It used to say **Bundle**, which named the artefact it fetches rather than
+the action it performs, and the row beside it read `bundle  v0 (cache)` — three pieces of jargon
+in nine characters, none of which answered the question an operator has before walking out.
+
+The button refetches `GET /api/lab/config`. The rows report what is loaded:
+
+| Row reads | Means |
+|---|---|
+| `NOT LOADED — press Reload config` | Nothing was ever fetched. Every session runs against `LabConfig.EMPTY`: no site, no telemetry, no anchor plan. **A blocker.** |
+| `cached — may be stale` | The last good copy from disk. Normal once the phone is on an AP with no route out, but only the server knows if it is current. |
+| `from server (v3)` | Fetched this launch. The one unambiguous good state. |
+| `set by hand` | Typed in on the bench. |
+| `site: unset — walks cannot be placed on a floor` | No site slug, so a trajectory cannot be registered to a floor bundle afterwards. |
+| `telemetry: live` / `off` | Whether this walk is visible on dashboard `39 · Handset Instrument` while it runs, or invisible until it uploads. |
+
+`v0` is not an error — it means the backend never set a version. That is why the version is no
+longer the headline.
