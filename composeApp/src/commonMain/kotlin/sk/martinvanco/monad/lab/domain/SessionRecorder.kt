@@ -73,6 +73,22 @@ interface SessionRecorder {
 
     suspend fun appendMarker(sessionId: String, marker: SessionMarker)
 
+    /**
+     * Read a stored blob back. The one read on this port, and it exists for the site map: a walk
+     * that starts by loading the site's saved world map is a walk whose poses come out in the same
+     * frame as every previous walk on that site.
+     */
+    suspend fun getBlob(sessionId: String, name: String): ByteArray?
+
+    /**
+     * Append instrument log lines.
+     *
+     * Batched like poses, for a different reason: log lines are written from `note()`, which is not
+     * suspend and must not become suspend — it is called beside the sampling paths. The instrument
+     * buffers and the heartbeat flushes, so a line costs a list append at the call site.
+     */
+    suspend fun appendLog(sessionId: String, batch: List<InstrumentLogEntry>)
+
     suspend fun appendHealthCheckpoint(
         sessionId: String,
         monotonicNanos: Long,
@@ -138,6 +154,8 @@ data class SessionCounts(
     val pose: Long = 0,
     /** Rows in `mesh.tsv` — geometry changes logged, not blocks. */
     val mesh: Long = 0,
+    /** Rows in `log.tsv` — what the instrument said while the session ran. */
+    val log: Long = 0,
     /** Stored binary artefacts, and their total size. */
     val blobs: Long = 0,
     val blobBytes: Long = 0,

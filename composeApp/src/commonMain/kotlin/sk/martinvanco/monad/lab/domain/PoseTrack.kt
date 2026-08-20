@@ -49,7 +49,21 @@ data class PoseSample(
      * cannot say which windows those were has to be dropped whole.
      */
     val reason: String? = null,
-)
+) {
+    /**
+     * Elevation of the camera's look direction above the horizon, degrees. −90 is straight at the
+     * floor, 0 the horizon, +90 the ceiling.
+     *
+     * Derived, not stored: the quaternion already carries it, and the number exists because it is
+     * the variable that separated the two 2026-08-19 walks. Walk A was carried at a median −39°
+     * (console-reading posture, camera staring at carpet a few metres ahead) and tracked 35 %
+     * `normal`; walk B at −14° tracked 61 %. The tracker starves without parallax, and where the
+     * camera points is the one thing the operator can change mid-walk — so the console coaches on
+     * this value while it still helps.
+     */
+    val cameraPitchDegrees: Double
+        get() = PoseGeometry.cameraPitchDegrees(qx, qy, qz, qw)
+}
 
 /**
  * How much the platform trusts the pose it just returned.
@@ -115,8 +129,27 @@ data class PoseTrackSummary(
     val samples: Long,
     /** Fraction of samples the platform called [TrackingQuality.NORMAL]. */
     @SerialName("normal_fraction") val normalFraction: Double,
-    /** Sum of consecutive displacements, metres. Not the straight-line distance. */
+    /**
+     * Sum of consecutive displacements a body could actually have made, metres. Not the
+     * straight-line distance, and **not** the raw sum — see [rejectedJumps].
+     */
     @SerialName("path_length_m") val pathLengthMetres: Double,
+    /**
+     * Displacements discarded as relocalisation jumps rather than locomotion.
+     *
+     * Measured 2026-08-19 on two real walks. Both reported 92 m and 161 m of "path" for a
+     * handset whose median step was 0.7 cm and 15 cm — the totals were dominated by a handful
+     * of instantaneous jumps implying 21.8 and 44.5 m/s. The operator had been told to read
+     * path length as the sanity check on whether the tracker initialised, and it was the one
+     * number confidently reporting that everything was fine.
+     *
+     * A jump is not noise to be smoothed. It is ARKit re-solving its world and moving the
+     * origin, and the honest treatment is to exclude it from the distance and **count it**:
+     * a high count is itself the diagnosis, so nothing is hidden by the exclusion.
+     */
+    @SerialName("rejected_jumps") val rejectedJumps: Long = 0,
+    /** Metres discarded with those jumps. Together with the count, the whole rejection. */
+    @SerialName("rejected_jump_m") val rejectedJumpMetres: Double = 0.0,
     /** Bounding-box side lengths of the horizontal extent, metres. */
     @SerialName("extent_x_m") val extentXMetres: Double,
     @SerialName("extent_z_m") val extentZMetres: Double,
@@ -124,14 +157,42 @@ data class PoseTrackSummary(
     @SerialName("extent_y_m") val extentYMetres: Double,
 ) {
     companion object {
-        val EMPTY = PoseTrackSummary(0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        val EMPTY = PoseTrackSummary(
+            samples = 0,
+            normalFraction = 0.0,
+            pathLengthMetres = 0.0,
+            extentXMetres = 0.0,
+            extentZMetres = 0.0,
+            extentYMetres = 0.0,
+        )
+
+        /**
+         * Fastest displacement a walking body can produce, metres per second.
+         *
+         * 3.0 — comfortably above a brisk indoor walk (1.2-1.5 m/s) and above a jog, so a real
+         * movement is never rejected, while an ARKit relocalisation (measured at 21.8 and
+         * 44.5 m/s on two real walks) always is. Deliberately a **physical** prior rather than a
+         * statistical one: a threshold fitted to the data would move with the data, and the point
+         * is that no body moves this fast across a library floor.
+         *
+         * The fleet's own BLE measured the same two walks at a median 0.73 m/s over 13 node hops
+         * with not one hop above 2 m/s, which is the independent check on this number.
+         */
+        const val MAX_WALK_SPEED_MPS: Double = 3.0
 
         /**
          * Reduce a track.
          *
-         * Displacements from [TrackingQuality.UNAVAILABLE] samples are skipped: a pose the platform
-         * disowned would otherwise contribute a jump to the path length, and a jump inflates it in
-         * exactly the direction that makes a broken track look like a long walk.
+         * Two exclusions, for two different reasons:
+         *
+         *  * a displacement touching an [TrackingQuality.UNAVAILABLE] sample is skipped, because
+         *    the platform disowned that position and it is not anywhere;
+         *  * a displacement implying more than [MAX_WALK_SPEED_MPS] is skipped and counted,
+         *    because it is the tracker re-solving its world rather than the body moving.
+         *
+         * Both inflate the total in the same direction — the one that makes a broken track look
+         * like a long walk — and path length is the number an operator is told to sanity-check
+         * the tracker against.
          */
         fun of(samples: List<PoseSample>): PoseTrackSummary {
             if (samples.isEmpty()) return EMPTY
@@ -144,6 +205,8 @@ data class PoseTrackSummary(
             var minZ = Float.MAX_VALUE
             var maxZ = -Float.MAX_VALUE
             var previous: PoseSample? = null
+            var jumps = 0L
+            var jumpMetres = 0.0
             samples.forEach { sample ->
                 if (sample.quality == TrackingQuality.NORMAL) normal++
                 if (sample.x < minX) minX = sample.x
@@ -160,7 +223,13 @@ data class PoseTrackSummary(
                     val dx = (sample.x - last.x).toDouble()
                     val dy = (sample.y - last.y).toDouble()
                     val dz = (sample.z - last.z).toDouble()
-                    length += sqrt(dx * dx + dy * dy + dz * dz)
+                    val step = sqrt(dx * dx + dy * dy + dz * dz)
+                    if (isLocomotion(step, sample.monotonicNanos - last.monotonicNanos)) {
+                        length += step
+                    } else {
+                        jumps++
+                        jumpMetres += step
+                    }
                 }
                 previous = sample
             }
@@ -168,10 +237,26 @@ data class PoseTrackSummary(
                 samples = samples.size.toLong(),
                 normalFraction = normal.toDouble() / samples.size,
                 pathLengthMetres = length,
+                rejectedJumps = jumps,
+                rejectedJumpMetres = jumpMetres,
                 extentXMetres = (maxX - minX).toDouble(),
                 extentZMetres = (maxZ - minZ).toDouble(),
                 extentYMetres = (maxY - minY).toDouble(),
             )
+        }
+
+        /**
+         * True when a displacement over an interval is something a body could have done.
+         *
+         * A non-positive interval is treated as a jump: two poses at the same instant that are
+         * metres apart cannot both be true, and admitting the step would add distance for no
+         * elapsed time. That case is real — it is what a re-solve looks like when it lands inside
+         * one sampling period.
+         */
+        fun isLocomotion(stepMetres: Double, intervalNanos: Long): Boolean {
+            if (stepMetres <= 0.0) return true
+            if (intervalNanos <= 0L) return false
+            return stepMetres / (intervalNanos / 1_000_000_000.0) <= MAX_WALK_SPEED_MPS
         }
     }
 }
@@ -194,6 +279,22 @@ data class PoseTrackProgress(
     val last: PoseSample? = null,
     /** Samples the platform called [TrackingQuality.NORMAL]. */
     val normalSamples: Long = 0,
+    /**
+     * Relocalisation jumps rejected from [pathLengthMetres] so far.
+     *
+     * On the console beside the distance, because it is the number that explains a distance
+     * that looks wrong — and because a rising count during a walk is the live signal that the
+     * tracker is not holding, which is actionable while the operator is still in the room.
+     */
+    val rejectedJumps: Long = 0,
+    /**
+     * Smoothed camera pitch, degrees — see [PoseSample.cameraPitchDegrees] for why it matters.
+     *
+     * Exponentially smoothed rather than instantaneous, because the raw value wobbles with every
+     * step and a coaching sentence that flickers is one the operator learns to ignore. Null before
+     * the first sample.
+     */
+    val pitchDegrees: Double? = null,
 ) {
     val quality: TrackingQuality get() = last?.quality ?: TrackingQuality.UNAVAILABLE
 
@@ -203,35 +304,87 @@ data class PoseTrackProgress(
     /**
      * Fold one pose in.
      *
-     * Skips the displacement across an [TrackingQuality.UNAVAILABLE] sample for the same reason
-     * [PoseTrackSummary.of] does: a disowned pose contributes a jump, and a jump inflates the length
-     * in exactly the direction that makes a broken track look like a long walk.
+     * Applies the same two exclusions as [PoseTrackSummary.of] — a disowned pose, and a step too
+     * fast to be locomotion. The live readout and the sidecar are two implementations of one
+     * number and they must not diverge: the operator decides whether to re-take a walk from this
+     * one, and the artefact carries the other.
      */
     fun plus(sample: PoseSample): PoseTrackProgress {
         val previous = last
-        val step = if (
-            previous != null &&
+        var step = 0.0
+        var jumped = false
+        if (previous != null &&
             previous.quality != TrackingQuality.UNAVAILABLE &&
             sample.quality != TrackingQuality.UNAVAILABLE
         ) {
             val dx = (sample.x - previous.x).toDouble()
             val dy = (sample.y - previous.y).toDouble()
             val dz = (sample.z - previous.z).toDouble()
-            kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
-        } else {
-            0.0
+            val raw = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+            if (PoseTrackSummary.isLocomotion(raw, sample.monotonicNanos - previous.monotonicNanos)) {
+                step = raw
+            } else {
+                jumped = true
+            }
         }
+        val pitch = sample.cameraPitchDegrees
         return PoseTrackProgress(
             samples = samples + 1,
             pathLengthMetres = pathLengthMetres + step,
             last = sample,
             normalSamples = normalSamples + if (sample.quality == TrackingQuality.NORMAL) 1 else 0,
+            rejectedJumps = rejectedJumps + if (jumped) 1L else 0L,
+            pitchDegrees = pitchDegrees?.let { it + PITCH_SMOOTHING * (pitch - it) } ?: pitch,
         )
     }
 
     companion object {
         val IDLE = PoseTrackProgress()
+
+        /**
+         * EMA weight for the pitch readout. 0.2 settles in roughly ten samples — a couple of
+         * seconds at the default rate, which is how fast a person actually re-angles a phone.
+         */
+        const val PITCH_SMOOTHING = 0.2
     }
+}
+
+/**
+ * Something the platform tracker reported about itself, outside the pose stream.
+ *
+ * These exist because the failures they describe are invisible in the samples. An interruption is a
+ * *gap* — and a gap looks identical to a slow stream. Walk B (2026-08-19) lost twenty seconds and
+ * came back `initializing` with a moved origin, and the artefacts recorded nothing about why; its
+ * mesh died the same way at close. The instrument turns these into timeline markers and log lines,
+ * so the next such hole carries its own explanation.
+ */
+sealed interface PoseTrackerEvent {
+    /** The platform suspended the session — camera taken, app inactive, system interruption. */
+    data object Interrupted : PoseTrackerEvent
+
+    /**
+     * The interruption ended. [relocalizing] says whether the platform is re-solving into the
+     * *same* map (poses stay in one frame, after a `limited` window) or restarted its world — in
+     * which case every pose after this instant is in a different frame from every pose before it.
+     */
+    data class InterruptionEnded(val relocalizing: Boolean) : PoseTrackerEvent
+
+    /** The session failed outright. No more poses will arrive until it is restarted. */
+    data class Failed(val reason: String) : PoseTrackerEvent
+
+    /**
+     * The loaded site map was abandoned and tracking restarted with a fresh origin.
+     *
+     * Measured 2026-08-19 (home bench, sessions 8204faf3 / ca60cf4f): a session started with
+     * `initialWorldMap` refuses to track until it visually recognises the mapped place, and it
+     * never falls back on its own — two walks ran to completion at **0% normal**, all
+     * `initializing`/`relocalizing`, frames stalling 2–3 s at a time, one ending in a process
+     * death. A walk that tracks in a fresh frame beats a walk that never tracks, so after
+     * [graceSeconds] without a single `normal` pose the tracker drops the map and resets. The
+     * poses after this instant are session-local again — which the marker this event becomes is
+     * there to say.
+     */
+    data class RelocalizationAbandoned(val graceSeconds: Double) : PoseTrackerEvent
 }
 
 /**
@@ -251,6 +404,19 @@ expect class PoseTracker() {
     /** Poses as they arrive. Cold until [start]. */
     val samples: Flow<PoseSample>
 
+    /** Interruptions, resumptions and failures, as the platform reports them. See [PoseTrackerEvent]. */
+    val events: Flow<PoseTrackerEvent>
+
+    /**
+     * An opaque handle the platform camera preview can render from, or null when there is nothing
+     * to show — no session running, or a platform with no tracker.
+     *
+     * `Any` because the type is a platform object (the ARKit session on iOS) and naming it here
+     * would put a platform type in common code. The only consumer is the platform half of the
+     * console's preview composable, which knows what it is.
+     */
+    fun previewHandle(): Any?
+
     /**
      * Runtime truth, separate from "the OS has the framework".
      *
@@ -260,8 +426,21 @@ expect class PoseTracker() {
      */
     suspend fun probe(): LabSensorModule.Availability
 
-    /** Begin tracking at a commanded sampling rate. Returns what the platform accepted. */
-    suspend fun start(rateHz: Double): Result<PoseTrackReport>
+    /**
+     * Begin tracking at a commanded sampling rate. Returns what the platform accepted.
+     *
+     * [initialWorldMap] is a previously saved site map (see [snapshotWorldMap]); when present the
+     * platform relocalises into it, so this walk's poses land in the same frame as the walk that
+     * saved it. Null starts a fresh session-local frame — the first walk on a site.
+     */
+    suspend fun start(rateHz: Double, initialWorldMap: ByteArray? = null): Result<PoseTrackReport>
+
+    /**
+     * Serialise the platform's world map — the persistent, relocalisable description of the site
+     * that turns odometry into positioning. Must be called while the session still runs; the close
+     * path calls it before the mesh export pauses the session.
+     */
+    suspend fun snapshotWorldMap(): Result<ByteArray>
 
     /**
      * Cheap pass over the mesh blocks: which ones exist, where they are, and whether any changed.
@@ -357,4 +536,20 @@ object PoseGeometry {
         }
         return q
     }
+
+    /**
+     * Elevation of the camera's look direction above the horizon, degrees, from the device
+     * orientation quaternion in a gravity-aligned frame (+y up).
+     *
+     * The camera looks along the device's −z axis, so the world-frame look vector is R(q)·(0,0,−1) —
+     * the negated third column of the rotation matrix — and the pitch is the arcsine of its y
+     * component. Two of the three components are never needed, so only r02/r12/r22 are formed.
+     */
+    fun cameraPitchDegrees(qx: Float, qy: Float, qz: Float, qw: Float): Double {
+        val ly = -(2.0 * (qy * qz - qw * qx))
+        val clamped = ly.coerceIn(-1.0, 1.0)
+        return kotlin.math.asin(clamped) * DEGREES_PER_RADIAN
+    }
+
+    private const val DEGREES_PER_RADIAN = 180.0 / kotlin.math.PI
 }

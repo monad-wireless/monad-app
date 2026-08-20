@@ -283,6 +283,7 @@ class LabSessionUploader(
         if (!step(LabArtefact.HEALTH, counts.health) { repository.healthTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.POSE, counts.pose) { repository.poseTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.MESH_LOG, counts.mesh) { repository.meshTsv(sessionId) }) return outcomes
+        if (!step(LabArtefact.LOG, counts.log) { repository.logTsv(sessionId) }) return outcomes
 
         // Binary artefacts, after the streams and before the sidecar. Same rule and the same reason: the
         // sidecar's presence is what marks the prefix complete, so anything it describes must already be

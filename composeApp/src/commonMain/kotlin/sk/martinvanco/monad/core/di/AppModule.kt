@@ -24,6 +24,7 @@ import sk.martinvanco.monad.lab.data.LabConfigService
 import sk.martinvanco.monad.lab.data.LabSessionRecovery
 import sk.martinvanco.monad.lab.data.LabSessionRepository
 import sk.martinvanco.monad.lab.data.LabSessionUploader
+import sk.martinvanco.monad.lab.data.LabTelemetryShipper
 import sk.martinvanco.monad.lab.data.LabTimeGateway
 import sk.martinvanco.monad.lab.data.PreflightService
 import sk.martinvanco.monad.lab.data.RoomTallyGateway
@@ -152,6 +153,10 @@ val appModule = module {
         )
     }
     single { GroundTruthRecorder(get(), get()) }
+    // Live instrument health -> the lab's LGTM stack, via the API. A singleton observing the one
+    // instrument, started once in `App()`: it has to outlive the console screen, because a walk
+    // continues with the screen closed and that is exactly when nobody can see the handset.
+    single { LabTelemetryShipper(get(), get()) }
     // The quest path's ports (see `quests/domain/port`). Adapters over the same singletons, not
     // second instances: one config service, one uploader, one user table. What changes is what the
     // coordinator can reach — it can drain the backlog but not delete a session, read step rows but

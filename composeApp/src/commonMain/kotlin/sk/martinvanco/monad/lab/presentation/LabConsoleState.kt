@@ -85,6 +85,15 @@ data class LabConsoleState(
     /** Record the trajectory. On by default on a platform that has odometry. */
     val trackEnabled: Boolean = true,
     /**
+     * Relocalise into the site's saved world map, when one exists.
+     *
+     * Off is a deliberate fresh origin — the right call on a bench, at home, or after the room
+     * changed. The tracker abandons a hopeless map on its own after a grace period, so leaving
+     * this on costs at most that grace; turning it off skips the wait when the operator already
+     * knows the map is wrong.
+     */
+    val useSiteMap: Boolean = true,
+    /**
      * Monitor the ESP32 iBeacon anchors.
      *
      * Off unless the bundle carries an anchor plan, because without deployed anchors it produces an
@@ -139,6 +148,29 @@ data class LabConsoleState(
     val waypoints: List<WaypointRow> = emptyList(),
     /** True while the inline QR scanner is open. Only reachable when the tracker is not running. */
     val isScanning: Boolean = false,
+
+    /**
+     * The card the operator is currently standing on, when a dwell is open.
+     *
+     * A dwell is the stationary probe arm: body parked on a surveyed card, held, so the CSI
+     * statistic reads against a fixed position with no direction-of-motion confound. It is the arm
+     * that can settle the walked-vs-simulated sign disagreement, and it costs two taps.
+     */
+    val dwellCode: String? = null,
+    /** When the open dwell started, for the elapsed readout and the closing marker's duration. */
+    val dwellStartedMonotonicNanos: Long = 0,
+
+    /** Camera preview on the walk panel. Costs battery; the coaching it buys usually wins. */
+    val showCameraPreview: Boolean = true,
+
+    /**
+     * A close the operator has to dismiss, or null when stopping needs no ceremony.
+     *
+     * Both 2026-08-19 walks closed with zero waypoints, which left two trajectories tied to no
+     * building — and nothing said so until analysis. The warning is dismissable rather than a hard
+     * refusal: an aborted bench test should not have to invent three waypoints to end.
+     */
+    val stopWarning: String? = null,
 
     // ---- pre-flight -------------------------------------------------------------------
     val preflight: PreflightReport? = null,
@@ -226,6 +258,48 @@ data class LabConsoleState(
             (!trackEnabled || poseProgress.quality == TrackingQuality.NORMAL)
 
     /**
+     * The one sentence telling the operator what to change with their hands, right now.
+     *
+     * Evidence-ordered, most fixable first. Camera pitch leads because it is what separated the two
+     * 2026-08-19 walks (−39° carried, 35 % normal; −14° carried, 61 %) and because raising a phone
+     * is the cheapest fix in the whole instrument. Null when there is nothing to coach — silence is
+     * what lets a sentence, when it appears, be read.
+     */
+    val coaching: String?
+        get() {
+            if (!isRunning || !trackEnabled || poseReport == null) return null
+            val progress = poseProgress
+            val pitch = progress.pitchDegrees
+            val reason = progress.last?.reason
+            return when {
+                pitch != null && pitch < PITCH_FLOOR_DEGREES ->
+                    "RAISE THE PHONE — the camera is looking at the floor " +
+                        "(${pitch.toInt()}°). Hold it up so the preview shows the room ahead."
+
+                reason == "initializing" && elapsedMillis > INIT_GRACE_MILLIS ->
+                    "Tracking cannot initialise. Stand still a moment and point the camera at " +
+                        "furniture or shelving a few metres away, not at a blank wall."
+
+                reason == "insufficient_features" ->
+                    "The camera sees too little texture. Aim at furniture, shelving or posters — " +
+                        "not carpet, glass or a bare wall."
+
+                reason == "excessive_motion" ->
+                    "Moving too fast for the tracker. Slow down and keep the phone steady."
+
+                reason == "relocalizing" ->
+                    "Relocalising. Stand still and face somewhere already scanned until quality " +
+                        "reads NORMAL."
+
+                progress.samples > 0 && progress.rejectedJumps * 20 > progress.samples ->
+                    "The tracker keeps re-solving its world. Hold the phone up and forward with a " +
+                        "clear view several metres ahead."
+
+                else -> null
+            }
+        }
+
+    /**
      * The code the waypoint button will record.
      *
      * The typed field wins when it is not blank, so the eight named zone cards
@@ -233,6 +307,34 @@ data class LabConsoleState(
      */
     val pendingWaypointCode: String
         get() = waypointCode.trim().ifBlank { fingerprintCode(waypointPoint) }
+
+    /** True while the operator is standing a dwell on a card. */
+    val isDwelling: Boolean get() = dwellCode != null
+
+    /**
+     * What stopping this walk right now would silently cost, or null when it costs nothing.
+     *
+     * Pure and derived, so the gate is testable without a screen model. The waypoint floor is
+     * three — the transform into the site frame plus a drift bound — but the sentence adjusts:
+     * a walk that relocalised into a saved site map is already in the site frame, and waypoints
+     * then verify rather than establish it.
+     */
+    val stopWarningText: String?
+        get() {
+            if (!isRunning || !trackEnabled || poseReport == null) return null
+            val complaints = mutableListOf<String>()
+            if (waypoints.size < WAYPOINT_FLOOR) {
+                complaints += "only ${waypoints.size} of $WAYPOINT_FLOOR waypoints are recorded — " +
+                    "the trajectory cannot be tied to the building and its drift cannot be bounded"
+            }
+            val trusted = poseProgress.normalFraction
+            if (trusted != null && poseProgress.samples >= TRUST_SAMPLE_FLOOR && trusted < TRUST_FLOOR) {
+                complaints += "only ${(trusted * 100).toInt()} % of the track is trusted — " +
+                    "re-taking the walk now is cheaper than discarding it in analysis"
+            }
+            if (complaints.isEmpty()) return null
+            return "Stopping now: " + complaints.joinToString(", and ") + "."
+        }
 
     companion object {
         /**
@@ -260,6 +362,27 @@ data class LabConsoleState(
          * be authoritative.
          */
         const val FINGERPRINT_CARD_COUNT: Int = 20
+
+        /**
+         * Below this smoothed camera pitch the console tells the operator to raise the phone.
+         *
+         * −30°. Walk A's median was −39° (35 % normal); walk B's −14° (61 %). The threshold sits
+         * between them, on the failing side, so a phone carried console-first trips it and a phone
+         * held preview-first does not.
+         */
+        const val PITCH_FLOOR_DEGREES = -30.0
+
+        /** How long `initializing` is normal before it becomes a coaching sentence. */
+        const val INIT_GRACE_MILLIS = 10_000L
+
+        /** Waypoints needed for a site-frame transform plus a drift bound. */
+        const val WAYPOINT_FLOOR = 3
+
+        /** Trusted-fraction floor mirrored from the instrument's close-time callout. */
+        const val TRUST_FLOOR = 0.8
+
+        /** Samples before the trusted fraction is worth warning about. ~30 s at the default rate. */
+        const val TRUST_SAMPLE_FLOOR = 300L
 
         /** The printed slug of numbered card [point]. See [FINGERPRINT_CARD_COUNT]. */
         fun fingerprintCode(point: Int): String =
@@ -311,6 +434,25 @@ sealed interface LabConsoleEvent {
     data object RefreshConfig : LabConsoleEvent
     data object StartSession : LabConsoleEvent
     data object StopSession : LabConsoleEvent
+
+    /** The operator read the stop warning and wants to stop anyway. */
+    data object ConfirmStopSession : LabConsoleEvent
+
+    /** The operator read the stop warning and is going back to fix what it names. */
+    data object DismissStopWarning : LabConsoleEvent
+
+    /** Toggle the walk panel's camera preview. */
+    data class ToggleCameraPreview(val shown: Boolean) : LabConsoleEvent
+
+    /** Toggle relocalising into the saved site map for the next walk. */
+    data class ToggleSiteMap(val enabled: Boolean) : LabConsoleEvent
+
+    // ---- dwell ------------------------------------------------------------------------
+    /** Start standing a dwell on the pending waypoint card. Records the waypoint too. */
+    data object StartDwell : LabConsoleEvent
+
+    /** Finish the open dwell. */
+    data object EndDwell : LabConsoleEvent
     data object RequestPrerequisites : LabConsoleEvent
     data object RetryUploads : LabConsoleEvent
     data object ClearLog : LabConsoleEvent

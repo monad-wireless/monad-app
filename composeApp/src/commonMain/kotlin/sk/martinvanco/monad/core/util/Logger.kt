@@ -1,13 +1,38 @@
 package sk.martinvanco.monad.core.util
 
+import io.github.aakira.napier.Antilog
 import io.github.aakira.napier.DebugAntilog
+import io.github.aakira.napier.LogLevel
 import io.github.aakira.napier.Napier
 
 object Logger {
 
+    /**
+     * DebugAntilog, but with the tag always supplied.
+     *
+     * On iOS `DebugAntilog` derives a missing tag by walking `NSThread.callStackSymbols` — an
+     * NSArray interop iteration plus a dyld symbol lookup **per log call**. Measured with Time
+     * Profiler on the device (2026-08-19, 61 s attach during a walk): 983 ms of
+     * `Kotlin_NSArrayAsKList_get` plus ~1 s of `dyld findClosestSymbol`, all under
+     * `DebugAntilog.performTag` — the single largest self-inflicted CPU cost in the app, spent
+     * producing a tag nobody reads. A non-null tag skips that path entirely; the messages already
+     * carry their own `[lab]`-style prefixes.
+     */
+    private object TaggedAntilog : Antilog() {
+        private val delegate = DebugAntilog()
+
+        override fun performLog(
+            priority: LogLevel,
+            tag: String?,
+            throwable: Throwable?,
+            message: String?,
+        ) {
+            delegate.log(priority, tag ?: "monad", throwable, message)
+        }
+    }
+
     fun init() {
-        // Initialize Napier with DebugAntilog (works for both platforms)
-        Napier.base(DebugAntilog())
+        Napier.base(TaggedAntilog)
     }
 
     // Convenience methods

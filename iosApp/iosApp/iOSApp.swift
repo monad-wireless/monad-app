@@ -18,6 +18,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // The ARKit pose shim: Kotlin must never touch an ARFrame (its wrappers retain frames
+        // until the Kotlin GC runs, which starves ARKit's capture pool and stops the camera —
+        // measured 2026-08-19). The read is compiled here, in MonadArPoseShim.m, and the walk
+        // tracker refuses to start if this line is missing.
+        ArPoseShim.shared.install(pointer: UnsafeMutableRawPointer(mutating: MonadReadArPoseAddress()))
+
         if firebaseAvailable, FirebaseApp.app() == nil {
             FirebaseApp.configure()
         }

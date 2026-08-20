@@ -63,16 +63,26 @@ class LabConsoleScreenModel(
     }
 
     /**
-     * A one-second display tick.
+     * A one-second display tick — and the pace of every high-rate readout.
      *
-     * Separate from the instrument's health heartbeat on purpose: this is a *view* clock, it stops when
-     * the console closes, and the instrument must not gain work on behalf of a screen. It reads
-     * `monotonicNanos()` and nothing else.
+     * Separate from the instrument's health heartbeat on purpose: this is a *view* clock, it stops
+     * when the console closes, and the instrument must not gain work on behalf of a screen.
+     *
+     * The pose and mesh readouts are **read here, not collected**. They used to be collected per
+     * emission, which recomposed the whole console at the pose rate — ten full recompositions a
+     * second of a long scrolling column, on a debug build, on the device that is also running
+     * ARKit and the camera. Measured 2026-08-19: main-thread CPU doubled against the same walk
+     * with the readouts sampled. A human reads these numbers at 1 Hz; the screen now changes at
+     * the rate it is read.
      */
     private fun tickDisplayClock() {
         screenModelScope.launch {
             while (isActive) {
-                mutableState.value = mutableState.value.copy(nowMonotonicNanos = monotonicNanos())
+                mutableState.value = mutableState.value.copy(
+                    nowMonotonicNanos = monotonicNanos(),
+                    poseProgress = instrument.poseProgress.value,
+                    mesh = instrument.meshProgress.value,
+                )
                 delay(DISPLAY_TICK_MILLIS)
             }
         }
@@ -112,15 +122,10 @@ class LabConsoleScreenModel(
             .onEach { mutableState.value = mutableState.value.copy(isBroadcasting = it) }
             .launchIn(screenModelScope)
 
-        // Held by the instrument, not accumulated here, so backing out of the console mid-walk and
-        // coming back does not show a trajectory that reset to zero metres.
-        instrument.poseProgress
-            .onEach { mutableState.value = mutableState.value.copy(poseProgress = it) }
-            .launchIn(screenModelScope)
-
-        instrument.meshProgress
-            .onEach { mutableState.value = mutableState.value.copy(mesh = it) }
-            .launchIn(screenModelScope)
+        // poseProgress and meshProgress are deliberately NOT collected — the display tick samples
+        // them at 1 Hz. Collecting them here recomposed the console at the pose rate, which is
+        // what made the screen freezy on a real walk. They live on the instrument, so nothing is
+        // lost: backing out mid-walk and returning shows the accumulated track either way.
 
         instrument.clockEstimate
             .onEach { mutableState.value = mutableState.value.copy(clock = it) }
@@ -147,7 +152,35 @@ class LabConsoleScreenModel(
             }
 
             LabConsoleEvent.StartSession -> startSession()
-            LabConsoleEvent.StopSession -> stopSession()
+
+            // The stop path has a gate, not a lock: a walk about to close with unfixable holes gets
+            // one sentence naming them, while the operator is still standing where fixing is cheap.
+            // Both 2026-08-19 walks closed with zero waypoints and nothing said so until analysis.
+            LabConsoleEvent.StopSession -> {
+                val warning = mutableState.value.stopWarningText
+                if (warning == null) {
+                    stopSession()
+                } else {
+                    mutableState.value = mutableState.value.copy(stopWarning = warning)
+                }
+            }
+
+            LabConsoleEvent.ConfirmStopSession -> {
+                mutableState.value = mutableState.value.copy(stopWarning = null)
+                stopSession()
+            }
+
+            LabConsoleEvent.DismissStopWarning ->
+                mutableState.value = mutableState.value.copy(stopWarning = null)
+
+            is LabConsoleEvent.ToggleCameraPreview ->
+                mutableState.value = mutableState.value.copy(showCameraPreview = event.shown)
+
+            is LabConsoleEvent.ToggleSiteMap ->
+                mutableState.value = mutableState.value.copy(useSiteMap = event.enabled)
+
+            LabConsoleEvent.StartDwell -> screenModelScope.launch { startDwell() }
+            LabConsoleEvent.EndDwell -> screenModelScope.launch { endDwell() }
 
             LabConsoleEvent.RequestPrerequisites -> screenModelScope.launch {
                 residency.requestPrerequisites()
@@ -241,6 +274,56 @@ class LabConsoleScreenModel(
                 applyAdvertiseNamespace()
             }
         }
+    }
+
+    /** The tracker's live camera for the preview, or null when nothing is tracking. */
+    fun previewHandle(): Any? = instrument.posePreviewHandle()
+
+    // ---- dwell -------------------------------------------------------------------------
+
+    /**
+     * Open a dwell on the pending card: record the waypoint (the position fix) and a `dwell_start`
+     * marker (the condition edge). Two markers because they are two facts — the fix survives even
+     * if the operator forgets to close the dwell.
+     */
+    private suspend fun startDwell() {
+        val state = mutableState.value
+        if (state.isDwelling) {
+            message("already dwelling on ${state.dwellCode} — end it first")
+            return
+        }
+        val code = state.pendingWaypointCode
+        instrument.markWaypoint(code)
+            .onFailure {
+                message("dwell refused: ${it.message}")
+                return
+            }
+        instrument.mark(
+            kind = SessionMarker.Kind.DWELL_START,
+            label = "dwell $code",
+            stepId = code,
+            payload = "{\"code\":\"$code\"}",
+        )
+        mutableState.value = mutableState.value.copy(
+            dwellCode = code,
+            dwellStartedMonotonicNanos = monotonicNanos(),
+        )
+        message("dwelling on $code — stand still until you end it")
+        refreshWaypoints()
+    }
+
+    private suspend fun endDwell() {
+        val state = mutableState.value
+        val code = state.dwellCode ?: return
+        val durationMillis = (monotonicNanos() - state.dwellStartedMonotonicNanos) / 1_000_000
+        instrument.mark(
+            kind = SessionMarker.Kind.DWELL_END,
+            label = "dwell $code done",
+            stepId = code,
+            payload = "{\"code\":\"$code\",\"duration_ms\":$durationMillis}",
+        )
+        mutableState.value = mutableState.value.copy(dwellCode = null, dwellStartedMonotonicNanos = 0)
+        message("dwell on $code closed after ${durationMillis / 1000} s")
     }
 
     // ---- waypoints -------------------------------------------------------------------------
@@ -359,6 +442,7 @@ class LabConsoleScreenModel(
                     advertise = config.advertise,
                     track = state.trackEnabled,
                     trackRateHz = state.trackRateHz,
+                    loadSiteMap = state.useSiteMap,
                 )
                 instrument.start(request)
                     .onSuccess { message("walk $it started") }
@@ -373,6 +457,9 @@ class LabConsoleScreenModel(
     private fun stopSession() {
         screenModelScope.launch {
             busy {
+                // A dwell still open at stop gets its closing edge first, so the interval never has
+                // to be resolved by guessing — the same rule the instrument applies to blocks.
+                if (mutableState.value.isDwelling) endDwell()
                 instrument.stop()
                     .onSuccess { message("walk $it closed — uploading") }
                     .onFailure { message("stop failed: ${it.message}") }

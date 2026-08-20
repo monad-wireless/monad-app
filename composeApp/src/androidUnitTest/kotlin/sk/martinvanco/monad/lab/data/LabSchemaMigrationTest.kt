@@ -4,7 +4,9 @@ import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.runBlocking
 import sk.martinvanco.monad.Database
+import sk.martinvanco.monad.lab.domain.InstrumentLogEntry
 import sk.martinvanco.monad.lab.domain.LabArtefact
+import sk.martinvanco.monad.lab.domain.siteMapKey
 import sk.martinvanco.monad.lab.domain.MeshObservation
 import sk.martinvanco.monad.lab.domain.PoseSample
 import sk.martinvanco.monad.lab.domain.TrackingQuality
@@ -125,8 +127,10 @@ class LabSchemaMigrationTest {
                 repository.appendPose(
                     "s",
                     listOf(
-                        pose(monotonicNanos = 1_000, x = 0f, z = 0f),
-                        pose(monotonicNanos = 2_000, x = 3f, z = 4f),
+                        // Seconds apart, so the 3-4-5 step is walking pace rather than a
+                        // relocalisation jump the locomotion prior would (correctly) reject.
+                        pose(monotonicNanos = 1_000_000_000, x = 0f, z = 0f),
+                        pose(monotonicNanos = 6_000_000_000, x = 3f, z = 4f),
                     ),
                 )
                 val counts = repository.counts("s")
@@ -223,6 +227,80 @@ class LabSchemaMigrationTest {
                 assertEquals(2, span.anchors)
                 assertEquals(1_000L, span.firstMonotonicNanos)
                 assertEquals(9_000L, span.lastMonotonicNanos)
+            }
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun migration13GivesADeployedHandsetTheInstrumentLog() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        try {
+            Database.Schema.create(driver)
+            val result = Database.Schema.migrate(driver, 13, 14)
+            assertTrue(result is QueryResult.Value<Unit> || result.value == Unit)
+
+            val repository = LabSessionRepository(Database(driver))
+            runBlocking {
+                repository.open(
+                    sessionId = "s", participantId = "p", enrollmentId = null, questId = null,
+                    site = null, apId = null, profileId = null,
+                    startedWallMillis = 1, startedMonotonicNanos = 1,
+                    boundInterface = null, socketPinned = false, bootId = "e",
+                )
+                repository.appendLog(
+                    "s",
+                    listOf(
+                        InstrumentLogEntry(1_000, 10, "session s starting"),
+                        // A message carrying a tab must not break its row — the lines after it are
+                        // the ones that explain what happened next.
+                        InstrumentLogEntry(2_000, 20, "mesh export refused:\tno anchors"),
+                    ),
+                )
+
+                assertEquals(2L, repository.counts("s").log)
+                val lines = repository.logTsv("s").decodeToString().trim().lines()
+                assertEquals("mono_ns\twall_ms\tmessage", lines.first())
+                assertTrue(lines[1].startsWith("1000\t10\t"), lines[1])
+                assertTrue(lines[2].contains("\\t"), lines[2])
+                assertEquals(3, lines[2].split("\t").size)
+
+                // The one rule: purge takes the log with everything else.
+                repository.close("s", endedWallMillis = 2, endedMonotonicNanos = 2, sidecarJson = "{}")
+                repository.markUploaded("s")
+                assertTrue(repository.purgeUploaded("s"))
+                assertEquals(0L, repository.counts("s").log)
+            }
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun theSiteMapSurvivesASessionPurge() {
+        // The standing site map is stored under a synthetic id no purge path ever names. If this
+        // fails, every walk becomes the first walk on its site again.
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        try {
+            Database.Schema.create(driver)
+            val repository = LabSessionRepository(Database(driver))
+            runBlocking {
+                repository.open(
+                    sessionId = "s", participantId = "p", enrollmentId = null, questId = null,
+                    site = null, apId = null, profileId = null,
+                    startedWallMillis = 1, startedMonotonicNanos = 1,
+                    boundInterface = null, socketPinned = false, bootId = "e",
+                )
+                val siteKey = siteMapKey("fiit-ground-0")
+                repository.putBlob("s", LabArtefact.WORLD_MAP, "application/octet-stream", 1, 1, byteArrayOf(7))
+                repository.putBlob(siteKey, LabArtefact.WORLD_MAP, "application/octet-stream", 1, 1, byteArrayOf(7))
+                repository.close("s", endedWallMillis = 2, endedMonotonicNanos = 2, sidecarJson = "{}")
+                repository.markUploaded("s")
+
+                assertTrue(repository.purgeUploaded("s"))
+                assertEquals(null, repository.getBlob("s", LabArtefact.WORLD_MAP))
+                assertEquals(1, repository.getBlob(siteKey, LabArtefact.WORLD_MAP)?.size)
             }
         } finally {
             driver.close()

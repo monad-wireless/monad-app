@@ -6,10 +6,19 @@ import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.FloatVar
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.ShortVar
+import kotlinx.cinterop.ObjCObjectVar
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.COpaque
+import kotlinx.cinterop.interpretCPointer
+import kotlinx.cinterop.objcPtr
 import kotlinx.cinterop.get
 import kotlinx.cinterop.plus
+import kotlinx.cinterop.ptr
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.useContents
+import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.value
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +30,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import platform.ARKit.ARCamera
 import platform.ARKit.ARGeometryElement
 import platform.ARKit.ARGeometrySource
 import platform.ARKit.ARMeshGeometry
@@ -29,10 +37,15 @@ import platform.ARKit.ARMeshAnchor
 import platform.ARKit.ARSceneReconstructionMesh
 import platform.ARKit.ARSceneReconstructionMeshWithClassification
 import platform.ARKit.ARSession
-import platform.ARKit.ARTrackingState
-import platform.ARKit.ARTrackingStateReason
+import platform.ARKit.ARSessionDelegateProtocol
+import platform.ARKit.ARSessionRunOptionRemoveExistingAnchors
+import platform.ARKit.ARSessionRunOptionResetTracking
 import platform.ARKit.ARWorldAlignment
 import platform.ARKit.ARWorldTrackingConfiguration
+import platform.Foundation.NSData
+import platform.Foundation.NSError
+import platform.Foundation.create
+import platform.darwin.NSObject
 import platform.AVFoundation.AVAuthorizationStatusAuthorized
 import platform.AVFoundation.AVCaptureDevice
 import platform.AVFoundation.AVMediaTypeVideo
@@ -85,11 +98,78 @@ actual class PoseTracker actual constructor() {
     )
     actual val samples: Flow<PoseSample> = _samples.asSharedFlow()
 
+    private val _events = MutableSharedFlow<PoseTrackerEvent>(replay = 0, extraBufferCapacity = 16)
+    actual val events: Flow<PoseTrackerEvent> = _events.asSharedFlow()
+
     private var session: ARSession? = null
     private var scope: CoroutineScope? = null
     private var job: Job? = null
     private var running = false
     private var meshEnabled = false
+
+    /**
+     * Relocalisation watchdog state — see [PoseTrackerEvent.RelocalizationAbandoned].
+     *
+     * [awaitingRelocalization] is true only while a loaded site map is still unconfirmed. The
+     * first `normal` pose confirms it (the map matched the room, poses are in the site frame);
+     * the grace expiring refutes it (drop the map, reset, fresh origin). Either way it goes false
+     * exactly once per session.
+     */
+    private var awaitingRelocalization = false
+    private var trackingStartNanos = 0L
+    private var activeConfiguration: ARWorldTrackingConfiguration? = null
+
+    /**
+     * The session observer, held strongly because `ARSession.delegate` is weak — an unreferenced
+     * observer is silently deallocated and the session reports to nobody, which is exactly the
+     * failure this object exists to end.
+     */
+    private var observer: SessionObserver? = null
+
+    /**
+     * Reports what the session did to itself. Both 2026-08-19 walks needed this and did not have
+     * it: walk B lost twenty seconds to an interruption at t+34 s and its mesh to another at close,
+     * and neither left a trace in any artefact.
+     *
+     * `sessionShouldAttemptRelocalization` answers **true**, and that answer is load-bearing. The
+     * alternative — restarting the world — moves the origin mid-walk, which silently splits
+     * `pose.tsv`, `mesh.ply` and every waypoint across two frames that share nothing. Relocalising
+     * keeps one frame at the cost of a `limited (relocalizing)` window, which is recorded per
+     * sample and can be cut out. If relocalisation cannot converge the console shows LIMITED until
+     * the operator gives up, which is the honest outcome.
+     */
+    private class SessionObserver(
+        private val emit: (PoseTrackerEvent) -> Unit,
+    ) : NSObject(), ARSessionDelegateProtocol {
+        override fun sessionWasInterrupted(session: ARSession) {
+            emit(PoseTrackerEvent.Interrupted)
+        }
+
+        override fun sessionInterruptionEnded(session: ARSession) {
+            emit(PoseTrackerEvent.InterruptionEnded(relocalizing = true))
+        }
+
+        override fun sessionShouldAttemptRelocalization(session: ARSession): Boolean = true
+
+        override fun session(session: ARSession, didFailWithError: NSError) {
+            emit(PoseTrackerEvent.Failed(didFailWithError.localizedDescription))
+        }
+    }
+
+    /**
+     * Frame timestamp of the last pose emitted, so a stalled ARKit frame is not published twice.
+     *
+     * Measured 2026-08-19: 13.9% and 12.4% of the records in two real walks were exact duplicates —
+     * same frame timestamp, pose identical to the last decimal. ARKit publishes a new frame only when
+     * it has one, and while tracking is `limited` it can hold the same frame for longer than a sample
+     * period even at a commanded 2 Hz. Polling then re-reads it.
+     *
+     * The cost is not the wasted rows. It is that the pose stream keeps arriving *on pace* while
+     * carrying no new information, so the health monitor's delivered-rate check reads healthy through
+     * exactly the stall that makes a track unusable — the "delivered rate looks fine, the data is
+     * stale" failure this instrument exists to prevent.
+     */
+    private var lastFrameTimestamp: Double = Double.NEGATIVE_INFINITY
 
     /**
      * Per-anchor fingerprint of the geometry last logged, keyed by ARKit's anchor UUID.
@@ -100,6 +180,22 @@ actual class PoseTracker actual constructor() {
     private val meshRevisions = mutableMapOf<String, MeshRevision>()
 
     private data class MeshRevision(val revision: Int, val fingerprint: Long)
+
+    /**
+     * Last successfully read geometry per anchor, in the session-local frame.
+     *
+     * The export used to read whatever ARKit held at close, and on 2026-08-19 that lost a whole
+     * room: walk B logged 24 KB of geometry changes across the session and `snapshotMesh` then
+     * found **no anchors at all**, because an interruption in the final seconds had cleared them.
+     * ARKit's anchor set is live state, not an accumulating record, and treating it as the latter
+     * makes the most expensive artefact of a walk contingent on the last instant of it.
+     *
+     * So blocks are banked as they are observed. The export merges the bank, and a block ARKit
+     * has since dropped is still in the file — which is correct: it was scanned, and the log says
+     * when. Memory cost is the room, once: measured 650 KB of PLY for 10 anchors, so the bank is
+     * a few megabytes for a floor.
+     */
+    private val meshBank = mutableMapOf<String, MeshBlock>()
 
     actual suspend fun probe(): LabSensorModule.Availability = when {
         !ARWorldTrackingConfiguration.isSupported() ->
@@ -112,7 +208,7 @@ actual class PoseTracker actual constructor() {
         else -> LabSensorModule.Availability.Available
     }
 
-    actual suspend fun start(rateHz: Double): Result<PoseTrackReport> {
+    actual suspend fun start(rateHz: Double, initialWorldMap: ByteArray?): Result<PoseTrackReport> {
         if (running) return Result.failure(IllegalStateException("already tracking"))
         when (val availability = probe()) {
             is LabSensorModule.Availability.Available -> Unit
@@ -126,6 +222,18 @@ actual class PoseTracker actual constructor() {
         }
         if (rateHz <= 0.0 || rateHz > MAX_RATE_HZ) {
             return Result.failure(IllegalArgumentException("pose rate $rateHz Hz is outside 0 < r <= $MAX_RATE_HZ"))
+        }
+
+        // Without the app-side pose shim there is no safe way to read frames (see ArPoseShim for
+        // the four dead ends). Refusing here is a one-line console message; starting anyway would
+        // be a session that stalls forever and says nothing.
+        if (!ArPoseShim.isInstalled) {
+            return Result.failure(
+                IllegalStateException(
+                    "pose shim not installed — iOSApp.swift did not register MonadReadArPose; " +
+                        "rebuild the iosApp target"
+                )
+            )
         }
 
         val notes = mutableListOf<String>()
@@ -165,12 +273,44 @@ actual class PoseTracker actual constructor() {
         }
         meshEnabled = depthAssisted
 
+        // The saved site map, when the caller has one. Loading it makes ARKit relocalise into the
+        // frame that map was built in — every walk on the site then shares one origin, which is
+        // what turns per-session odometry into positioning. A map that will not deserialise is a
+        // note and a fresh frame, never a refusal: the walk is worth more than the anchor.
+        if (initialWorldMap != null) {
+            val map = decodeWorldMap(initialWorldMap)
+            if (map != null) {
+                configuration.initialWorldMap = map
+                notes += "relocalising into the saved site map (${initialWorldMap.size / 1024} KiB) — " +
+                    "poses are in the site's standing frame once tracking reports normal"
+            } else {
+                notes += "saved site map could not be read — starting a fresh session-local frame"
+            }
+        }
+
         // Created on the main thread: ARSession touches AVCaptureSession, which UIKit expects to be
         // configured there. Polling afterwards happens off it.
+        val newObserver = SessionObserver { event -> _events.tryEmit(event) }
+        observer = newObserver
         val newSession = withContext(Dispatchers.Main) {
-            ARSession().also { it.runWithConfiguration(configuration) }
+            ARSession().also {
+                // Before run, so an interruption in the first instants is not missed. The delegate
+                // property is weak; the strong reference lives on this tracker.
+                it.delegate = newObserver
+                it.runWithConfiguration(configuration)
+            }
         }
         session = newSession
+        activeConfiguration = configuration
+        // Armed only when a map was genuinely loaded — a fresh-origin session has nothing to
+        // abandon, and the watchdog must never reset a session that is merely slow to initialise.
+        awaitingRelocalization = configuration.initialWorldMap != null
+        trackingStartNanos = monotonicNanos()
+
+        // The raw session pointer the pose reader messages. Raw on purpose: a pointer creates no
+        // Kotlin peer and therefore no retain — see ArPoseReader.
+        val sessionPointer = interpretCPointer<COpaque>(newSession.objcPtr())
+            ?: return Result.failure(IllegalStateException("ARSession has no ObjC pointer"))
 
         val periodNanos = (1_000_000_000.0 / rateHz).toLong().coerceAtLeast(1L)
         val newScope = CoroutineScope(Dispatchers.Default)
@@ -184,46 +324,87 @@ actual class PoseTracker actual constructor() {
             val origin = monotonicNanos()
             var index = 0L
             while (isActive) {
-                val frame = newSession.currentFrame
-                val camera: ARCamera? = frame?.camera
-                if (camera != null) {
-                    val state = camera.trackingState
-                    val quality = quality(state)
-                    val reason = reason(state, camera.trackingStateReason)
-                    // Read both clocks adjacently so the offset between them is measured at this
-                    // instant, not inherited from session start.
+                // Read through the app-side shim, never through Kotlin ARFrame wrappers. A Kotlin
+                // peer RETAINS its ObjC object until the Kotlin GC collects the wrapper, so a
+                // 10 Hz poll of `currentFrame` pinned multi-megabyte capture buffers faster than
+                // ARKit's shallow pool could stand — ARKit logged "The delegate of ARSession is
+                // retaining N ARFrames. The camera will stop delivering camera images" 73 times
+                // in one measured minute (2026-08-19), the preview froze in waves, tracking could
+                // not initialise, and the mesh never got a frame to build from. The reader does
+                // the whole read in the iosApp target under ARC in its own pool and hands back
+                // plain numbers — see ArPoseShim for the four failed alternatives it survived.
+                val read = ArPoseShim.read(sessionPointer) ?: break
+                // A frame ARKit has not replaced carries no new pose. Skipping it makes the
+                // delivered rate an honest measure of what the tracker produced, which is what
+                // lets the health monitor call a stall a stall.
+                if (read.hasFrame && read.timestamp > lastFrameTimestamp) {
+                    val quality = qualityOf(read.trackingState)
+                    val reason = reasonOf(read.trackingState, read.trackingReason)
+                    // The first normal pose confirms the loaded map: the room matched, the
+                    // frame is the site's, the watchdog stands down.
+                    if (quality == TrackingQuality.NORMAL) awaitingRelocalization = false
+                    // Read both clocks adjacently so the offset between them is measured at
+                    // this instant, not inherited from session start.
                     val monotonicNow = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW.toUInt()).toLong()
                     val uptimeNow = clock_gettime_nsec_np(CLOCK_UPTIME_RAW.toUInt()).toLong()
-                    val frameUptimeNanos = (frame.timestamp * 1_000_000_000.0).toLong()
+                    val frameUptimeNanos = (read.timestamp * 1_000_000_000.0).toLong()
                     val stampNanos = frameUptimeNanos + (monotonicNow - uptimeNow)
 
-                    val pose = camera.transform.useContents {
-                        // `columns` is four contiguous `simd_float4` (the struct is 64 bytes, four
-                        // 16-byte lanes), so reinterpreting it as sixteen floats is exact and avoids
-                        // Kotlin/Native's experimental vector accessors entirely. Element `4*c + r`
-                        // is row r of column c — column-major, as Metal and simd define it.
-                        val m = columns.reinterpret<FloatVar>()
-                        val c0 = floatArrayOf(m[0], m[1], m[2])
-                        val c1 = floatArrayOf(m[4], m[5], m[6])
-                        val c2 = floatArrayOf(m[8], m[9], m[10])
-                        // Column 3 of a column-major rigid transform is the translation.
-                        val translation = floatArrayOf(m[12], m[13], m[14])
-                        val q = PoseGeometry.quaternion(c0, c1, c2)
-                        PoseSample(
-                            monotonicNanos = stampNanos,
-                            wallMillis = currentTimeMillis(),
-                            x = translation[0],
-                            y = translation[1],
-                            z = translation[2],
-                            qx = q[0],
-                            qy = q[1],
-                            qz = q[2],
-                            qw = q[3],
-                            quality = quality,
-                            reason = reason,
-                        )
-                    }
+                    // `m` is the camera transform as sixteen column-major floats — the simd
+                    // struct's own layout, copied by the reader. Element `4*c + r` is row r of
+                    // column c; column 3 is the translation.
+                    val m = read.m
+                    val c0 = floatArrayOf(m[0], m[1], m[2])
+                    val c1 = floatArrayOf(m[4], m[5], m[6])
+                    val c2 = floatArrayOf(m[8], m[9], m[10])
+                    val q = PoseGeometry.quaternion(c0, c1, c2)
+                    val pose = PoseSample(
+                        monotonicNanos = stampNanos,
+                        wallMillis = currentTimeMillis(),
+                        x = m[12],
+                        y = m[13],
+                        z = m[14],
+                        qx = q[0],
+                        qy = q[1],
+                        qz = q[2],
+                        qw = q[3],
+                        quality = quality,
+                        reason = reason,
+                    )
+                    lastFrameTimestamp = read.timestamp
                     _samples.tryEmit(pose)
+                }
+                // The relocalisation watchdog. Measured 2026-08-19: a session started with a site
+                // map that does not describe the room never converges and never falls back — two
+                // real walks ran to completion at 0% normal with 2-3 s frame stalls throughout.
+                // After the grace, the map is dropped and tracking restarts with a fresh origin:
+                // a walk in a session-local frame beats a walk that never tracks.
+                if (awaitingRelocalization &&
+                    monotonicNanos() - trackingStartNanos > RELOCALIZATION_GRACE_NANOS
+                ) {
+                    awaitingRelocalization = false
+                    val config = activeConfiguration
+                    if (config != null) {
+                        withContext(Dispatchers.Main) {
+                            config.initialWorldMap = null
+                            // Reset tracking AND drop the map's anchors: keeping either would
+                            // leave state from a frame this session is abandoning.
+                            newSession.runWithConfiguration(
+                                config,
+                                ARSessionRunOptionResetTracking or ARSessionRunOptionRemoveExistingAnchors,
+                            )
+                        }
+                        // The bank held nothing real (no tracking, no reconstruction), and any
+                        // fingerprints refer to anchors the reset just removed.
+                        meshRevisions.clear()
+                        meshBank.clear()
+                        _events.tryEmit(
+                            PoseTrackerEvent.RelocalizationAbandoned(
+                                graceSeconds = RELOCALIZATION_GRACE_NANOS / 1e9,
+                            )
+                        )
+                        Napier.i("[lab] site map abandoned — tracking restarted with a fresh origin")
+                    }
                 }
                 index++
                 val dueAt = origin + index * periodNanos
@@ -280,6 +461,11 @@ actual class PoseTracker actual constructor() {
 
             val revision = if (previous == null) 0 else previous.revision + 1
             meshRevisions[id] = MeshRevision(revision, print)
+            // Bank the geometry while the anchor is definitely alive. This is the only moment it
+            // is guaranteed readable, and it is why an interruption at close can no longer cost
+            // the room. Failure here is skipped rather than fatal: the change log still records
+            // that the block moved, and the previous banked revision stands.
+            runCatching { block(anchor) }.getOrNull()?.let { meshBank[id] = it }
             val translation = anchor.transform.useContents {
                 val m = columns.reinterpret<FloatVar>()
                 floatArrayOf(m[12], m[13], m[14])
@@ -327,21 +513,25 @@ actual class PoseTracker actual constructor() {
         val frame = live.currentFrame
             ?: return@withContext Result.failure(IllegalStateException("no ARKit frame to export"))
         live.pause()
-        val anchors = frame.anchors.filterIsInstance<ARMeshAnchor>()
-        if (anchors.isEmpty()) {
+        // Top the bank up from whatever ARKit still holds, then export the bank. An anchor present
+        // now is fresher than its banked copy; an anchor ARKit has dropped keeps the copy taken
+        // while it was alive.
+        frame.anchors.filterIsInstance<ARMeshAnchor>().forEach { anchor ->
+            runCatching { block(anchor) }.getOrNull()?.let {
+                meshBank[anchor.identifier.UUIDString] = it
+            }
+        }
+        if (meshBank.isEmpty()) {
             // A stated failure rather than an empty file. A PLY carrying a header and no triangles is
             // an export that looks successful and contains nothing, which is the outcome the whole
             // subsystem exists to avoid.
             return@withContext Result.failure(
-                IllegalStateException("ARKit holds no mesh anchors — nothing was scanned")
+                IllegalStateException("no mesh geometry was ever read — nothing was scanned")
             )
         }
 
         runCatching {
-            val blocks = anchors.mapNotNull { anchor -> block(anchor) }
-            if (blocks.isEmpty()) {
-                throw IllegalStateException("every mesh anchor was unreadable")
-            }
+            val blocks = meshBank.values.toList()
             PlyWriter.write(
                 blocks = blocks,
                 comments = listOf(
@@ -522,6 +712,86 @@ actual class PoseTracker actual constructor() {
         return hash
     }
 
+    /**
+     * Serialise the live session's world map.
+     *
+     * On the main thread and **before anything pauses the session** — ARKit refuses a map from a
+     * paused session, which is why the close path calls this ahead of the mesh export. The map is
+     * NSKeyedArchiver output (a binary plist): opaque, versioned by the OS, and only ever read back
+     * by [decodeWorldMap] on another walk.
+     */
+    actual suspend fun snapshotWorldMap(): Result<ByteArray> = withContext(Dispatchers.Main) {
+        val live = session
+            ?: return@withContext Result.failure(IllegalStateException("no ARKit session to map from"))
+        val outcome = kotlinx.coroutines.CompletableDeferred<Result<ByteArray>>()
+        live.getCurrentWorldMapWithCompletionHandler { map, error ->
+            outcome.complete(
+                when {
+                    map != null -> encodeWorldMap(map)
+                    else -> Result.failure(
+                        IllegalStateException(error?.localizedDescription ?: "world map unavailable")
+                    )
+                }
+            )
+        }
+        outcome.await()
+    }
+
+    /** [ARWorldMap] → bytes, via the platform's own archiver. */
+    @OptIn(kotlinx.cinterop.BetaInteropApi::class)
+    private fun encodeWorldMap(map: platform.ARKit.ARWorldMap): Result<ByteArray> =
+        kotlinx.cinterop.memScoped {
+            val error = alloc<kotlinx.cinterop.ObjCObjectVar<NSError?>>()
+            val data = platform.Foundation.NSKeyedArchiver.archivedDataWithRootObject(
+                `object` = map,
+                requiringSecureCoding = true,
+                error = error.ptr,
+            )
+            if (data == null) {
+                return Result.failure(
+                    IllegalStateException(error.value?.localizedDescription ?: "archive failed")
+                )
+            }
+            val length = data.length.toInt()
+            if (length == 0) return Result.failure(IllegalStateException("archived world map is empty"))
+            val bytes = ByteArray(length)
+            bytes.usePinned { pinned ->
+                platform.posix.memcpy(pinned.addressOf(0), data.bytes, data.length)
+            }
+            Result.success(bytes)
+        }
+
+    /** Bytes → [ARWorldMap], or null when the archive will not read. Never throws into a walk. */
+    @OptIn(kotlinx.cinterop.BetaInteropApi::class)
+    private fun decodeWorldMap(bytes: ByteArray): platform.ARKit.ARWorldMap? =
+        kotlinx.cinterop.memScoped {
+            if (bytes.isEmpty()) return null
+            val data: NSData = bytes.usePinned { pinned ->
+                NSData.create(bytes = pinned.addressOf(0), length = bytes.size.toULong())
+            }
+            val cls = platform.Foundation.NSClassFromString("ARWorldMap") ?: return null
+            val error = alloc<kotlinx.cinterop.ObjCObjectVar<NSError?>>()
+            val decoded = platform.Foundation.NSKeyedUnarchiver.unarchivedObjectOfClass(
+                cls = cls,
+                fromData = data,
+                error = error.ptr,
+            )
+            val map = decoded as? platform.ARKit.ARWorldMap
+            if (map == null) {
+                Napier.w("[lab] world map unarchive failed: ${error.value?.localizedDescription}")
+            }
+            map
+        }
+
+    /**
+     * The live [ARSession], for the console's camera preview.
+     *
+     * The preview renders *this* session rather than opening its own capture — the camera is not
+     * shareable, and a second session would kill the tracking the preview exists to protect. Typed
+     * `Any?` because the declaration is in common code; the iOS preview composable casts it back.
+     */
+    actual fun previewHandle(): Any? = if (running) session else null
+
     actual fun stop() {
         if (!running) return
         running = false
@@ -531,8 +801,13 @@ actual class PoseTracker actual constructor() {
         scope = null
         session?.pause()
         session = null
+        observer = null
+        activeConfiguration = null
+        awaitingRelocalization = false
         meshEnabled = false
         meshRevisions.clear()
+        meshBank.clear()
+        lastFrameTimestamp = Double.NEGATIVE_INFINITY
         Napier.i("[lab] pose tracking stopped")
     }
 
@@ -552,21 +827,22 @@ actual class PoseTracker actual constructor() {
         add("tracking is foreground-only — ARKit pauses when the app is backgrounded")
     }
 
-    private fun quality(state: ARTrackingState): TrackingQuality = when (state) {
-        ARTrackingState.ARTrackingStateNormal -> TrackingQuality.NORMAL
-        ARTrackingState.ARTrackingStateLimited -> TrackingQuality.LIMITED
+    // Raw ARTrackingState / ARTrackingStateReason values, as the shim forwards them. Integers
+    // rather than the platform enums, because the enums only exist on Kotlin ARCamera wrappers —
+    // and not creating those wrappers is the entire point of the shim.
+    private fun qualityOf(state: Int): TrackingQuality = when (state) {
+        2 -> TrackingQuality.NORMAL
+        1 -> TrackingQuality.LIMITED
         else -> TrackingQuality.UNAVAILABLE
     }
 
-    private fun reason(state: ARTrackingState, reason: ARTrackingStateReason): String? {
-        if (state == ARTrackingState.ARTrackingStateNormal) return null
+    private fun reasonOf(state: Int, reason: Int): String? {
+        if (state == 2) return null
         return when (reason) {
-            ARTrackingStateReason.ARTrackingStateReasonInitializing -> "initializing"
-            ARTrackingStateReason.ARTrackingStateReasonRelocalizing -> "relocalizing"
-            ARTrackingStateReason.ARTrackingStateReasonExcessiveMotion -> "excessive_motion"
-            ARTrackingStateReason.ARTrackingStateReasonInsufficientFeatures ->
-                "insufficient_features"
-
+            1 -> "initializing"
+            2 -> "excessive_motion"
+            3 -> "insufficient_features"
+            4 -> "relocalizing"
             else -> "unspecified"
         }
     }
@@ -587,5 +863,15 @@ actual class PoseTracker actual constructor() {
          * hundred anchors cost sixteen hundred strided reads per tick rather than millions.
          */
         const val FINGERPRINT_SAMPLES = 16
+
+        /**
+         * How long a loaded site map gets to relocalise before it is abandoned.
+         *
+         * Twenty-five seconds. A fresh solve reaches `normal` in single-digit seconds; a map that
+         * has not matched in twenty-five is a map of somewhere else (both 2026-08-19 failures ran
+         * 100+ s without a single normal pose). Long enough that standing still at the start
+         * point, as the protocol asks, always wins the race.
+         */
+        const val RELOCALIZATION_GRACE_NANOS = 25_000_000_000L
     }
 }

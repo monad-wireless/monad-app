@@ -352,3 +352,28 @@ SELECT COALESCE(SUM(sizeBytes), 0) FROM SessionBlobRecord WHERE sessionId = ?;
 
 deleteBlobsBySession:
 DELETE FROM SessionBlobRecord WHERE sessionId = ?;
+
+-- Instrument log. What the instrument said while the session ran, on the shared clock. The console
+-- shows the tail; this is the record. See migration 13 for why a StateFlow was not enough.
+CREATE TABLE IF NOT EXISTS InstrumentLogRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    message TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_instrument_log_session ON InstrumentLogRecord(sessionId, monoNs);
+
+insertInstrumentLog:
+INSERT INTO InstrumentLogRecord(sessionId, monoNs, wallMs, message)
+VALUES (?, ?, ?, ?);
+
+selectInstrumentLogBySession:
+SELECT * FROM InstrumentLogRecord WHERE sessionId = ? ORDER BY monoNs ASC, id ASC;
+
+countInstrumentLogBySession:
+SELECT COUNT(*) FROM InstrumentLogRecord WHERE sessionId = ?;
+
+deleteInstrumentLogBySession:
+DELETE FROM InstrumentLogRecord WHERE sessionId = ?;

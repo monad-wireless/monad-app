@@ -24,6 +24,7 @@ import sk.martinvanco.monad.device.presentation.DeviceScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.core.util.Logger
+import sk.martinvanco.monad.lab.data.LabTelemetryShipper
 import sk.martinvanco.monad.ui.theme.AppTheme
 import com.mmk.kmpnotifier.notification.NotifierManager
 import dev.gitlive.firebase.Firebase
@@ -63,6 +64,18 @@ fun App() {
             }
         })
         Logger.i("Push notification listener registered successfully")
+
+        // Live instrument telemetry. Started here, not in the lab console's screen model, because a
+        // session outlives the screen: the participant pockets the phone and the console is gone
+        // while the walk continues. `start()` is idempotent, so a recomposition costs nothing, and
+        // the shipper pushes only while a session is actually recording.
+        try {
+            getKoin().get<LabTelemetryShipper>().start()
+            Logger.i("Lab telemetry shipper started")
+        } catch (e: Exception) {
+            // A courier that cannot start must never stop the app it reports on.
+            Logger.e("Lab telemetry shipper failed to start: ${e.message}", throwable = e)
+        }
     }
 
     // Fetch FCM token on startup

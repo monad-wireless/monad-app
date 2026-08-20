@@ -41,6 +41,16 @@ data class SessionRequest(
      * sixth of the rows the camera's own frame rate would produce.
      */
     val trackRateHz: Double = 10.0,
+    /**
+     * Load the site's saved world map, when one exists, so this walk relocalises into the frame
+     * every earlier walk on the site used.
+     *
+     * Off means a deliberate fresh origin — the right choice on a bench, at home, or anywhere the
+     * standing map does not describe. The tracker also abandons a loaded map on its own if it
+     * cannot relocalise within a grace period, so leaving this on cannot hold a walk hostage; but
+     * the operator who *knows* the map is wrong should not have to wait out the grace.
+     */
+    val loadSiteMap: Boolean = true,
 )
 
 enum class Phase { IDLE, STARTING, ASSOCIATING, BINDING, SYNCING, RUNNING }
@@ -78,3 +88,13 @@ data class LabInstrumentState(
 }
 
 data class InstrumentLogLine(val wallMillis: Long, val message: String)
+
+/**
+ * One instrument log line as persisted — [InstrumentLogLine] plus the monotonic stamp every other
+ * stream carries, so the log joins the timeline instead of merely narrating it.
+ */
+data class InstrumentLogEntry(
+    val monotonicNanos: Long,
+    val wallMillis: Long,
+    val message: String,
+)

@@ -103,9 +103,10 @@ class PoseTrackSummaryTest {
     @Test
     fun pathLengthSumsConsecutiveDisplacements() {
         val track = listOf(
-            pose(1, x = 0f, z = 0f),
-            pose(2, x = 3f, z = 4f),
-            pose(3, x = 3f, z = 8f),
+            // Four seconds apart: the 5 m and 4 m legs are 1.25 and 1.0 m/s, i.e. walking.
+            pose(1_000_000_000, x = 0f, z = 0f),
+            pose(5_000_000_000, x = 3f, z = 4f),
+            pose(9_000_000_000, x = 3f, z = 8f),
         )
         val summary = PoseTrackSummary.of(track)
         assertEquals(9.0, summary.pathLengthMetres, 1e-6)
@@ -120,7 +121,11 @@ class PoseTrackSummaryTest {
         // Out and back. A straight-line metric would say zero and a walk that covered ten metres
         // would look like a tracker that never moved — the exact failure the readout exists to catch.
         val summary = PoseTrackSummary.of(
-            listOf(pose(1, x = 0f, z = 0f), pose(2, x = 5f, z = 0f), pose(3, x = 0f, z = 0f))
+            listOf(
+                pose(1_000_000_000, x = 0f, z = 0f),
+                pose(5_000_000_000, x = 5f, z = 0f),
+                pose(9_000_000_000, x = 0f, z = 0f),
+            )
         )
         assertEquals(10.0, summary.pathLengthMetres, 1e-6)
     }
@@ -131,9 +136,9 @@ class PoseTrackSummaryTest {
         // the length in exactly the direction that makes a broken track look like a long walk.
         val summary = PoseTrackSummary.of(
             listOf(
-                pose(1, x = 0f, z = 0f),
-                pose(2, x = 100f, z = 0f, quality = TrackingQuality.UNAVAILABLE),
-                pose(3, x = 1f, z = 0f),
+                pose(1_000_000_000, x = 0f, z = 0f),
+                pose(2_000_000_000, x = 100f, z = 0f, quality = TrackingQuality.UNAVAILABLE),
+                pose(3_000_000_000, x = 1f, z = 0f),
             )
         )
         assertEquals(0.0, summary.pathLengthMetres, 1e-9)
@@ -149,8 +154,8 @@ class PoseTrackSummaryTest {
         // quality column downstream, not by silently shortening the track here.
         val summary = PoseTrackSummary.of(
             listOf(
-                pose(1, x = 0f, z = 0f),
-                pose(2, x = 2f, z = 0f, quality = TrackingQuality.LIMITED),
+                pose(1_000_000_000, x = 0f, z = 0f),
+                pose(3_000_000_000, x = 2f, z = 0f, quality = TrackingQuality.LIMITED),
             )
         )
         assertEquals(2.0, summary.pathLengthMetres, 1e-6)
@@ -158,9 +163,55 @@ class PoseTrackSummaryTest {
     }
 
     @Test
+    fun aRelocalisationJumpIsRejectedAndCounted() {
+        // Measured on two real walks, 2026-08-19. Both reported 92 m and 161 m of path for a handset
+        // whose median step was 0.7 cm and 15 cm; the totals were a handful of instantaneous jumps
+        // implying 21.8 and 44.5 m/s. The operator had been told to read path length as the check on
+        // whether the tracker initialised, and it was the one number saying everything was fine.
+        //
+        // 10 m in 0.2 s is 50 m/s. No body does that, so it is ARKit re-solving its world.
+        val summary = PoseTrackSummary.of(
+            listOf(
+                pose(0, x = 0f, z = 0f),
+                pose(200_000_000, x = 1f, z = 0f),      // 1 m in 0.2 s = 5 m/s -> also a jump
+                pose(400_000_000, x = 11f, z = 0f),     // 10 m in 0.2 s = 50 m/s -> a jump
+                pose(1_400_000_000, x = 12f, z = 0f),   // 1 m in 1.0 s = 1 m/s -> walking
+            )
+        )
+        assertEquals(1.0, summary.pathLengthMetres, 1e-6, "only the walkable step counts")
+        assertEquals(2L, summary.rejectedJumps)
+        assertEquals(11.0, summary.rejectedJumpMetres, 1e-6)
+    }
+
+    @Test
+    fun aBriskWalkIsNeverRejected() {
+        // The threshold is a physical prior and must not clip real movement. 1.5 m/s is a brisk
+        // indoor walk; the fleet's BLE measured these same two walks at a median 0.73 m/s.
+        val summary = PoseTrackSummary.of(
+            listOf(pose(0, x = 0f, z = 0f), pose(1_000_000_000, x = 1.5f, z = 0f))
+        )
+        assertEquals(1.5, summary.pathLengthMetres, 1e-6)
+        assertEquals(0L, summary.rejectedJumps)
+    }
+
+    @Test
+    fun twoPosesAtOneInstantMetresApartIsAJump() {
+        // A re-solve landing inside one sampling period. Admitting it would add distance for zero
+        // elapsed time, which no speed threshold expressed as a ratio can catch.
+        val summary = PoseTrackSummary.of(
+            listOf(pose(1_000, x = 0f, z = 0f), pose(1_000, x = 5f, z = 0f))
+        )
+        assertEquals(0.0, summary.pathLengthMetres, 1e-9)
+        assertEquals(1L, summary.rejectedJumps)
+    }
+
+    @Test
     fun verticalExtentIsWhereAFloorChangeShowsUp() {
         val summary = PoseTrackSummary.of(
-            listOf(pose(1, x = 0f, z = 0f, y = 0f), pose(2, x = 0f, z = 0f, y = 3.2f))
+            listOf(
+                pose(1_000_000_000, x = 0f, z = 0f, y = 0f),
+                pose(5_000_000_000, x = 0f, z = 0f, y = 3.2f),
+            )
         )
         assertEquals(3.2, summary.extentYMetres, 1e-5)
     }
@@ -169,17 +220,37 @@ class PoseTrackSummaryTest {
 class PoseTrackProgressTest {
 
     @Test
+    fun theRunningSumRejectsTheSameJumpsAsTheBatchReduction() {
+        // The live console readout and the sidecar are two implementations of one number. If they
+        // disagree the operator decides whether to re-take a walk from a figure the artefact will
+        // not carry — which is how a 92 m readout accompanied a stationary handset.
+        val track = listOf(
+            pose(0, x = 0f, z = 0f),
+            pose(1_000_000_000, x = 1f, z = 0f),
+            pose(1_100_000_000, x = 30f, z = 0f),     // 29 m in 0.1 s: a jump
+            pose(2_100_000_000, x = 31f, z = 0f),
+        )
+        val running = track.fold(PoseTrackProgress.IDLE) { acc, s -> acc.plus(s) }
+        val batch = PoseTrackSummary.of(track)
+        assertEquals(batch.pathLengthMetres, running.pathLengthMetres, 1e-6)
+        assertEquals(batch.rejectedJumps, running.rejectedJumps)
+        assertEquals(2.0, running.pathLengthMetres, 1e-6)
+    }
+
+    @Test
     fun theRunningSumAgreesWithTheBatchReduction() {
         // The invariant that matters most in this file. The console shows a **running** sum
         // accumulated pose by pose; the sidecar records a **batch** reduction over the stored rows.
         // They are two implementations of one number, and if they disagree the operator's decision to
         // keep or re-take a walk is made against a figure the artefact will not carry.
+        // One-second spacing, so every real step is inside the locomotion prior and the only
+        // exclusion under test is the UNAVAILABLE one.
         val track = listOf(
-            pose(1, x = 0f, z = 0f),
-            pose(2, x = 1f, z = 0f),
-            pose(3, x = 50f, z = 0f, quality = TrackingQuality.UNAVAILABLE),
-            pose(4, x = 1f, z = 3f, quality = TrackingQuality.LIMITED),
-            pose(5, x = 1f, z = 7f),
+            pose(1_000_000_000, x = 0f, z = 0f),
+            pose(2_000_000_000, x = 1f, z = 0f),
+            pose(3_000_000_000, x = 50f, z = 0f, quality = TrackingQuality.UNAVAILABLE),
+            pose(4_000_000_000, x = 1f, z = 3f, quality = TrackingQuality.LIMITED),
+            pose(5_000_000_000, x = 1f, z = 5f),
         )
         val running = track.fold(PoseTrackProgress.IDLE) { acc, sample -> acc.plus(sample) }
         val batch = PoseTrackSummary.of(track)
@@ -203,8 +274,8 @@ class PoseTrackProgressTest {
         // operator can act on while still holding the phone. Worst-state accounting is the health
         // monitor's job and is reported separately.
         val progress = PoseTrackProgress.IDLE
-            .plus(pose(1, x = 0f, z = 0f, quality = TrackingQuality.LIMITED))
-            .plus(pose(2, x = 1f, z = 0f))
+            .plus(pose(1_000_000_000, x = 0f, z = 0f, quality = TrackingQuality.LIMITED))
+            .plus(pose(3_000_000_000, x = 1f, z = 0f))
         assertEquals(TrackingQuality.NORMAL, progress.quality)
     }
 }

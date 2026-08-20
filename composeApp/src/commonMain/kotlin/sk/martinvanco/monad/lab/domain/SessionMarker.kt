@@ -91,6 +91,36 @@ data class SessionMarker(
          * `pose.tsv` and `markers.tsv` are read apart.
          */
         WAYPOINT,
+
+        /**
+         * The pose stream stopped advancing — ARKit held the same frame past several sample
+         * periods, so the trajectory has a hole starting here.
+         *
+         * Measured 2026-08-19: walk B carried a twenty-second frame gap at t+34 s after which the
+         * tracker reported `initializing` again — a mid-walk reset that nothing recorded. The rate
+         * check cannot catch it (the poller skips stale frames, so the gap looks like a slow
+         * stream), and the row that follows the gap says nothing about the gap itself. This marker
+         * records *when* the tracker stopped producing, which is what lets the analysis cut the
+         * hole out instead of interpolating across a reset.
+         */
+        POSE_STALLED,
+
+        /** The pose stream advanced again. Payload carries the measured gap. */
+        POSE_RESUMED,
+
+        /**
+         * The operator started standing still on a surveyed card — the stationary probe arm.
+         *
+         * A dwell is a different measurement from a walk: the body parked at a known distance from
+         * a link's line of sight, held, so the CSI statistic can be read against a *fixed* position
+         * with no direction-of-motion confound. It is the arm that can resolve the walked-vs-
+         * simulated sign disagreement (ρ = −0.22 measured, +0.63 simulated, 2026-08-19), because it
+         * matches the simulation's sampling geometry. `step_id` carries the card code.
+         */
+        DWELL_START,
+
+        /** The operator finished the dwell. Payload adds the measured duration. */
+        DWELL_END,
         ;
 
         val wire: String
@@ -104,6 +134,10 @@ data class SessionMarker(
                 BROADCAST_START -> "broadcast_start"
                 BROADCAST_STOP -> "broadcast_stop"
                 WAYPOINT -> "waypoint"
+                POSE_STALLED -> "pose_stalled"
+                POSE_RESUMED -> "pose_resumed"
+                DWELL_START -> "dwell_start"
+                DWELL_END -> "dwell_end"
             }
 
         /** True for the two kinds that carry a [BlockMarkerPayload]. */
@@ -119,6 +153,10 @@ data class SessionMarker(
                 "broadcast_start" -> BROADCAST_START
                 "broadcast_stop" -> BROADCAST_STOP
                 "waypoint" -> WAYPOINT
+                "pose_stalled" -> POSE_STALLED
+                "pose_resumed" -> POSE_RESUMED
+                "dwell_start" -> DWELL_START
+                "dwell_end" -> DWELL_END
                 else -> ANNOTATION
             }
         }

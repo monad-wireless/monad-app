@@ -377,8 +377,26 @@ object LabArtefact {
      */
     const val MESH = "mesh.ply"
 
+    /**
+     * What the instrument said while the session ran, on the shared clock.
+     *
+     * The line that explained walk B's lost mesh existed only on the console and died with it.
+     * A session's own words are evidence, and evidence is uploaded.
+     */
+    const val LOG = "log.tsv"
+
+    /**
+     * ARKit's serialised world map — the localization anchor, not a debug dump.
+     *
+     * A walk that starts from a saved site map relocalises into the *same* frame as every other
+     * walk on that site, which turns per-session odometry into positioning. The map is saved at
+     * close so the site's map improves as walks accumulate, and uploaded so the frame every
+     * session used is reconstructable later.
+     */
+    const val WORLD_MAP = "worldmap.armap"
+
     val ALL = listOf(
         SIDECAR, TRAFFIC, BEACONS, TRANSITIONS, CLOCK, MARKERS, HEALTH, POSE, MESH_LOG, MESH,
-        GROUND_TRUTH,
+        LOG, WORLD_MAP, GROUND_TRUTH,
     )
 }

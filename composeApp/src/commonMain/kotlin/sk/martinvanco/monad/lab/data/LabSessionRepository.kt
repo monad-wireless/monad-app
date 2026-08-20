@@ -10,6 +10,7 @@ import sk.martinvanco.monad.lab.domain.BeaconObservation
 import sk.martinvanco.monad.lab.domain.ClockEstimate
 import sk.martinvanco.monad.lab.domain.SessionStatus
 import sk.martinvanco.monad.lab.domain.TrafficSample
+import sk.martinvanco.monad.lab.domain.InstrumentLogEntry
 import sk.martinvanco.monad.lab.domain.LabArtefact
 import sk.martinvanco.monad.lab.domain.MeshObservation
 import sk.martinvanco.monad.lab.domain.MeshSpan
@@ -283,6 +284,10 @@ class LabSessionRepository(
         samples.selectBlobBytes(sessionId, name).executeAsOneOrNull()
     }
 
+    /** The recorder port's read — same query, named for the one thing the instrument reads. */
+    override suspend fun getBlob(sessionId: String, name: String): ByteArray? =
+        blobBytes(sessionId, name)
+
     override suspend fun meshSpan(sessionId: String): MeshSpan = withContext(Dispatchers.IO) {
         val row = samples.meshSpanBySession(sessionId).executeAsOne()
         MeshSpan(
@@ -318,6 +323,22 @@ class LabSessionRepository(
             )
         }
 
+    /** Append instrument log lines. One transaction per batch, as for poses. */
+    override suspend fun appendLog(sessionId: String, batch: List<InstrumentLogEntry>) =
+        withContext(Dispatchers.IO) {
+            if (batch.isEmpty()) return@withContext
+            samples.transaction {
+                batch.forEach {
+                    samples.insertInstrumentLog(
+                        sessionId = sessionId,
+                        monoNs = it.monotonicNanos,
+                        wallMs = it.wallMillis,
+                        message = it.message,
+                    )
+                }
+            }
+        }
+
     suspend fun markers(sessionId: String): List<SessionMarker> = withContext(Dispatchers.IO) {
         samples.markersForSession(sessionId).executeAsList().map {
             SessionMarker(
@@ -347,6 +368,7 @@ class LabSessionRepository(
             pose = samples.countPoseBySession(sessionId).executeAsOne(),
             poseNormal = samples.countPoseNormalBySession(sessionId).executeAsOne(),
             mesh = samples.countMeshBySession(sessionId).executeAsOne(),
+            log = samples.countInstrumentLogBySession(sessionId).executeAsOne(),
             blobs = samples.countBlobsBySession(sessionId).executeAsOne(),
             blobBytes = samples.blobBytesBySession(sessionId).executeAsOne(),
         )
@@ -514,6 +536,10 @@ class LabSessionRepository(
                             LabArtefact.MESH_LOG,
                             samples.countMeshBySession(record.sessionId).executeAsOne(),
                         ),
+                        PendingArtefact(
+                            LabArtefact.LOG,
+                            samples.countInstrumentLogBySession(record.sessionId).executeAsOne(),
+                        ),
                     ),
                 )
             }
@@ -680,6 +706,25 @@ class LabSessionRepository(
         }.encodeToByteArray()
     }
 
+    /**
+     * The instrument log as TSV — what the instrument said, on the shared clock.
+     *
+     * Tabs and newlines inside a message are escaped rather than stripped, exactly as for marker
+     * payloads: a log line that broke its row would corrupt the lines after it, which are the ones
+     * that explain what happened next.
+     */
+    suspend fun logTsv(sessionId: String): ByteArray = withContext(Dispatchers.IO) {
+        val rows = samples.selectInstrumentLogBySession(sessionId).executeAsList()
+        buildString {
+            appendLine("mono_ns\twall_ms\tmessage")
+            rows.forEach {
+                val message = it.message
+                    .replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n").replace("\r", "")
+                appendLine("${it.monoNs}\t${it.wallMs}\t$message")
+            }
+        }.encodeToByteArray()
+    }
+
     suspend fun purgeUploaded(sessionId: String): Boolean = withContext(Dispatchers.IO) {
         val record = sessions.selectById(sessionId).executeAsOneOrNull() ?: return@withContext false
         if (SessionStatus.fromStorage(record.status) != SessionStatus.UPLOADED) return@withContext false
@@ -692,6 +737,7 @@ class LabSessionRepository(
             samples.deleteHealthBySession(sessionId)
             samples.deletePoseBySession(sessionId)
             samples.deleteMeshBySession(sessionId)
+            samples.deleteInstrumentLogBySession(sessionId)
             samples.deleteBlobsBySession(sessionId)
         }
         sessions.deleteSession(sessionId)
@@ -709,6 +755,7 @@ class LabSessionRepository(
             samples.deleteHealthBySession(sessionId)
             samples.deletePoseBySession(sessionId)
             samples.deleteMeshBySession(sessionId)
+            samples.deleteInstrumentLogBySession(sessionId)
             samples.deleteBlobsBySession(sessionId)
         }
         sessions.deleteSession(sessionId)

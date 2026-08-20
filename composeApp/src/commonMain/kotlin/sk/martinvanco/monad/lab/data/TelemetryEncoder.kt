@@ -1,0 +1,229 @@
+package sk.martinvanco.monad.lab.data
+
+/**
+ * Turns buffered instrument heartbeats into OTLP payloads.
+ *
+ * Pure — no clock, no network, no Koin — for the same reason `StreamHealthTracker` is a pure function
+ * of (counter, time): the interesting behaviour is what the label sets and timestamps come out as,
+ * and that deserves exhaustive tests rather than an integration run against a live collector.
+ *
+ * WHAT IS A LABEL AND WHAT IS NOT
+ * ------------------------------
+ * The rule that matters, because the collector keeps series for a year:
+ *
+ *   metric labels  = site, platform, participant, stream   — all bounded sets
+ *   log attributes = the above plus session id, build id, phase, clock gate, per-stream detail
+ *
+ * `participant` is in the metric labels because nine handsets run at once, and without a per-phone
+ * dimension they would all write the same series from independent gauges — one phone's health would
+ * silently be reported as the room's. It is safe to use because it is the stable backend user id, so
+ * it bounds at the number of enrolled people and does not grow with time.
+ *
+ * `session_id` is NOT a metric label. It is new for every walk, so it would mint a fresh time series
+ * per session against a 365-day retention. It travels as a log attribute, where cardinality is free.
+ *
+ * WHY `state` IS A NUMBER AND NOT A LABEL
+ * --------------------------------------
+ * A gauge whose label set changes leaves the old series holding its last value forever. Putting
+ * `state` on `rate_hz` would mean a stream that went ALIVE -> DEAD kept publishing its healthy rate
+ * under the ALIVE series indefinitely, which reads as a working stream. So state ships as its own
+ * numeric gauge, where a transition moves one series instead of stranding one.
+ */
+internal object TelemetryEncoder {
+
+    /** Metric names. `monad.lab.*` matches what the backend's session-sidecar metrics already use. */
+    const val RATE_HZ = "monad.lab.stream.rate_hz"
+    const val DELIVERED = "monad.lab.stream.delivered"
+    const val SEVERITY = "monad.lab.stream.severity"
+    const val SILENCE_MS = "monad.lab.stream.silence_ms"
+    const val TROUBLE_MS = "monad.lab.stream.trouble_ms"
+    const val EVENTS = "monad.lab.stream.events"
+    const val SESSION_SEVERITY = "monad.lab.session.severity"
+    const val SESSION_RECORDING = "monad.lab.session.recording"
+    const val SESSION_ELAPSED_MS = "monad.lab.session.elapsed_ms"
+    const val DROPPED = "monad.lab.telemetry.dropped"
+
+    /**
+     * Every metric name this app may emit.
+     *
+     * Mirrored by the collector's own allow-list filter, and the mirror is the containment: the
+     * credential that reaches this endpoint travels to participant handsets, so it must be assumed
+     * public. Authentication decides who may knock; this list decides what can possibly get in.
+     */
+    val METRIC_NAMES: Set<String> = setOf(
+        RATE_HZ, DELIVERED, SEVERITY, SILENCE_MS, TROUBLE_MS, EVENTS,
+        SESSION_SEVERITY, SESSION_RECORDING, SESSION_ELAPSED_MS, DROPPED,
+    )
+
+    fun metrics(batch: TelemetryBatch): OtlpMetricsRequest {
+        val scope = listOf(
+            Otlp.attribute("site", batch.site),
+            Otlp.attribute("platform", batch.platform),
+            Otlp.attribute("participant", batch.participantToken),
+        )
+
+        // One data point per (metric, sample), each stamped with the sample's OWN wall clock. This is
+        // the whole reason the app speaks OTLP itself: a five-minute network gap comes back as five
+        // real minutes of history rather than one late value.
+        val rateHz = mutableListOf<OtlpNumberDataPoint>()
+        val delivered = mutableListOf<OtlpNumberDataPoint>()
+        val severity = mutableListOf<OtlpNumberDataPoint>()
+        val silence = mutableListOf<OtlpNumberDataPoint>()
+        val trouble = mutableListOf<OtlpNumberDataPoint>()
+        val events = mutableListOf<OtlpNumberDataPoint>()
+        val sessionSeverity = mutableListOf<OtlpNumberDataPoint>()
+        val sessionRecording = mutableListOf<OtlpNumberDataPoint>()
+        val sessionElapsed = mutableListOf<OtlpNumberDataPoint>()
+
+        for (sample in batch.samples) {
+            val at = Otlp.nanosOf(sample.wallMs)
+
+            sessionSeverity += OtlpNumberDataPoint(at, severityOf(sample.overall), scope)
+            sessionRecording += OtlpNumberDataPoint(at, if (sample.recording) 1.0 else 0.0, scope)
+            sessionElapsed += OtlpNumberDataPoint(at, sample.elapsedMs.toDouble(), scope)
+
+            for (stream in sample.streams) {
+                val attributes = scope + Otlp.attribute("stream", stream.stream)
+
+                severity += OtlpNumberDataPoint(at, severityOf(stream.state), attributes)
+                rateHz += OtlpNumberDataPoint(at, stream.rateHz, attributes)
+                silence += OtlpNumberDataPoint(at, stream.silenceMs.toDouble(), attributes)
+                trouble += OtlpNumberDataPoint(at, stream.troubleMs.toDouble(), attributes)
+                events += OtlpNumberDataPoint(at, stream.totalEvents.toDouble(), attributes)
+
+                // Only the paced streams have a commanded rate. Recording 0 for an event-driven
+                // stream would claim it delivered nothing, when it was never told to deliver a rate.
+                stream.deliveredFraction?.let {
+                    delivered += OtlpNumberDataPoint(at, it, attributes)
+                }
+            }
+        }
+
+        // The drop count rides on the newest sample's timestamp, so a gap is visible at the moment it
+        // was noticed rather than at the start of the buffer.
+        val dropped = batch.samples.lastOrNull()?.let {
+            listOf(OtlpNumberDataPoint(Otlp.nanosOf(it.wallMs), batch.dropped.toDouble(), scope))
+        }.orEmpty()
+
+        val metrics = listOfNotNull(
+            gauge(SEVERITY, "1", severity),
+            gauge(RATE_HZ, "Hz", rateHz),
+            gauge(DELIVERED, "1", delivered),
+            gauge(SILENCE_MS, "ms", silence),
+            gauge(TROUBLE_MS, "ms", trouble),
+            gauge(EVENTS, "events", events),
+            gauge(SESSION_SEVERITY, "1", sessionSeverity),
+            gauge(SESSION_RECORDING, "1", sessionRecording),
+            gauge(SESSION_ELAPSED_MS, "ms", sessionElapsed),
+            gauge(DROPPED, "samples", dropped),
+        )
+
+        return OtlpMetricsRequest(
+            resourceMetrics = listOf(
+                OtlpResourceMetrics(
+                    resource = resource(batch),
+                    scopeMetrics = listOf(OtlpScopeMetrics(OtlpScope(Otlp.SCOPE), metrics)),
+                )
+            )
+        )
+    }
+
+    /**
+     * Log records for the samples worth reading.
+     *
+     * Only the unhealthy ones, plus nothing else. A clean walk at 1 Hz for forty minutes is 2,400
+     * lines that all say "fine", and the gauges already say that more cheaply. The same policy the
+     * collector already applies to `cypher.match`: drop the fast and successful, keep what is worth
+     * seeing. Returns null when there is nothing to say, so the shipper can skip the request entirely.
+     */
+    fun logs(batch: TelemetryBatch): OtlpLogsRequest? {
+        val records = batch.samples
+            .filter { severityOf(it.overall) >= DEGRADED_SEVERITY }
+            .map { sample ->
+                val troubled = sample.streams
+                    .filter { severityOf(it.state) >= DEGRADED_SEVERITY }
+
+                OtlpLogRecord(
+                    timeUnixNano = Otlp.nanosOf(sample.wallMs),
+                    severityNumber = Otlp.SEVERITY_WARN,
+                    severityText = "WARN",
+                    body = OtlpAnyValue(
+                        "instrument degraded: " + troubled.joinToString(", ") {
+                            "${it.stream}=${it.state}@${format1(it.rateHz)}Hz"
+                        }.ifBlank { sample.overall }
+                    ),
+                    attributes = listOf(
+                        Otlp.attribute("site", batch.site),
+                        Otlp.attribute("platform", batch.platform),
+                        Otlp.attribute("participant", batch.participantToken),
+                        // Free here, forbidden as a metric label. This is where a specific walk is
+                        // identifiable months later.
+                        Otlp.attribute("session_id", batch.sessionId),
+                        Otlp.attribute("build_id", batch.appVersion),
+                        Otlp.attribute("phase", sample.phase),
+                        Otlp.attribute("overall", sample.overall),
+                        Otlp.attribute("clock_gate", sample.clockGate),
+                        // The monotonic stamp is the axis every other artefact of this session was
+                        // written on, so a log line can be lined up against `pose.tsv` even if the
+                        // handset's wall clock stepped mid-walk.
+                        Otlp.attribute("mono_ns", sample.monoNs.toString()),
+                        Otlp.attribute("elapsed_ms", sample.elapsedMs.toString()),
+                        Otlp.attribute("troubled_streams", troubled.joinToString(",") { it.stream }),
+                    ),
+                )
+            }
+
+        if (records.isEmpty()) return null
+
+        return OtlpLogsRequest(
+            resourceLogs = listOf(
+                OtlpResourceLogs(
+                    resource = resource(batch),
+                    scopeLogs = listOf(OtlpScopeLogs(OtlpScope(Otlp.SCOPE), records)),
+                )
+            )
+        )
+    }
+
+    /**
+     * `service.name` is what Loki's `service_name` label and Mimir's `target_info` are derived from,
+     * so it is the one string that decides whether this shows up beside `csid` and `api` or nowhere.
+     */
+    private fun resource(batch: TelemetryBatch): OtlpResource = OtlpResource(
+        listOf(
+            Otlp.attribute("service.name", SERVICE_NAME),
+            Otlp.attribute("service.version", batch.appVersion),
+            Otlp.attribute("monad.node_role", "participant-handset"),
+        )
+    )
+
+    private fun gauge(name: String, unit: String, points: List<OtlpNumberDataPoint>): OtlpMetric? =
+        if (points.isEmpty()) null else OtlpMetric(name, unit, OtlpGauge(points))
+
+    /**
+     * The app's `StreamState.severity`, restated over the wire form.
+     *
+     * Restated rather than imported so this file stays free of the domain: the encoder is given
+     * already-flattened wire strings, which is what makes it testable from a literal.
+     */
+    private fun severityOf(state: String): Double = when (state) {
+        "not_applicable" -> 0.0
+        "alive" -> 0.0
+        "idle" -> 1.0
+        "degraded" -> 2.0
+        "stale" -> 3.0
+        "dead" -> 4.0
+        else -> 0.0
+    }
+
+    /** One decimal place, without depending on a platform formatter. */
+    private fun format1(value: Double): String {
+        val scaled = (value * 10.0).toLong()
+        return "${scaled / 10}.${scaled % 10}"
+    }
+
+    const val SERVICE_NAME = "monad-app"
+
+    /** `degraded` and worse. The threshold the app's own `isHealthy` uses. */
+    private const val DEGRADED_SEVERITY = 2.0
+}

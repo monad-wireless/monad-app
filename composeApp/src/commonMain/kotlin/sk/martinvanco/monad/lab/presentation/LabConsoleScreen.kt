@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -91,18 +93,49 @@ class LabConsoleScreen : Screen {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                WalkPanel(state, model)
-                ReadinessPanel(state, model)
-                BroadcastPanel(state, model)
-                TrackPanel(state, model)
-                MeshPanel(state)
-                WaypointPanel(state, model)
-                SessionsPanel(state, model)
-                LogPanel(state, model)
+                // Two consoles, one screen. While a walk runs the operator is standing in a room
+                // holding a phone: they get the panels a walk is steered by and nothing else.
+                // Idle, they get the setup and housekeeping panels — which are exactly the ones
+                // that read as "mostly empty" mid-walk, because mid-walk they are.
+                if (state.isRunning) {
+                    WalkPanel(state, model)
+                    WaypointPanel(state, model)
+                    TrackPanel(state, model)
+                    MeshPanel(state)
+                    BroadcastPanel(state, model)
+                    LogPanel(state, model, limit = RUNNING_LOG_LINES)
+                } else {
+                    WalkPanel(state, model)
+                    ReadinessPanel(state, model)
+                    BroadcastPanel(state, model)
+                    TrackPanel(state, model)
+                    SessionsPanel(state, model)
+                    LogPanel(state, model, limit = IDLE_LOG_LINES)
+                }
                 state.message?.let {
                     Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 }
             }
+        }
+
+        // The stop gate. Dismissable, not a lock: the warning names what this close silently
+        // costs, and the operator decides — while still standing where fixing it is cheap.
+        state.stopWarning?.let { warning ->
+            AlertDialog(
+                onDismissRequest = { model.onEvent(LabConsoleEvent.DismissStopWarning) },
+                title = { Text("Stop with holes?") },
+                text = { Text(warning) },
+                confirmButton = {
+                    TextButton(onClick = { model.onEvent(LabConsoleEvent.ConfirmStopSession) }) {
+                        Text("Stop anyway")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { model.onEvent(LabConsoleEvent.DismissStopWarning) }) {
+                        Text("Keep walking")
+                    }
+                },
+            )
         }
     }
 }
@@ -193,6 +226,38 @@ private fun WalkPanel(state: LabConsoleState, model: LabConsoleScreenModel) = Pa
             MaterialTheme.colorScheme.error
         },
     )
+    // The coaching sentence: what to change with your hands, right now. Above everything else
+    // because it is the only line on this screen that can improve the walk while it runs.
+    state.coaching?.let {
+        Text(
+            it,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+
+    // What the tracking camera sees. The operator reading this console is why walk A's camera
+    // stared at carpet; a preview held so it shows the room ahead is the fix, made visible.
+    if (state.isRunning && state.trackEnabled && state.poseReport != null) {
+        if (state.showCameraPreview) {
+            WalkCameraPreview(
+                handle = model.previewHandle(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+        }
+        ToggleRow(
+            label = "camera preview",
+            detail = "what the tracker sees — hold the phone so this shows the room ahead",
+            checked = state.showCameraPreview,
+            enabled = true,
+            onChange = { model.onEvent(LabConsoleEvent.ToggleCameraPreview(it)) },
+        )
+    }
+
     if (state.isRunning) {
         KeyValue("elapsed", formatElapsed(state.elapsedMillis))
         KeyValue("session", state.instrument.sessionId?.take(8) ?: "-")
@@ -212,35 +277,47 @@ private fun WalkPanel(state: LabConsoleState, model: LabConsoleScreenModel) = Pa
         KeyValue("site", state.config.site.ifBlank { "unset" })
     }
 
-    HorizontalDivider()
+    // Setup is an idle activity. Mid-walk these rows are all disabled — six lines of grey that
+    // push the waypoint panel below the fold on the screen an operator reads at arm's length.
+    if (!state.isRunning) {
+        HorizontalDivider()
 
-    ToggleRow(
-        label = "advertise identity",
-        detail = "the frame the fleet's BLE scan hears — without it nothing it records is yours",
-        checked = state.broadcastEnabled,
-        enabled = !state.isRunning,
-        onChange = { model.onEvent(LabConsoleEvent.ToggleBroadcast(it)) },
-    )
-    ToggleRow(
-        label = "record trajectory",
-        detail = "where the phone was, at ${state.trackRateHz.toInt()} Hz",
-        checked = state.trackEnabled,
-        enabled = !state.isRunning,
-        onChange = { model.onEvent(LabConsoleEvent.ToggleTrack(it)) },
-    )
-    ToggleRow(
-        label = "witness anchors",
-        detail = if (state.witnessAvailable) {
-            "monitor the ESP32 iBeacons in ${state.config.beacons.zones.size} zone(s)"
-        } else {
-            "no surveyed anchors in this bundle — a walk does not need them, the fleet hears the phone"
-        },
-        checked = state.witnessEnabled,
-        enabled = !state.isRunning && state.witnessAvailable,
-        onChange = { model.onEvent(LabConsoleEvent.ToggleWitness(it)) },
-    )
+        ToggleRow(
+            label = "advertise identity",
+            detail = "the frame the fleet's BLE scan hears — without it nothing it records is yours",
+            checked = state.broadcastEnabled,
+            enabled = true,
+            onChange = { model.onEvent(LabConsoleEvent.ToggleBroadcast(it)) },
+        )
+        ToggleRow(
+            label = "record trajectory",
+            detail = "where the phone was, at ${state.trackRateHz.toInt()} Hz",
+            checked = state.trackEnabled,
+            enabled = true,
+            onChange = { model.onEvent(LabConsoleEvent.ToggleTrack(it)) },
+        )
+        ToggleRow(
+            label = "witness anchors",
+            detail = if (state.witnessAvailable) {
+                "monitor the ESP32 iBeacons in ${state.config.beacons.zones.size} zone(s)"
+            } else {
+                "no surveyed anchors in this bundle — a walk does not need them, the fleet hears the phone"
+            },
+            checked = state.witnessEnabled,
+            enabled = state.witnessAvailable,
+            onChange = { model.onEvent(LabConsoleEvent.ToggleWitness(it)) },
+        )
+    }
 
     if (state.trackEnabled && !state.isRunning) {
+        ToggleRow(
+            label = "use site map",
+            detail = "relocalise into the site's saved frame — turn OFF for a bench test away " +
+                "from the mapped room (a wrong map costs the walk a 25 s fresh-origin fallback)",
+            checked = state.useSiteMap,
+            enabled = true,
+            onChange = { model.onEvent(LabConsoleEvent.ToggleSiteMap(it)) },
+        )
         Text("pose rate", fontSize = 10.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             LabConsoleState.TRACK_RATE_OPTIONS.forEach { rate ->
@@ -428,9 +505,22 @@ private fun TrackPanel(state: LabConsoleState, model: LabConsoleScreenModel) = P
     )
     progress.last?.reason?.let { KeyValue("reason", it, warn = true) }
     KeyValue("walked", "${format(progress.pathLengthMetres)} m")
+    // Beside the distance, always. A rising count is the live signal that the tracker is
+    // re-solving its world rather than following the body — actionable in the room, and the
+    // only thing that explains a distance that looks wrong.
+    KeyValue(
+        "jumps rejected",
+        progress.rejectedJumps.toString(),
+        warn = progress.rejectedJumps > 0 && progress.samples > 0 &&
+            progress.rejectedJumps.toDouble() / progress.samples > 0.01,
+    )
     KeyValue("poses", progress.samples.toString())
     progress.normalFraction?.let {
         KeyValue("trusted", "${(it * 100).toInt()} %", warn = it < 0.8)
+    }
+    // The variable that separated the two 2026-08-19 walks. −90 is the floor, 0 the horizon.
+    progress.pitchDegrees?.let {
+        KeyValue("camera pitch", "${it.toInt()}°", warn = it < LabConsoleState.PITCH_FLOOR_DEGREES)
     }
     progress.last?.let {
         KeyValue("position", "x ${format(it.x.toDouble())}  z ${format(it.z.toDouble())} m")
@@ -451,6 +541,13 @@ private fun TrackPanel(state: LabConsoleState, model: LabConsoleScreenModel) = P
                 KeyValue("delivered", "${(it * 100).toInt()} % of commanded", warn = it < 0.5)
             }
         }
+    if (progress.rejectedJumps > 5) {
+        Note(
+            "The tracker is re-solving its world repeatedly. Hold the phone up and forward with a " +
+                "clear view several metres ahead — pointing at a blank wall or down at the floor " +
+                "starves it of parallax. The distance above already excludes these jumps."
+        )
+    }
     Note(
         "The origin is wherever tracking started and the axes are gravity-aligned. These are metres " +
             "in that frame, not coordinates in the building — waypoints are what convert one to the " +
@@ -577,9 +674,32 @@ private fun WaypointPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
 
     Button(
         onClick = { model.onEvent(LabConsoleEvent.MarkWaypoint()) },
-        enabled = !state.isBusy,
+        enabled = !state.isBusy && !state.isDwelling,
         modifier = Modifier.fillMaxWidth(),
     ) { Text("Record ${state.pendingWaypointCode}") }
+
+    // The stationary probe arm: stand on a card, hold, end. Records the waypoint AND brackets the
+    // interval with dwell markers, so the analysis reads the CSI statistic against a fixed position
+    // with no direction-of-motion confound — the arm that can settle the walked-vs-simulated sign.
+    if (state.isDwelling) {
+        Button(
+            onClick = { model.onEvent(LabConsoleEvent.EndDwell) },
+            enabled = !state.isBusy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "End dwell on ${state.dwellCode} " +
+                    "(${formatElapsed((state.nowMonotonicNanos - state.dwellStartedMonotonicNanos) / 1_000_000)})"
+            )
+        }
+        Note("Stand still on the card until you end the dwell. Walking during a dwell poisons the arm.")
+    } else {
+        OutlinedButton(
+            onClick = { model.onEvent(LabConsoleEvent.StartDwell) },
+            enabled = !state.isBusy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Dwell on ${state.pendingWaypointCode}") }
+    }
 
     if (state.isScanning) {
         CameraGate {
@@ -678,8 +798,8 @@ private fun SessionsPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
 }
 
 @Composable
-private fun LogPanel(state: LabConsoleState, model: LabConsoleScreenModel) = Panel("log") {
-    state.log.takeLast(40).reversed().forEach { line ->
+private fun LogPanel(state: LabConsoleState, model: LabConsoleScreenModel, limit: Int) = Panel("log") {
+    state.log.takeLast(limit).reversed().forEach { line ->
         Text(
             line.message,
             fontSize = 10.sp,
@@ -748,6 +868,16 @@ private fun CameraGate(content: @Composable () -> Unit) {
     content()
 }
 
+
+/**
+ * Log lines shown while walking. Eight — the stall/resume chatter of a struggling tracker fills
+ * forty lines in a minute, and the panel exists to show the last thing that happened, not to be
+ * scrolled mid-walk. The full log persists and uploads regardless.
+ */
+private const val RUNNING_LOG_LINES = 8
+
+/** Log lines shown idle, where reading back a finished session is the point. */
+private const val IDLE_LOG_LINES = 40
 
 /** Three decimals, which is a millimetre — past what odometry resolves and short enough to read. */
 private fun format(value: Double): String {

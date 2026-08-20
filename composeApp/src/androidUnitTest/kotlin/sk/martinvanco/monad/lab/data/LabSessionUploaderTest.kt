@@ -177,6 +177,7 @@ class LabSessionUploaderTest {
                 LabArtefact.HEALTH,
                 LabArtefact.POSE,
                 LabArtefact.MESH_LOG,
+                LabArtefact.LOG,
                 LabArtefact.SIDECAR,
             ),
             artefacts,

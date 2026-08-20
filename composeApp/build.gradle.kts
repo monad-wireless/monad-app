@@ -414,7 +414,9 @@ sqldelight {
             //      a mapping *from*. Additive; an upgrading device gains an empty table.
             // 12 — MeshObservationRecord + SessionBlobRecord: the room's geometry on the shared clock,
             //      and the first place this app has ever had to put a binary artefact
-            version = 13
+            // 13 — InstrumentLogRecord: the instrument's own log persisted per session, so the
+            //      sentence that explains a failure survives the process that said it
+            version = 14
         }
     }
 }

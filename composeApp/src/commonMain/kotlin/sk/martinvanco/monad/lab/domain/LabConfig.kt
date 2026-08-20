@@ -23,6 +23,7 @@ data class LabConfig(
     val advertise: AdvertisePlan = AdvertisePlan(),
     @SerialName("traffic_profiles") val trafficProfiles: List<TrafficProfile> = emptyList(),
     @SerialName("clock_sync") val clockSync: ClockSyncPolicy = ClockSyncPolicy(),
+    val telemetry: TelemetrySink = TelemetrySink(),
 ) {
     fun accessPoint(id: String): ApProfile? = accessPoints.firstOrNull { it.id == id }
 
@@ -39,6 +40,46 @@ data class LabConfig(
          */
         val EMPTY = LabConfig()
     }
+}
+
+/**
+ * Where the instrument ships its own health while a session runs — an OTLP/HTTP endpoint.
+ *
+ * The handset speaks OTLP straight to the lab's collector. There is no application in between,
+ * deliberately: a relay would have to re-encode every sample, and re-encoding means a second
+ * definition of every field plus a service that can be down while the measurement is up.
+ *
+ * **The credential is delivered here rather than compiled in.** An app binary is readable, so a
+ * baked-in secret is a published secret. This bundle is already authenticated and already carries
+ * access-point passwords, and it is Ansible-rendered on the server — so rotating the ingest
+ * credential is an inventory edit, not a release. A handset that has never signed in has no bundle,
+ * therefore no credential, therefore cannot write to the collector at all.
+ *
+ * Empty [endpoint] means the deployment has no public collector and the shipper stays silent. That
+ * is the correct bench default: nothing is more confusing than a phone retrying a host that was
+ * never meant to exist.
+ */
+@Serializable
+data class TelemetrySink(
+    /** Base URL of the OTLP/HTTP receiver, e.g. `https://otlp.monad.dubec.dev:4319`. No trailing slash. */
+    val endpoint: String = "",
+    /** Basic-auth user. The collector validates against an htpasswd file it alone holds. */
+    val username: String = "",
+    val password: String = "",
+    /**
+     * Seconds between flush attempts.
+     *
+     * Not the 1 Hz the heartbeat runs at: one request per second per handset would be a dozen a
+     * second from a full cohort, for a signal whose purpose is to be noticed by a human within a
+     * minute. Because the app stamps every sample itself, a coarser flush costs no resolution — the
+     * samples still land at the time they were taken.
+     */
+    @SerialName("flush_seconds") val flushSeconds: Int = 15,
+) {
+    val isConfigured: Boolean get() = endpoint.isNotBlank()
+
+    /** Guards against a bundle that sets an absurd interval and starves the live view. */
+    val flushMillis: Long get() = (flushSeconds.coerceIn(5, 300)) * 1000L
 }
 
 /**

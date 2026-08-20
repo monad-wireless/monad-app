@@ -70,11 +70,25 @@ class LabInstrument(
     private var broadcastReport: BroadcastReport? = null
     private var broadcastActive: Boolean = false
     private var poseJob: Job? = null
+    private var poseEventsJob: Job? = null
     private var poseFlushJob: Job? = null
     private var meshJob: Job? = null
     private var meshRevisions: Long = 0
     private var poseReport: PoseTrackReport? = null
     private var poseCount: Long = 0
+
+    /**
+     * Stall detection for the pose stream. Null when the session does not track.
+     *
+     * The poller skips frames whose timestamp has not advanced, so a stalled tracker now looks like
+     * a *slow* stream — walk B's twenty-second hole (2026-08-19) left no trace beyond a gap in
+     * `pose.tsv` a reader has to hunt for. The detector turns the gap into a `pose_stalled` /
+     * `pose_resumed` marker pair, on the timeline, while it happens.
+     */
+    private var stallDetector: PoseStallDetector? = null
+
+    /** Monotonic stamp of the last accepted pose, or of tracking start before the first one. */
+    private var lastPoseAdvanceNanos: Long = 0
 
     /**
      * The most recent pose, held so a waypoint scan can be stamped with a position synchronously.
@@ -146,6 +160,16 @@ class LabInstrument(
     fun poseDiagnostics(): List<String> = poseTracker.diagnostics()
 
     /**
+     * The tracker's live camera, for the console preview. Null when nothing is tracking.
+     *
+     * The preview earns its battery cost twice over: the operator can *see* what the tracker sees —
+     * walk A was carried at a median −39° pitch precisely because the screen showed a console and
+     * the camera showed carpet — and a preview held up and forward is a phone held the way the
+     * tracker needs.
+     */
+    fun posePreviewHandle(): Any? = poseTracker.previewHandle()
+
+    /**
      * Platform posture of the advertiser, for the console. Answerable with no session running.
      *
      * Reached through the instrument rather than by injecting [IdentityBroadcaster] into the console,
@@ -158,6 +182,17 @@ class LabInstrument(
     private var sessionEvents = mutableListOf<SessionEvent>()
     private val pendingTraffic = mutableListOf<TrafficSample>()
     private val pendingPose = mutableListOf<PoseSample>()
+
+    /**
+     * Log lines waiting to be persisted, and the session they belong to.
+     *
+     * `note()` is not suspend and must stay that way — it is called beside the sampling paths — so
+     * lines are buffered here and the heartbeat flushes them. [logSessionId] rather than reading
+     * `_state` at flush time, because the closing notes ("session closed — …") are said *after* the
+     * state resets to IDLE and they are exactly the lines worth keeping.
+     */
+    private val pendingLog = mutableListOf<InstrumentLogEntry>()
+    private var logSessionId: String? = null
 
     private var healthMonitor: SessionHealthMonitor? = null
     private var transitionCount: Long = 0
@@ -211,6 +246,10 @@ class LabInstrument(
         poseCount = 0
         lastPose = null
         pendingPose.clear()
+        pendingLog.clear()
+        logSessionId = sessionId
+        stallDetector = null
+        lastPoseAdvanceNanos = 0
         meshRevisions = 0
         _poseProgress.value = PoseTrackProgress.IDLE
         _mesh.value = MeshProgress.IDLE
@@ -415,6 +454,22 @@ class LabInstrument(
             }
         }
 
+        // The request has to be visible in the state BEFORE the broadcaster is asked to start,
+        // because `startBroadcast()` reads `_state.value.request` for the advertise plan and the
+        // participant id. It used to be published at the very end of start(), so step 5b always
+        // failed with "no session request" — both walks on 2026-08-19 recorded exactly that, and
+        // only went on air because something asked a second time afterwards. A role that works only
+        // when retried is a role that is off on the first walk nobody thinks to retry.
+        //
+        // Phase stays as it was: this publishes what the session IS, not that it is running.
+        _state.value = _state.value.copy(
+            startedWallMillis = startedWall,
+            startedMonotonicNanos = startedMono,
+            boundInterface = boundDescription,
+            socketPinned = pinned,
+            request = request,
+        )
+
         // 5b — broadcasting, when the session plays the role for its whole length. A refusal is
         // recorded and the session continues: a walk with no identity frame is still a walk.
         if (request.broadcast) {
@@ -438,6 +493,19 @@ class LabInstrument(
                     lastPose = sample
                     poseCount++
                     _poseProgress.value = _poseProgress.value.plus(sample)
+                    // A stall that ended between heartbeats still gets its closing marker, with the
+                    // gap it actually had.
+                    val previousAdvance = lastPoseAdvanceNanos
+                    lastPoseAdvanceNanos = sample.monotonicNanos
+                    stallDetector?.onAdvance(sample.monotonicNanos, previousAdvance)?.let {
+                        if (it is PoseStallDetector.Transition.Resumed) {
+                            mark(
+                                kind = SessionMarker.Kind.POSE_RESUMED,
+                                label = "pose stream resumed",
+                                payload = "{\"gap_ms\":${it.gapNanos / 1_000_000}}",
+                            )
+                        }
+                    }
                     // Buffered under the same lock-free discipline as traffic: the sampler must keep
                     // its phase, so nothing on its path waits for SQLite.
                     pendingPose += sample
@@ -449,9 +517,84 @@ class LabInstrument(
                 }
                 .launchIn(newScope)
 
-            poseTracker.start(request.trackRateHz)
+            // What the session does to itself — interruptions, resumptions, outright failure —
+            // becomes timeline markers. Walk B (2026-08-19) lost twenty seconds and its mesh to
+            // interruptions nothing recorded; these rows are what would have said so.
+            poseEventsJob = poseTracker.events
+                .onEach { trackerEvent ->
+                    when (trackerEvent) {
+                        is PoseTrackerEvent.Interrupted -> {
+                            event("tracking_interrupted")
+                            note("TRACKING INTERRUPTED — the platform took the camera or paused the session")
+                            mark(SessionMarker.Kind.ANNOTATION, "tracking_interrupted")
+                        }
+
+                        is PoseTrackerEvent.InterruptionEnded -> {
+                            event("tracking_resumed", "relocalizing=${trackerEvent.relocalizing}")
+                            note(
+                                if (trackerEvent.relocalizing) {
+                                    "tracking resumed — relocalising into the same frame; hold still " +
+                                        "facing somewhere already scanned"
+                                } else {
+                                    "tracking resumed with a NEW ORIGIN — poses before and after this " +
+                                        "instant are in different frames"
+                                }
+                            )
+                            mark(
+                                SessionMarker.Kind.ANNOTATION,
+                                "tracking_resumed",
+                                payload = "{\"relocalizing\":${trackerEvent.relocalizing}}",
+                            )
+                        }
+
+                        is PoseTrackerEvent.Failed -> {
+                            event("tracking_failed", trackerEvent.reason)
+                            note("TRACKING FAILED — ${trackerEvent.reason}. No more poses will arrive.")
+                            mark(
+                                SessionMarker.Kind.ANNOTATION,
+                                "tracking_failed",
+                                payload = "{\"reason\":\"${trackerEvent.reason.replace("\"", "'")}\"}",
+                            )
+                        }
+
+                        is PoseTrackerEvent.RelocalizationAbandoned -> {
+                            event("relocalization_abandoned", "${trackerEvent.graceSeconds}s")
+                            note(
+                                "SITE MAP ABANDONED after ${trackerEvent.graceSeconds.toInt()} s without " +
+                                    "tracking — restarting with a fresh origin. Poses before this instant " +
+                                    "are meaningless; poses after it are session-local."
+                            )
+                            mark(
+                                SessionMarker.Kind.ANNOTATION,
+                                "relocalization_abandoned",
+                                payload = "{\"grace_s\":${trackerEvent.graceSeconds}}",
+                            )
+                        }
+                    }
+                }
+                .launchIn(newScope)
+
+            // The saved site map, when this site has one and the request asked for it. Loading it
+            // means the tracker relocalises into the SAME frame every walk on this site has used —
+            // which is what turns per-session odometry into positioning. Nothing is fatal about not
+            // having one: the first walk on a site is the walk that creates it. The operator can
+            // decline it (a bench test at home must not fight the lab's map), and the tracker
+            // abandons it on its own if relocalisation cannot converge.
+            val siteMap = if (request.loadSiteMap) {
+                repository.getBlob(siteMapKey(request.site), LabArtefact.WORLD_MAP)
+            } else {
+                note("site map skipped by request — fresh session-local frame")
+                null
+            }
+            if (siteMap != null) {
+                note("site map found (${siteMap.size / 1024} KiB) — the walk will relocalise into it")
+            }
+
+            poseTracker.start(request.trackRateHz, siteMap)
                 .onSuccess { report ->
                     poseReport = report
+                    stallDetector = PoseStallDetector(report.commandedRateHz)
+                    lastPoseAdvanceNanos = monotonicNanos()
                     event("pose_tracking_started", "${report.implementation} @ ${report.commandedRateHz} Hz")
                     note(
                         "tracking at ${report.commandedRateHz} Hz " +
@@ -522,14 +665,9 @@ class LabInstrument(
             }
         }
 
-        _state.value = _state.value.copy(
-            phase = Phase.RUNNING,
-            startedWallMillis = startedWall,
-            startedMonotonicNanos = startedMono,
-            boundInterface = boundDescription,
-            socketPinned = pinned,
-            request = request,
-        )
+        // Only the phase is left to publish — the identity of the session went out above, before
+        // the broadcaster needed it.
+        _state.value = _state.value.copy(phase = Phase.RUNNING)
 
         // Health last, so its clock starts when the session is genuinely running and the streams
         // are not judged against a warm-up they never had.
@@ -549,7 +687,13 @@ class LabInstrument(
             clockDisciplined = true,
         )
         healthMonitor = monitor
-        newScope.startHeartbeat(monitor, emitting = request.emit)
+        newScope.startHeartbeat(
+            monitor,
+            emitting = request.emit,
+            // Every session disciplines its clock now: the collector path when there is one, the
+            // reference path when there is not.
+            clockDisciplined = true,
+        )
 
         return Result.success(sessionId)
     }
@@ -925,13 +1069,32 @@ class LabInstrument(
             nowMillis = monotonicNanos() / 1_000_000,
             clockGate = ClockGate.evaluate(
                 clockSync.history.value,
-                applicable = request?.emit == true,
+                // Not `request?.emit`: a walk's timeline is mapped by the reference-clock path and
+                // is exactly as much in need of the gate as an illuminator session's.
+                applicable = true,
             ),
             isRecording = false,
         ) ?: InstrumentHealth.IDLE
 
         trafficGenerator.stop()
         beaconWitness.stop()
+        // World map **before** the mesh export: the export pauses the session, and a paused session
+        // cannot serialise its map. Saved per session (provenance — which frame did this walk use)
+        // and per site (the standing map the next walk relocalises into). Failure is recorded and
+        // swallowed on the same rule as the mesh: the map is valuable and optional.
+        //
+        // Gated on the session having tracked at all. Measured 2026-08-19: a walk that spent its
+        // whole length relocalising still "saved" a 441 KiB map at close — the stale loaded map,
+        // re-serialised — and overwrote the site store with it, so every later walk inherited the
+        // same hostage-taking. A session with zero normal poses observed nothing worth keeping.
+        if (request?.track == true && poseReport != null) {
+            if (_poseProgress.value.normalSamples > 0) {
+                saveWorldMap(sessionId, request.site)
+            } else {
+                note("world map not saved — this session never tracked, so its map describes nothing")
+                event("world_map_skipped", "no normal poses")
+            }
+        }
         // Mesh export **before** the tracker is stopped: pausing the ARSession discards the anchor set,
         // so reading it afterwards would return an empty room every time. This is the single ordering
         // constraint in the whole shutdown, and getting it wrong produces a header-only PLY.
@@ -953,11 +1116,14 @@ class LabInstrument(
 
         poseTracker.stop()
         poseJob?.cancel()
+        poseEventsJob?.cancel()
         poseFlushJob?.cancel()
         meshJob?.cancel()
         poseJob = null
+        poseEventsJob = null
         poseFlushJob = null
         meshJob = null
+        stallDetector = null
         witnessJob?.cancel()
         resyncJob?.cancel()
         heartbeatJob?.cancel()
@@ -1128,7 +1294,38 @@ class LabInstrument(
         if (finalHealth.clockGate.wouldFailGate) {
             note("CLOCK GATE G4 WOULD FAIL — ${finalHealth.clockGate.headline}")
         }
+        // The last flush, carrying the closing notes above. After this, lines go back to being
+        // console-only — there is no session for them to belong to.
+        flushLog()
+        logSessionId = null
         return Result.success(sessionId)
+    }
+
+    /**
+     * Serialise the tracker's world map and store it twice: on the session (provenance) and on the
+     * site (the standing map the next walk loads).
+     *
+     * The site copy is a plain overwrite. The newest map has seen everything the previous one had
+     * plus this walk, so "latest wins" is also "most complete wins" — ARKit extends a loaded map
+     * rather than starting over.
+     */
+    private suspend fun saveWorldMap(sessionId: String, site: String?) {
+        val bytes = poseTracker.snapshotWorldMap().getOrElse {
+            note("world map not saved: ${it.message}")
+            event("world_map_failed", it.message ?: "")
+            return
+        }
+        val mono = monotonicNanos()
+        val wall = currentTimeMillis()
+        runCatching {
+            repository.putBlob(sessionId, LabArtefact.WORLD_MAP, WORLD_MAP_CONTENT_TYPE, mono, wall, bytes)
+            repository.putBlob(siteMapKey(site), LabArtefact.WORLD_MAP, WORLD_MAP_CONTENT_TYPE, mono, wall, bytes)
+            event("world_map_saved", "${bytes.size} bytes")
+            note("world map saved (${bytes.size / 1024} KiB) — the next walk on this site starts in this frame")
+        }.onFailure {
+            note("world map could not be stored: ${it.message}")
+            event("world_map_store_failed", it.message ?: "")
+        }
     }
 
     /**
@@ -1268,7 +1465,11 @@ class LabInstrument(
      * writes to the streams and never touches the socket, so the worst it can do is report stale
      * numbers.
      */
-    private fun CoroutineScope.startHeartbeat(monitor: SessionHealthMonitor, emitting: Boolean) {
+    private fun CoroutineScope.startHeartbeat(
+        monitor: SessionHealthMonitor,
+        emitting: Boolean,
+        clockDisciplined: Boolean,
+    ) {
         heartbeatJob = launch {
             while (isActive) {
                 val nowNanos = monotonicNanos()
@@ -1280,13 +1481,42 @@ class LabInstrument(
                         transitions = transitionCount,
                         groundTruth = groundTruthCount,
                         clock = clockSync.history.value.size.toLong(),
+                        // Measured 2026-08-19: omitted here while `stop()` set it, so every
+                        // heartbeat fed the monitor pose = 0. Two real walks recorded 707 and 331
+                        // poses and their health trace says `dead` for the whole session, with
+                        // `dead_ms` climbing to 108 s — while `pose.tsv` was being written the whole
+                        // time. A stream that is alive must never be able to report itself dead:
+                        // that is the inverse of this module's purpose, and the console showed the
+                        // operator a red pose panel through two good walks.
+                        pose = poseCount,
                     ),
                     nowMillis = now,
-                    clockGate = ClockGate.evaluate(clockSync.history.value, applicable = emitting),
+                    // Gated on `clockDisciplined`, not on `emitting`. A walk has no collector and
+                    // still disciplines its clock over `GET /api/lab/time` — both walks carried two
+                    // samples — but the gate reported NOT_APPLICABLE, so the one check that says
+                    // "this session can be placed on the fleet timeline" was never evaluated for
+                    // the only session shape that needs it.
+                    clockGate = ClockGate.evaluate(
+                        clockSync.history.value,
+                        applicable = clockDisciplined,
+                    ),
                     isRecording = _state.value.isRunning,
                 )
                 _health.value = snapshot
                 checkpointHealth(snapshot, nowNanos, now)
+                // Stall detection rides the heartbeat: one comparison against the last accepted
+                // pose's stamp, and a marker only on a transition.
+                stallDetector?.evaluate(nowNanos, lastPoseAdvanceNanos)?.let { transition ->
+                    if (transition is PoseStallDetector.Transition.Stalled) {
+                        note("POSE STREAM STALLED — no new frame for ${transition.gapNanos / 1_000_000} ms")
+                        mark(
+                            kind = SessionMarker.Kind.POSE_STALLED,
+                            label = "pose stream stalled",
+                            payload = "{\"gap_ms\":${transition.gapNanos / 1_000_000}}",
+                        )
+                    }
+                }
+                flushLog()
                 delay(HEARTBEAT_MILLIS)
             }
         }
@@ -1332,7 +1562,23 @@ class LabInstrument(
 
     private fun note(message: String) {
         Napier.i("[lab] $message")
-        _log.value = (_log.value + InstrumentLogLine(currentTimeMillis(), message)).takeLast(MAX_LOG)
+        val wall = currentTimeMillis()
+        _log.value = (_log.value + InstrumentLogLine(wall, message)).takeLast(MAX_LOG)
+        // Persisted too, while a session exists to own it. The console shows the tail; log.tsv is
+        // the record — the sentence that explains a failure must survive the process that said it.
+        if (logSessionId != null) {
+            pendingLog += InstrumentLogEntry(monotonicNanos(), wall, message)
+        }
+    }
+
+    /** Drain [pendingLog] into storage. Called from the heartbeat and the two shutdown paths. */
+    private suspend fun flushLog() {
+        val target = logSessionId ?: return
+        if (pendingLog.isEmpty()) return
+        val batch = pendingLog.toList()
+        pendingLog.clear()
+        runCatching { repository.appendLog(target, batch) }
+            .onFailure { Napier.w("[lab] log lines dropped: ${it.message}") }
     }
 
     private fun event(kind: String, detail: String = "") {
@@ -1354,14 +1600,21 @@ class LabInstrument(
         poseTracker.stop()
         poseJob?.cancel()
         poseJob = null
+        poseEventsJob?.cancel()
+        poseEventsJob = null
         poseFlushJob?.cancel()
         poseFlushJob = null
+        stallDetector = null
         wake.release()
         heartbeatJob?.cancel()
         heartbeatJob = null
         healthMonitor = null
         socket.close()
         residency.release()
+        // A failed start's log is worth more than a clean one's — flush what was said, then stop
+        // owning lines.
+        flushLog()
+        logSessionId = null
         _state.value = LabInstrumentState.IDLE.copy(lastError = message)
         _health.value = InstrumentHealth.IDLE
     }
@@ -1456,6 +1709,12 @@ class LabInstrument(
          * delays is the SQLite write, and the marker goes in either way.
          */
         const val BOUNDARY_SYNC_BUDGET_MILLIS = 400L
+
+        /**
+         * NSKeyedArchiver output is a binary plist, but naming that would promise a format the
+         * platform owns. Octet-stream, on the mesh's reasoning: the artefact name is the contract.
+         */
+        const val WORLD_MAP_CONTENT_TYPE = "application/octet-stream"
     }
 }
 
@@ -1489,6 +1748,15 @@ private fun ClockGateReport.toRecord(): ClockGateRecord = ClockGateRecord(
     wouldFailGate = wouldFailGate,
     note = note,
 )
+
+/**
+ * The synthetic session id the standing site map is stored under.
+ *
+ * A blob row needs a session id and the site map belongs to no session — it is the thing sessions
+ * share. The prefix keeps it clear of real UUIDs, and the purge paths never touch it because they
+ * only ever delete by a real session's id.
+ */
+fun siteMapKey(site: String?): String = "site-map/" + (site?.ifBlank { null } ?: "default")
 
 // `SessionRequest`, `Phase`, `LabInstrumentState` and `InstrumentLogLine` live in
 // `LabInstrumentState.kt`; `LabEnvironment` (expect) in `LabEnvironment.kt`, beside its actuals.

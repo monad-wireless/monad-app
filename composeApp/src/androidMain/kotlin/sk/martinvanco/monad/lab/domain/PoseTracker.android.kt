@@ -33,6 +33,13 @@ actual class PoseTracker actual constructor() {
     private val _samples = MutableSharedFlow<PoseSample>(replay = 0, extraBufferCapacity = 1)
     actual val samples: Flow<PoseSample> = _samples.asSharedFlow()
 
+    /** Never emits — there is no session to be interrupted. */
+    private val _events = MutableSharedFlow<PoseTrackerEvent>(replay = 0, extraBufferCapacity = 1)
+    actual val events: Flow<PoseTrackerEvent> = _events.asSharedFlow()
+
+    /** Nothing to preview: no tracker means no camera session to render. */
+    actual fun previewHandle(): Any? = null
+
     actual suspend fun probe(): LabSensorModule.Availability = withContext(Dispatchers.IO) {
         val arcore = runCatching {
             ArCoreApk.getInstance().checkAvailability(context) ==
@@ -48,11 +55,16 @@ actual class PoseTracker actual constructor() {
         )
     }
 
-    actual suspend fun start(rateHz: Double): Result<PoseTrackReport> {
+    actual suspend fun start(rateHz: Double, initialWorldMap: ByteArray?): Result<PoseTrackReport> {
         val reason = (probe() as? LabSensorModule.Availability.Unsupported)?.reason
             ?: "pose tracking unavailable"
         return Result.failure(UnsupportedOperationException(reason))
     }
+
+    /** No tracker, no map. ARCore's Cloud Anchors are a different mechanism and a different design. */
+    actual suspend fun snapshotWorldMap(): Result<ByteArray> = Result.failure(
+        UnsupportedOperationException("no world map on Android in this build")
+    )
 
     /**
      * Empty, not a failure. A handset with no tracker never had a mesh to have changed, so an empty

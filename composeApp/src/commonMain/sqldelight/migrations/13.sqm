@@ -1,0 +1,23 @@
+-- Migration 13: the instrument's own words, persisted.
+--
+-- The console log was the only record of what the instrument said while a session ran, and it lived
+-- in a StateFlow capped at 200 lines that died with the process. The diagnosis of walk B's lost mesh
+-- (2026-08-19) came from the sidecar's terse `lifecycle.events`; the sentence that actually explained
+-- it — "mesh export refused: ARKit holds no mesh anchors" with everything the instrument said around
+-- it — was on a screen nobody was reading and gone at close.
+--
+-- So log lines are now a session stream like any other: written as they are said, on the same
+-- `mono_ns` clock, uploaded as `log.tsv` with the artefacts. A session the OS kills keeps every line
+-- it managed to say, which is precisely the session whose log matters.
+--
+-- Purely additive. A device upgrading from schema 13 gains one empty table, and every existing
+-- session reads as a session whose instrument said nothing that survived — which is what happened.
+CREATE TABLE IF NOT EXISTS InstrumentLogRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    monoNs INTEGER NOT NULL,
+    wallMs INTEGER NOT NULL,
+    message TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_instrument_log_session ON InstrumentLogRecord(sessionId, monoNs);
