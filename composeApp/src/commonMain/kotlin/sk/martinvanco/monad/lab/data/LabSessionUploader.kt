@@ -48,6 +48,11 @@ class LabSessionUploader(
     private val groundTruth: GroundTruthRepository,
     private val tallyService: RoomTallyGateway,
     private val retry: RetryPolicy = RetryPolicy.LAB,
+    /**
+     * Reports a failing attempt to the LGTM stack as it happens, rather than only in the local
+     * `uploadError` a stuck session leaves behind. `null` in tests, where there is nothing to ship to.
+     */
+    private val telemetry: LabTelemetryShipper? = null,
 ) {
     private val _progress = MutableStateFlow<UploadProgress?>(null)
     val progress: StateFlow<UploadProgress?> = _progress.asStateFlow()
@@ -262,6 +267,7 @@ class LabSessionUploader(
                 contentType = contentType,
                 token = token,
                 participantId = record.participantId,
+                site = record.site.orEmpty(),
             )
             outcomes += outcome
             if (!outcome.succeeded) {
@@ -308,6 +314,7 @@ class LabSessionUploader(
             contentType = JSON,
             token = token,
             participantId = record.participantId,
+            site = record.site.orEmpty(),
         )
         outcomes += sidecarOutcome
         if (!sidecarOutcome.succeeded) {
@@ -337,6 +344,7 @@ class LabSessionUploader(
         contentType: String,
         token: String,
         participantId: String,
+        site: String = "",
     ): ArtefactOutcome {
         _progress.value = _progress.value?.copy(artefact = artefact)
         var lastError: String? = null
@@ -366,6 +374,18 @@ class LabSessionUploader(
             val error = result.exceptionOrNull()
             lastError = error?.message ?: error?.let { it::class.simpleName } ?: "unknown"
             Napier.w("[lab] $artefact attempt $attemptNumber/${retry.maxAttempts} failed: $lastError")
+            runCatching {
+                telemetry?.reportUploadFailure(
+                    sessionId = sessionId,
+                    participant = participantId,
+                    site = site,
+                    artefact = artefact,
+                    bytes = content.size,
+                    attempt = attemptNumber,
+                    maxAttempts = retry.maxAttempts,
+                    error = lastError,
+                )
+            }
         }
         return ArtefactOutcome(
             sessionId = sessionId,

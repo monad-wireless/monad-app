@@ -134,6 +134,46 @@ class LabTelemetryShipper(
         }
     }
 
+    /**
+     * Report one failed artefact-upload attempt, immediately rather than batched.
+     *
+     * [LabSessionUploader] already computes exactly why an attempt failed — HTTP status, response
+     * content-type, timeout duration — because that is what it writes into `uploadError` locally. The
+     * problem that detail never reached the operator until the session finally uploaded, which is
+     * exactly the case a stuck upload cannot satisfy. This ships it the moment it happens, on the
+     * existing `/v1/logs` path, the same one degraded stream samples already use.
+     *
+     * Best-effort like every other call in this class: a failed report must never turn one failed
+     * upload into two failures worth caring about.
+     */
+    suspend fun reportUploadFailure(
+        sessionId: String,
+        participant: String,
+        site: String,
+        artefact: String,
+        bytes: Int,
+        attempt: Int,
+        maxAttempts: Int,
+        error: String?,
+    ) {
+        val sink = configService.config.value.telemetry
+        if (!sink.isConfigured) return
+        val request = TelemetryEncoder.uploadFailure(
+            wallMs = currentTimeMillis(),
+            sessionId = sessionId,
+            participant = participant,
+            site = site,
+            appVersion = AppConfig.BUILD_ID,
+            artefact = artefact,
+            bytes = bytes,
+            attempt = attempt,
+            maxAttempts = maxAttempts,
+            error = error,
+        )
+        runCatching { send(sink, LOGS_PATH, request) }
+            .onFailure { Napier.w("[lab-telemetry] could not report upload failure for $artefact: ${it.message}") }
+    }
+
     /** Stop observing and drop what is buffered. For tests and for a deliberate opt-out. */
     suspend fun stop() {
         collectJob?.cancel()

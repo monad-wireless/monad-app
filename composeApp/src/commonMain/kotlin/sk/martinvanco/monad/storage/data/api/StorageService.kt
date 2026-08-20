@@ -1,12 +1,14 @@
 package sk.martinvanco.monad.storage.data.api
 
 import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
+import sk.martinvanco.monad.core.config.AppConfig
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.storage.data.dto.UploadResponseDto
 
@@ -28,6 +30,9 @@ class StorageService(private val ktorClient: KtorClient) {
             header(HttpHeaders.Authorization, "Bearer $token")
             header("X-Filename", filename)
             contentType(ContentType.Application.OctetStream)
+            // The default client timeout is sized to fail fast on a phone with no route out at all;
+            // a real binary artefact needs the opposite (see AppConfig.UPLOAD_REQUEST_TIMEOUT).
+            timeout { requestTimeoutMillis = AppConfig.UPLOAD_REQUEST_TIMEOUT }
             setBody(fileContent)
         }
         return response.body<UploadResponseDto>()
@@ -55,6 +60,10 @@ class StorageService(private val ktorClient: KtorClient) {
             header("X-Session-Id", sessionId)
             header("X-Participant-Id", participantId)
             contentType(ContentType.parse(contentType))
+            // mesh.ply / worldmap.armap run into the hundreds of megabytes; the default client
+            // timeout is sized to fail fast on a phone with no route out, not to survive their
+            // transfer time (see AppConfig.UPLOAD_REQUEST_TIMEOUT).
+            timeout { requestTimeoutMillis = AppConfig.UPLOAD_REQUEST_TIMEOUT }
             setBody(content)
         }
         return response.body<UploadResponseDto>()

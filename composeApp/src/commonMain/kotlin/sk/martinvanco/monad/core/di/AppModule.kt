@@ -129,7 +129,7 @@ val appModule = module {
     // about ordering and bookkeeping, not about HTTP. Naming the network as a one-method port is
     // what lets those rules be tested against a real schema instead of believed.
     single<ArtefactSink> { StorageArtefactSink(get()) }
-    single { LabSessionUploader(get(), get(), get(), get(), get()) }
+    single { LabSessionUploader(get(), get(), get(), get(), get(), telemetry = get()) }
     // Pre-flight readiness. Holds the same singleton socket the instrument uses, so it refuses to
     // probe while a session is live and always resets the clock service afterwards.
     single { PreflightService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }

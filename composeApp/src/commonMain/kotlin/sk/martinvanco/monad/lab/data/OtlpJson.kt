@@ -136,6 +136,7 @@ internal object Otlp {
     const val SCOPE = "monad.lab.live"
     const val SEVERITY_INFO = 9
     const val SEVERITY_WARN = 13
+    const val SEVERITY_ERROR = 17
 
     fun attribute(key: String, value: String): OtlpAttribute =
         OtlpAttribute(key, OtlpAnyValue(value))

@@ -35,6 +35,20 @@ object AppConfig {
     const val REQUEST_TIMEOUT = 15_000L
 
     /**
+     * Request timeout in milliseconds for large binary artefact uploads (`mesh.ply`,
+     * `worldmap.armap`).
+     *
+     * [REQUEST_TIMEOUT] governs everything else and is deliberately short, to fail fast on a phone
+     * with no route out at all. A multi-hundred-megabyte artefact on a real uplink needs the
+     * opposite property: Ktor's `HttpTimeout` plugin `requestTimeoutMillis` covers the whole call including the
+     * body, so 15 s aborted a 60+ MB `mesh.ply` mid-transfer regardless of what the server allowed.
+     * Sized against the backend's own `monad_api_proxy_timeout` ceiling (3000 s,
+     * `infra/ansible/roles/monad_api/defaults/main.yml`), not against a UX guess, so the client is
+     * never the shorter clock on a slow upload.
+     */
+    const val UPLOAD_REQUEST_TIMEOUT = 3_000_000L
+
+    /**
      * Marketing version of this build, e.g. `1.2.0`.
      *
      * Not a constant of this file any more, and deliberately so. It used to say `0.3.0-lab` while

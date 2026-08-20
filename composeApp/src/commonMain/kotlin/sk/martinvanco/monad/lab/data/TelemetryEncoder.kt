@@ -238,13 +238,68 @@ internal object TelemetryEncoder {
      * `service.name` is what Loki's `service_name` label and Mimir's `target_info` are derived from,
      * so it is the one string that decides whether this shows up beside `csid` and `api` or nowhere.
      */
-    private fun resource(batch: TelemetryBatch): OtlpResource = OtlpResource(
+    private fun resource(batch: TelemetryBatch): OtlpResource = resource(batch.appVersion)
+
+    private fun resource(appVersion: String): OtlpResource = OtlpResource(
         listOf(
             Otlp.attribute("service.name", SERVICE_NAME),
-            Otlp.attribute("service.version", batch.appVersion),
+            Otlp.attribute("service.version", appVersion),
             Otlp.attribute("monad.node_role", "participant-handset"),
         )
     )
+
+    /**
+     * One log record for an artefact upload attempt that did NOT succeed.
+     *
+     * The gap this closes: [LabSessionUploader] already knows exactly why an upload failed — HTTP
+     * status, response content-type, timeout duration, all of it — because that is what
+     * `uploadError` stores locally. Until now that detail reached the operator only once the session
+     * finally uploaded (chicken-and-egg for a session that cannot upload), or by walking over and
+     * reading the console. This ships it live, the same way a degraded stream already does.
+     *
+     * Success is never logged here, for the same reason a clean stream heartbeat is never logged: an
+     * hour of "mesh.ply attempt 1/1 ok" is pure noise next to `monad_lab_upload_bytes_sum`, which
+     * already says that more cheaply.
+     */
+    fun uploadFailure(
+        wallMs: Long,
+        sessionId: String,
+        participant: String,
+        site: String,
+        appVersion: String,
+        artefact: String,
+        bytes: Int,
+        attempt: Int,
+        maxAttempts: Int,
+        error: String?,
+    ): OtlpLogsRequest {
+        val record = OtlpLogRecord(
+            timeUnixNano = Otlp.nanosOf(wallMs),
+            severityNumber = Otlp.SEVERITY_ERROR,
+            severityText = "ERROR",
+            body = OtlpAnyValue("upload failed: $artefact ($bytes bytes, attempt $attempt/$maxAttempts): ${error ?: "unknown error"}"),
+            attributes = listOf(
+                Otlp.attribute("site", site),
+                Otlp.attribute("participant", participant),
+                Otlp.attribute("session_id", sessionId),
+                Otlp.attribute("build_id", appVersion),
+                Otlp.attribute("artefact", artefact),
+                Otlp.attribute("bytes", bytes.toString()),
+                Otlp.attribute("attempt", attempt.toString()),
+                Otlp.attribute("max_attempts", maxAttempts.toString()),
+                Otlp.attribute("error", error ?: "unknown error"),
+            ),
+        )
+
+        return OtlpLogsRequest(
+            resourceLogs = listOf(
+                OtlpResourceLogs(
+                    resource = resource(appVersion),
+                    scopeLogs = listOf(OtlpScopeLogs(OtlpScope(Otlp.SCOPE), listOf(record))),
+                )
+            )
+        )
+    }
 
     private fun gauge(name: String, unit: String, points: List<OtlpNumberDataPoint>): OtlpMetric? =
         if (points.isEmpty()) null else OtlpMetric(name, unit, OtlpGauge(points))
