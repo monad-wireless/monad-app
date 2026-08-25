@@ -21,6 +21,7 @@ import sk.martinvanco.monad.core.deeplink.DeepLink
 import sk.martinvanco.monad.core.deeplink.PendingDeepLink
 import sk.martinvanco.monad.core.navigation.NavigationCommand
 import sk.martinvanco.monad.device.presentation.DeviceScreen
+import sk.martinvanco.monad.marker.presentation.MarkerScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.core.util.Logger
@@ -133,6 +134,13 @@ fun App() {
                         when (link) {
                             is DeepLink.Device -> navigator.push(
                                 DeviceScreen(slug = link.slug, questId = link.questId),
+                            )
+
+                            // IP-140 — a marker card resolves to a run rather than to a page. The
+                            // participant is standing at the card; the fastest correct thing to
+                            // show them is the countdown.
+                            is DeepLink.Marker -> navigator.push(
+                                MarkerScreen(code = link.code, scannedValue = link.scannedValue),
                             )
                         }
                     }

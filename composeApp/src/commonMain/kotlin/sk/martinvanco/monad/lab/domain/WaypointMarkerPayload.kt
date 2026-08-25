@@ -37,9 +37,41 @@ data class WaypointMarkerPayload(
      * trajectory, and a reader must be able to tell the two cases apart.
      */
     val pose: WaypointPose? = null,
+    /**
+     * The room the **quest asserted** this code stands in, e.g. `library-open`.
+     *
+     * Not a contradiction of the paragraph above. That paragraph refuses to carry a *coordinate*,
+     * because a coordinate printed into an artefact goes stale the first time a card is re-laid and
+     * nothing notices. This is a different fact: it is what the quest running at the time claimed,
+     * and the quest is regenerated from the PostGIS placement layouts, so recording it is
+     * provenance rather than a second copy of the survey. The placement record still supplies where
+     * the card actually was; this says what the participant was told.
+     *
+     * Null for a waypoint recorded from the walk console, which has no quest to assert anything.
+     */
+    val room: String? = null,
+    /**
+     * `card` or `node` — which kind of surveyed point was scanned. Null outside a probe step.
+     *
+     * Load-bearing for the analysis, not a label. A dwell at a node sticker sits at zero distance
+     * from one end of every link that node terminates — the degenerate corner of the geometry,
+     * where grad N on the line of sight is zero. A dwell at a marker card samples open floor.
+     * Pooling the two yields a statistic that cannot be interpreted, so the split has to be
+     * expressible from the artefact alone.
+     */
+    @SerialName("target_kind") val targetKind: String? = null,
 ) {
     companion object {
-        const val SCHEMA: String = "monad-app/waypoint-marker/v1"
+        /**
+         * v2 adds [room] and [targetKind] (IP-140).
+         *
+         * A version rather than a silent addition because their **absence changes meaning**. A v2
+         * payload with `target_kind = null` says the waypoint came from somewhere with no quest to
+         * assert a kind — the walk console. A v1 payload says nothing at all about kind, because
+         * the build that wrote it could not express one. A reader that treats the two alike would
+         * count every pre-IP-140 waypoint as an untagged probe.
+         */
+        const val SCHEMA: String = "monad-app/waypoint-marker/v2"
     }
 }
 

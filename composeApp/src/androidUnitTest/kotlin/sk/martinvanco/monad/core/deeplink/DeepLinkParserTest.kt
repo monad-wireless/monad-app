@@ -157,4 +157,65 @@ class PendingDeepLinkTest {
         PendingDeepLink.parkUrl("https://monad.dubec.dev/d/monad05")
         assertEquals(DeepLink.Device(slug = "monad05"), PendingDeepLink.consume())
     }
+
+    // ── Lab marker cards (IP-140) ────────────────────────────────────────────
+
+    @Test
+    fun `parses a marker card`() {
+        assertEquals(
+            DeepLink.Marker(code = "MONAD-FP-07"),
+            DeepLinkParser.parse("https://monad.dubec.dev/m/MONAD-FP-07"),
+        )
+    }
+
+    @Test
+    fun `tolerates a trailing slash on a marker`() {
+        assertEquals(
+            DeepLink.Marker(code = "MONAD-A-IN"),
+            DeepLinkParser.parse("https://monad.dubec.dev/m/MONAD-A-IN/"),
+        )
+    }
+
+    @Test
+    fun `keeps marker code case verbatim`() {
+        // The code is matched case-insensitively downstream, but this type carries
+        // identity, and lower-casing it here would make the parsed value disagree
+        // with what is printed on the card and with what the portal echoes back.
+        assertEquals(
+            DeepLink.Marker(code = "MONAD-fp-07"),
+            DeepLinkParser.parse("https://monad.dubec.dev/m/MONAD-fp-07"),
+        )
+    }
+
+    @Test
+    fun `rejects a malformed marker code`() {
+        // A forged or damaged scan costs a regex rather than a navigation into a
+        // screen that then has to explain itself. Same shape the portal validates.
+        assertNull(DeepLinkParser.parse("https://monad.dubec.dev/m/"))
+        assertNull(DeepLinkParser.parse("https://monad.dubec.dev/m/-leading-hyphen"))
+        assertNull(DeepLinkParser.parse("https://monad.dubec.dev/m/has space"))
+        assertNull(DeepLinkParser.parse("https://monad.dubec.dev/m/a/b"))
+    }
+
+    @Test
+    fun `rejects a marker on a foreign host`() {
+        assertNull(DeepLinkParser.parse("https://example.org/m/MONAD-FP-07"))
+    }
+
+    @Test
+    fun `a marker canonicalises back to its printed payload`() {
+        // What a probe step is offered. It must fold to the same identity as the
+        // string on the card, whichever form the camera actually read.
+        assertEquals(
+            "https://monad.dubec.dev/m/MONAD-FP-07",
+            DeepLinkParser.parse("https://monad.dubec.dev/m/MONAD-FP-07/")?.scannedValue,
+        )
+    }
+
+    @Test
+    fun `parks and drains a marker`() {
+        PendingDeepLink.parkUrl("https://monad.dubec.dev/m/MONAD-FP-13")
+        assertEquals(DeepLink.Marker(code = "MONAD-FP-13"), PendingDeepLink.consume())
+        assertNull(PendingDeepLink.consume())
+    }
 }

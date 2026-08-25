@@ -16,6 +16,7 @@ import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.device.data.api.DeviceService
 import sk.martinvanco.monad.device.presentation.DeviceScreenModel
+import sk.martinvanco.monad.marker.presentation.MarkerScreenModel
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.presentation.HomeScreenModel
 import sk.martinvanco.monad.lab.data.GroundTruthRepository
@@ -169,7 +170,7 @@ val appModule = module {
     single { QuestSessionCoordinator(get(), get(), get(), get(), get(), get()) }
 
     // Screen models
-    factory { SplashScreenModel(get(), get(), get()) }
+    factory { SplashScreenModel(get(), get(), get(), get()) }
     factory { OnboardingScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
@@ -178,6 +179,8 @@ val appModule = module {
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), questId) }
     // IP-128 — device landing. questId is the optional `?q=` from the deep link.
     factory { (slug: String, questId: String?) -> DeviceScreenModel(get(), get(), slug, questId) }
+    // IP-140 — resolves a scanned marker card to a runnable quest and starts it.
+    factory { (code: String, scanned: String) -> MarkerScreenModel(get(), get(), get(), code, scanned) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), questId) }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }

@@ -82,6 +82,10 @@ enum class StepType {
     @SerialName("ble_advertise")
     BLE_ADVERTISE,
 
+    /** IP-140 — scan one of a named set of surveyed points, then hold still for a fixed dwell. */
+    @SerialName("probe")
+    PROBE,
+
     @SerialName("finish")
     FINISH,
 
@@ -99,6 +103,7 @@ enum class StepType {
             FIND_BLE_DEVICE -> "find_ble_device"
             SENSOR_CAPTURE -> "sensor_capture"
             BLE_ADVERTISE -> "ble_advertise"
+            PROBE -> "probe"
             FINISH -> "finish"
             UNKNOWN -> "unknown"
         }

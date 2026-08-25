@@ -29,12 +29,20 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform.getKoin
+import sk.martinvanco.monad.quests.data.dto.TaskStatus
 import sk.martinvanco.monad.quests.presentation.components.StepRouter
 import sk.martinvanco.monad.quests.presentation.quest_completed.QuestCompletedScreen
 import sk.martinvanco.monad.quests.presentation.quest_ended.QuestEndedEarlyScreen
 
+/**
+ * @param preScannedValue the code the participant scanned to get here — a marker card or a node
+ *   sticker read by the phone camera outside the app (IP-140). It is offered to every step, and
+ *   only a probe whose targets accept it will consume it, so it can never satisfy a step the
+ *   participant did not stand in front of. Null on every other entry path.
+ */
 data class ActiveQuestScreen(
-    val questId: String
+    val questId: String,
+    val preScannedValue: String? = null,
 ) : Screen {
     @Composable
     override fun Content() {
@@ -299,7 +307,14 @@ data class ActiveQuestScreen(
                                 task = task,
                                 onComplete = {
                                     screenModel.onEvent(ActiveQuestEvent.CompleteTask(index))
-                                }
+                                },
+                                // Offered to every step and consumed by at most one: a probe
+                                // matches it against its own targets, and everything else ignores
+                                // it. Only the first pending step may take it, so a scan cannot
+                                // satisfy a later leg of a treasure hunt the participant has not
+                                // walked to yet.
+                                preScannedValue = preScannedValue
+                                    ?.takeIf { index == state.tasks.indexOfFirst { t -> t.status != TaskStatus.COMPLETED } },
                             )
                         }
                     }

@@ -291,17 +291,43 @@ class WaypointMarkerPayloadTest {
                 code = "MONAD-FP-07",
                 note = "by the far window",
                 pose = WaypointPose.of(pose(1_234, x = 1.5f, z = -2.25f)),
+                room = "library-open",
+                targetKind = "card",
             ),
         )
-        assertTrue(encoded.contains("\"schema\":\"monad-app/waypoint-marker/v1\""), encoded)
+        // v2 (IP-140) adds `room` and `target_kind`. The version moved rather than the fields
+        // being added quietly, because their ABSENCE changes meaning: a v2 payload with a null
+        // target_kind says "recorded outside a probe, so nothing asserted a kind", while a v1
+        // payload says "the build that wrote this could not express one". A reader that treats
+        // the two alike counts every pre-IP-140 waypoint as an untagged probe.
+        assertTrue(encoded.contains("\"schema\":\"monad-app/waypoint-marker/v2\""), encoded)
         assertTrue(encoded.contains("\"code\":\"MONAD-FP-07\""), encoded)
         assertTrue(encoded.contains("\"pose_mono_ns\":1234"), encoded)
         assertTrue(encoded.contains("\"quality\":\"normal\""), encoded)
+        assertTrue(encoded.contains("\"room\":\"library-open\""), encoded)
+        assertTrue(encoded.contains("\"target_kind\":\"card\""), encoded)
 
         val decoded = json.decodeFromString(WaypointMarkerPayload.serializer(), encoded)
         assertEquals("MONAD-FP-07", decoded.code)
         assertEquals(1.5f, decoded.pose?.x)
         assertEquals(-2.25f, decoded.pose?.z)
+        assertEquals("library-open", decoded.room)
+        assertEquals("card", decoded.targetKind)
+    }
+
+    @Test
+    fun aWaypointFromTheWalkConsoleAssertsNoRoomAndNoKind() {
+        // The console has no quest to assert either, so both are null — and null must decode as
+        // null rather than as an empty string, so "nothing asserted this" stays distinguishable
+        // from "asserted to be blank".
+        val json = kotlinx.serialization.json.Json { encodeDefaults = true }
+        val encoded = json.encodeToString(
+            WaypointMarkerPayload.serializer(),
+            WaypointMarkerPayload(code = "MONAD-FP-13"),
+        )
+        val decoded = json.decodeFromString(WaypointMarkerPayload.serializer(), encoded)
+        assertEquals(null, decoded.room)
+        assertEquals(null, decoded.targetKind)
     }
 
     @Test

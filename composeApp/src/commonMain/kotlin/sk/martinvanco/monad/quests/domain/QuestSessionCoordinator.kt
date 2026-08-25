@@ -5,6 +5,7 @@ import kotlinx.datetime.Instant
 import sk.martinvanco.monad.core.util.currentTimeMillis
 import sk.martinvanco.monad.lab.domain.LabConfig
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.QuestFeatures
 import sk.martinvanco.monad.lab.domain.SessionRequest
 import sk.martinvanco.monad.quests.domain.port.LabBundleSource
 import sk.martinvanco.monad.quests.domain.port.LabSessionArchive
@@ -68,15 +69,27 @@ class QuestSessionCoordinator(
     /**
      * Start instrumenting a quest.
      *
-     * A quest run is a witness session by default and additionally an illuminator session when the
-     * lab bundle carries a traffic profile and the quest's AP is known — so an ordinary participant
-     * contributes zone truth, while an operator running a rate-ladder contributes illumination too.
+     * What the session does is **declared by the quest** (IP-140), in a `features` block on its
+     * `start` step, rather than inferred here. Before that block existed this method decided every
+     * role from the bundle alone, which meant a fingerprinting quest and a block-bracketing quest
+     * got identical sessions and neither could ask for what it needed.
+     *
+     * Every feature defaults to off, so a quest that declares nothing gets exactly the session
+     * quests got before this change. That is what keeps the block-bracketing EXP-C1 quests correct
+     * without editing them: their on-air interval must equal their labelled block interval, and a
+     * session-scoped frame would break that silently.
+     *
+     * Two features are still gated by physical reality rather than by the declaration alone:
+     * `illuminator` needs the bundle to carry a traffic profile and an access point, and `witness`
+     * needs a beacon plan. A quest may ask for either; it cannot conjure the hardware. When a quest
+     * asks and the bundle cannot supply, its `connect_to_ap` step is what says so out loud.
      */
     suspend fun startSession(
         questId: String,
         enrollmentId: String,
         apId: String? = null,
         profileId: String? = null,
+        features: QuestFeatures = QuestFeatures.NONE,
     ): Result<String> {
         val config = ensureLabConfig()
         val participant = participants.current()
@@ -85,7 +98,7 @@ class QuestSessionCoordinator(
         val profile = profileId?.let { config.trafficProfile(it) }
         val accessPoint = apId?.let { config.accessPoint(it) }
             ?: profile?.apId?.let { config.accessPoint(it) }
-        val emit = profile != null && config.isIlluminationReady
+        val emit = features.illuminator && profile != null && config.isIlluminationReady
 
         return instrument.start(
             SessionRequest(
@@ -102,10 +115,16 @@ class QuestSessionCoordinator(
                 enrollmentId = enrollmentId,
                 questId = questId,
                 emit = emit,
-                witness = config.beacons.isConfigured,
-                // Session-scoped broadcasting stays off: a quest turns the frame on and off through
-                // its own ble_advertise steps, so the on-air interval is exactly the labelled one.
+                witness = features.witness && config.beacons.isConfigured,
+                // Session-scoped broadcasting: on for the whole run when the quest asks for it, so
+                // the walk BETWEEN two probes is on air too — that interval is the continuous
+                // trajectory the fleet's per-node RSSI reconstructs, and it is the most valuable
+                // part of a fingerprinting run. Off by default, in which case a quest still turns
+                // the frame on and off through its own ble_advertise steps and the on-air interval
+                // is exactly the labelled one.
+                broadcast = features.broadcast,
                 advertise = config.advertise,
+                track = features.track,
             )
         )
     }

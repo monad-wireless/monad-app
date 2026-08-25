@@ -91,6 +91,16 @@
                     android:scheme="https"
                     android:host="monad.dubec.dev"
                     android:pathPrefix="/d/" />
+                <!--
+                    IP-140 — lab marker cards. A second <data> rather than a second
+                    intent-filter: one filter with two prefixes claims exactly those
+                    two paths, while a second filter would repeat the host and the
+                    autoVerify and give two places for the scope to drift apart.
+                -->
+                <data
+                    android:scheme="https"
+                    android:host="monad.dubec.dev"
+                    android:pathPrefix="/m/" />
             </intent-filter>
         </activity>
 

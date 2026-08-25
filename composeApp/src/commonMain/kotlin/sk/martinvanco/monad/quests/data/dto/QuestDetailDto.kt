@@ -10,6 +10,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import sk.martinvanco.monad.home.data.dto.QuestDetailResponseDto
+import sk.martinvanco.monad.lab.domain.QuestFeatures
 import sk.martinvanco.monad.home.data.dto.StepResponseDto
 import sk.martinvanco.monad.home.data.dto.StepType
 
@@ -104,6 +105,16 @@ enum class TaskType {
     @SerialName("ble_advertise")
     BLE_ADVERTISE,
 
+    /**
+     * IP-140 — scan one of a named set of surveyed points, then hold still for a fixed dwell.
+     *
+     * A probe never touches the radio. The identity frame is session-scoped and declared once in
+     * the start step's `features` block, so it stays on air across the walk *between* two probes —
+     * which is the part of the record the fleet's per-node RSSI reconstructs a trajectory from.
+     */
+    @SerialName("probe")
+    PROBE,
+
     @SerialName("finish")
     FINISH,
 
@@ -123,6 +134,7 @@ enum class TaskType {
             WALK_TO -> "walk_to"
             SENSOR_CAPTURE -> "sensor_capture"
             BLE_ADVERTISE -> "ble_advertise"
+            PROBE -> "probe"
             FINISH -> "finish"
             INFO -> "info"
         }
@@ -138,6 +150,7 @@ enum class TaskType {
                 StepType.FIND_BLE_DEVICE -> FIND_BLE_DEVICE
                 StepType.SENSOR_CAPTURE -> SENSOR_CAPTURE
                 StepType.BLE_ADVERTISE -> BLE_ADVERTISE
+                StepType.PROBE -> PROBE
                 StepType.FINISH -> FINISH
                 // A step type this build predates: shown as a plain instruction card so the
                 // participant can still walk the quest.
@@ -195,6 +208,127 @@ data class BleAdvertiseConfig(
     @SerialName("adv_interval_ms") val advIntervalMs: Int? = null,
     /** `ultra_low` | `low` | `medium` | `high`; Android only. Null = bundle default. */
     @SerialName("tx_power") val txPower: String? = null,
+) : TaskConfig
+
+/**
+ * One surveyed point a [ProbeConfig] will accept, as generated from the PostGIS placement layouts.
+ *
+ * The card itself is deliberately anonymous — `MONAD-FP-07` does not say where it is, so the set can
+ * be re-laid between arms without a reprint. The label and the room therefore have to arrive from
+ * somewhere the operator controls per arm, and that is the quest: `monad-knowledge lab quest-build`
+ * reads the placements and writes them here. Nothing on the handset holds a marker table.
+ */
+@Serializable
+data class ProbeTarget(
+    /** The exact string the QR carries. Matched case-insensitively, trailing path segment folded. */
+    val value: String,
+    /** What the participant is told they found. */
+    val label: String = "",
+    /** The surveyed room, e.g. `library-open`. */
+    val room: String = "",
+    /**
+     * `card` or `node`.
+     *
+     * Not decoration. A dwell at a node sticker sits at zero distance from one end of every link
+     * that node terminates, which is the degenerate corner of the geometry; a dwell at a marker
+     * card samples open floor. An analysis that pools the two produces a statistic nobody can read,
+     * so the kind travels with the waypoint.
+     */
+    val kind: String = "",
+)
+
+/**
+ * Configuration for the IP-140 probe step: scan one of these, then hold still.
+ *
+ * One target makes a treasure-hunt leg — the step names the node to find. Many targets make a
+ * fingerprint probe that accepts whichever code the participant happens to be standing at, which is
+ * what keeps that quest to a single step and a single scan.
+ */
+@Serializable
+data class ProbeConfig(
+    val targets: List<ProbeTarget> = emptyList(),
+    @SerialName("dwell_seconds") val dwellSeconds: Int = 30,
+) : TaskConfig {
+
+    /**
+     * The target a scan satisfies, or null.
+     *
+     * Two foldings, both of which the rest of the system already performs somewhere: case is
+     * ignored (`QrCodeStep` has always done this) and a URL collapses to its last path segment
+     * (`marker_key()` on the portal, `waypointCodeFrom` in the walk console). Without the second,
+     * a card printed as `https://monad.dubec.dev/m/MONAD-FP-07` and a quest carrying the bare code
+     * are two identities for one piece of card — which is live today for the two showcase markers.
+     */
+    fun match(scanned: String): ProbeTarget? {
+        val key = codeKey(scanned)
+        if (key.isEmpty()) return null
+        return targets.firstOrNull { codeKey(it.value) == key }
+    }
+
+    companion object {
+        /** The one host a printed payload may name. Anything else is not one of our cards. */
+        private const val ALLOWED_HOST = "monad.dubec.dev"
+
+        /**
+         * One card's identity, whichever form it was read in. Empty means "not one of ours".
+         *
+         * Folding to the trailing path segment is what reconciles the two forms that exist in the
+         * field: `MONAD-SHOWCASE-IN` is printed as a full URL and named in its quest as a bare
+         * code, and before this they were two identities for one piece of card.
+         *
+         * **A URL is only folded when it names our host.** Folding blindly would make
+         * `https://example.org/m/MONAD-FP-07` satisfy a probe, because only the last segment
+         * would ever be compared — so anyone could print a sticker that completes a step from
+         * anywhere. The card is public and photographable, so this is not a strong secret; it is
+         * still the difference between a dwell that happened at a surveyed point and one that did
+         * not, and that is the whole value of the measurement.
+         *
+         * A string with no scheme is treated as a bare code, which is what a hand-typed or
+         * legacy-payload card is.
+         */
+        fun codeKey(raw: String): String {
+            var s = raw.trim()
+            s = s.substringBefore('?').substringBefore('#')
+            s = s.trimEnd('/')
+            if (s.isEmpty()) return ""
+
+            if (s.contains("://")) {
+                val afterScheme = s.substringAfter("://")
+                val host = afterScheme.substringBefore('/').lowercase()
+                if (host != ALLOWED_HOST) return ""
+                return afterScheme.substringAfterLast('/').lowercase()
+            }
+
+            // A bare code must not contain a path either: `a/b` is not a card code.
+            return s.lowercase()
+        }
+    }
+}
+
+/**
+ * Configuration for `connect_to_ap`.
+ *
+ * No SSID and no password: step config is served to every authenticated caller, so a credential
+ * here is a published credential. `ap_id` selects one of the lab bundle's access points and the
+ * handset reads the key from there — the same rule `ble_advertise` follows for the advertise
+ * namespace.
+ */
+@Serializable
+data class ConnectToApConfig(
+    @SerialName("ap_id") val apId: String = "",
+    /** Seconds to wait for association plus a verified route before giving up. */
+    @SerialName("verify_timeout_seconds") val verifyTimeoutSeconds: Int = 30,
+) : TaskConfig
+
+/**
+ * Configuration for the `start` step. Only the feature block is typed; the prose is free.
+ *
+ * [QuestFeatures] itself lives in `lab.domain`, beside [sk.martinvanco.monad.lab.domain.SessionRequest]
+ * whose roles it names — see the KDoc there for why.
+ */
+@Serializable
+data class StartConfig(
+    val features: QuestFeatures = QuestFeatures.NONE,
 ) : TaskConfig
 
 // ============================================================================

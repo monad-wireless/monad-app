@@ -44,6 +44,25 @@ class QuestsService(private val ktorClient: KtorClient) {
         return response.body<QuestDetailResponseDto>()
     }
 
+    /**
+     * The same quest, fetched with a token so the steps carry their `config`.
+     *
+     * The anonymous route above deliberately withholds config: a `scan_qr` step's `expected_value`
+     * is the answer key to the people channel, and until 2026-08-14 it was served to the whole
+     * internet. The backend now emits config only when a token populates `getUser()`, and the
+     * running quest gets it from `POST /start` instead.
+     *
+     * IP-140 needs it in one more place. Resolving "which quest accepts the card I just scanned"
+     * means reading probe targets *before* starting anything, so this variant exists — additive,
+     * so no existing caller starts sending a token it did not send before.
+     */
+    suspend fun getQuestDetail(questId: String, token: String): QuestDetailResponseDto {
+        val response = ktorClient.client.get("/api/quest/$questId") {
+            headers { append(HttpHeaders.Authorization, "Bearer $token") }
+        }
+        return response.body<QuestDetailResponseDto>()
+    }
+
     suspend fun startQuest(questId: String, token: String): QuestStartResponseDto {
         val response = ktorClient.client.post("/api/quest/$questId/start") {
             headers {

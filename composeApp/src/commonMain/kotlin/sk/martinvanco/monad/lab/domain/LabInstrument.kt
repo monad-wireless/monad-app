@@ -807,7 +807,12 @@ class LabInstrument(
      * they recorded and did not is a hole in the geometry that only shows up in analysis, so this one
      * has to say no out loud.
      */
-    suspend fun markWaypoint(code: String, annotation: String? = null): Result<WaypointMarkerPayload> {
+    suspend fun markWaypoint(
+        code: String,
+        annotation: String? = null,
+        room: String? = null,
+        targetKind: String? = null,
+    ): Result<WaypointMarkerPayload> {
         val sessionId = _state.value.sessionId?.takeIf { it.isNotEmpty() }
             ?: return Result.failure(IllegalStateException("no running session to place a waypoint in"))
         val trimmed = code.trim()
@@ -818,6 +823,8 @@ class LabInstrument(
             code = trimmed,
             note = annotation?.trim()?.ifBlank { null },
             pose = pose?.let { WaypointPose.of(it) },
+            room = room?.trim()?.ifBlank { null },
+            targetKind = targetKind?.trim()?.ifBlank { null },
         )
         mark(
             kind = SessionMarker.Kind.WAYPOINT,

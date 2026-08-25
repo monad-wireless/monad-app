@@ -15,13 +15,17 @@ import sk.martinvanco.monad.quests.presentation.components.steps.*
  * @param stepNumber Sequential number of this step in the quest
  * @param task The active task to render
  * @param onComplete Callback when step is completed
+ * @param preScannedValue a code the participant already scanned outside the quest — the QR deep
+ *   link that opened the app. Only a [TaskType.PROBE] consumes it, and only when it matches one of
+ *   that step's targets, so it can never satisfy a step the participant did not stand in front of.
  */
 @Composable
 fun StepRouter(
     stepNumber: Int,
     task: ActiveTaskDto,
     onComplete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    preScannedValue: String? = null,
 ) {
     when (task.type) {
         TaskType.QR_CODE, TaskType.SCAN_QR -> {
@@ -78,7 +82,26 @@ fun StepRouter(
             )
         }
 
-        TaskType.CONNECT_TO_AP, TaskType.WALK_TO, TaskType.INFO -> {
+        TaskType.PROBE -> {
+            ProbeStep(
+                stepNumber = stepNumber,
+                task = task,
+                onComplete = onComplete,
+                modifier = modifier,
+                preScannedValue = preScannedValue,
+            )
+        }
+
+        TaskType.CONNECT_TO_AP -> {
+            ConnectToApStep(
+                stepNumber = stepNumber,
+                task = task,
+                onComplete = onComplete,
+                modifier = modifier
+            )
+        }
+
+        TaskType.WALK_TO, TaskType.INFO -> {
             TextBoxStep(
                 stepNumber = stepNumber,
                 task = task,

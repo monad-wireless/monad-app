@@ -17,6 +17,7 @@ import sk.martinvanco.monad.core.util.currentTimeMillis
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.quests.data.repository.QuestStepCompletionRepository
 import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.TaskConfigParser
 import sk.martinvanco.monad.quests.data.dto.TaskStatus
 import sk.martinvanco.monad.quests.data.dto.TaskType
 import sk.martinvanco.monad.lab.domain.LabInstrument
@@ -177,8 +178,11 @@ class ActiveQuestScreenModel(
     }
 
     /**
-     * A quest run *is* a lab session. Every participant witnesses the surveyed anchors; a run whose
-     * quest names an AP and a traffic profile plays the illuminator role as well.
+     * A quest run *is* a lab session, and what that session does is declared by the quest.
+     *
+     * The `features` block on the `start` step (IP-140) names which roles the run plays. Before it
+     * existed every quest got the same session, so a fingerprinting run and a block-bracketing run
+     * were indistinguishable to the instrument and neither could ask for what it needed.
      */
     private fun startLabSession() {
         screenModelScope.launch {
@@ -190,7 +194,8 @@ class ActiveQuestScreenModel(
             // Without passing these the coordinator could never resolve a profile, so `emit` was
             // always false and the illuminator role was unreachable from the quest path.
             val (apId, profileId) = labTargetsFromSteps()
-            val started = sessionCoordinator.startSession(questId, enrollmentId, apId, profileId)
+            val features = TaskConfigParser.featuresOf(mutableState.value.tasks)
+            val started = sessionCoordinator.startSession(questId, enrollmentId, apId, profileId, features)
             if (started.isSuccess) {
                 // The first step has no predecessor to open it, so the run's opening marker is
                 // raised here — otherwise take 1 would have no begin boundary.

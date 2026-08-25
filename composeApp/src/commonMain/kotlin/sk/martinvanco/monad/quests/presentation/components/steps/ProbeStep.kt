@@ -1,0 +1,361 @@
+package sk.martinvanco.monad.quests.presentation.components.steps
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.icerock.moko.permissions.DeniedAlwaysException
+import dev.icerock.moko.permissions.DeniedException
+import dev.icerock.moko.permissions.Permission
+import dev.icerock.moko.permissions.camera.CAMERA
+import dev.icerock.moko.permissions.compose.BindEffect
+import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
+import qrscanner.CameraLens
+import qrscanner.QrScanner
+import sk.martinvanco.monad.core.presentation.components.PermissionRequiredCard
+import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.SessionMarker
+import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.ProbeConfig
+import sk.martinvanco.monad.quests.data.dto.ProbeTarget
+import sk.martinvanco.monad.quests.data.dto.TaskConfigParser
+import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
+
+/**
+ * IP-140 — scan one of a named set of surveyed points, then hold still for a fixed dwell.
+ *
+ * This is the whole participant mechanic behind both new quests. One target makes a treasure-hunt
+ * leg ("go to monad04, scan it, wait"). Many targets make a fingerprint probe that accepts whichever
+ * code the participant is standing at, which is what keeps that quest to a single step.
+ *
+ * **It never touches the radio.** The identity frame is session-scoped and declared once in the
+ * quest's `start` step, so it is already on air when this step opens and stays on air after it
+ * closes. That is deliberate and it is the point of the design: the walk *between* two probes is
+ * the continuous trajectory the fleet's per-node RSSI reconstructs, and a step that switched the
+ * frame on and off would silence the radio for exactly that interval. What this step contributes is
+ * a `dwell_start` / `dwell_end` bracket punched into that stream at a position somebody surveyed.
+ *
+ * The camera opens on entry rather than behind a button. A fingerprint probe is meant to cost a
+ * participant one action, and an extra tap on every card is the friction that decides whether a
+ * cohort completes the protocol or abandons it.
+ *
+ * Refuses to run without a session, on the same grounds as `BleAdvertiseStep`: a dwell recorded
+ * while nothing is recording is thirty seconds of somebody's time spent on nothing, and it must say
+ * so rather than complete.
+ *
+ * @param preScannedValue a code already scanned outside the step — a QR deep link that opened the
+ *   app straight into this quest. Non-null means the participant has already pointed a camera at
+ *   the thing, so asking them to do it again would be the friction this step exists to remove.
+ */
+@Composable
+fun ProbeStep(
+    stepNumber: Int,
+    task: ActiveTaskDto,
+    onComplete: () -> Unit,
+    modifier: Modifier = Modifier,
+    preScannedValue: String? = null,
+    instrument: LabInstrument = koinInject(),
+) {
+    val permFactory = rememberPermissionsControllerFactory()
+    val permController = remember(permFactory) { permFactory.createPermissionsController() }
+    BindEffect(permController)
+
+    var permissionGranted by remember { mutableStateOf(false) }
+    var permissionDeniedPermanently by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(permController) {
+        permissionGranted = permController.isPermissionGranted(Permission.CAMERA)
+    }
+
+    if (!permissionGranted) {
+        PermissionRequiredCard(
+            permissionName = "Camera",
+            deniedPermanently = permissionDeniedPermanently,
+            onRequestPermission = {
+                scope.launch {
+                    try {
+                        permController.providePermission(Permission.CAMERA)
+                        permissionGranted = true
+                        permissionDeniedPermanently = false
+                    } catch (e: DeniedAlwaysException) {
+                        permissionDeniedPermanently = true
+                    } catch (e: DeniedException) {
+                        // Denied once; stay on the card.
+                    } catch (e: Exception) {
+                        permissionDeniedPermanently = false
+                    }
+                }
+            },
+            onOpenSettings = { permController.openAppSettings() },
+        )
+        return
+    }
+
+    val config = remember(task) { TaskConfigParser.getProbeConfig(task) }
+    val instrumentState by instrument.state.collectAsState()
+    val broadcasting by instrument.isBroadcasting.collectAsState(initial = false)
+
+    var matched by remember { mutableStateOf<ProbeTarget?>(null) }
+    var remainingSeconds by remember { mutableStateOf(config?.dwellSeconds ?: 0) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    // Latches for the step's lifetime. The scanner fires its callback repeatedly while a code is in
+    // frame, so without these one physical scan opens several dwells.
+    var hasScanned by remember { mutableStateOf(false) }
+    var hasCompleted by remember { mutableStateOf(false) }
+
+    fun accept(target: ProbeTarget) {
+        if (hasScanned) return
+        hasScanned = true
+        matched = target
+        errorMessage = null
+        remainingSeconds = config?.dwellSeconds ?: 0
+    }
+
+    // A deep link already delivered the code. Satisfy the step from it rather than asking for a
+    // second scan of the same sticker.
+    LaunchedEffect(preScannedValue, config) {
+        val pre = preScannedValue ?: return@LaunchedEffect
+        val target = config?.match(pre) ?: return@LaunchedEffect
+        accept(target)
+    }
+
+    // The dwell. Bracketed with markers so the analysis can select the still window without
+    // re-deriving it from a countdown it cannot see.
+    LaunchedEffect(matched) {
+        val target = matched ?: return@LaunchedEffect
+        val total = config?.dwellSeconds ?: return@LaunchedEffect
+
+        instrument.markWaypoint(
+            code = target.value,
+            annotation = target.label.ifBlank { null },
+            room = target.room.ifBlank { null },
+            targetKind = target.kind.ifBlank { null },
+        )
+        instrument.mark(
+            kind = SessionMarker.Kind.DWELL_START,
+            label = target.label.ifBlank { target.value },
+            stepId = target.value,
+        )
+
+        while (isActive && remainingSeconds > 0) {
+            delay(1000)
+            remainingSeconds--
+        }
+
+        if (remainingSeconds == 0 && !hasCompleted) {
+            hasCompleted = true
+            instrument.mark(
+                kind = SessionMarker.Kind.DWELL_END,
+                label = target.label.ifBlank { target.value },
+                stepId = target.value,
+                payload = "{\"dwell_seconds\":$total}",
+            )
+            delay(300)
+            onComplete()
+        }
+    }
+
+    QuestStepCard(
+        stepNumber = stepNumber,
+        title = task.name,
+        description = task.description,
+        status = task.status,
+        modifier = modifier,
+        content = {
+            ProbeContent(
+                config = config,
+                sessionRunning = instrumentState.isRunning,
+                broadcasting = broadcasting,
+                matched = matched,
+                remainingSeconds = remainingSeconds,
+                errorMessage = errorMessage,
+                onScan = { scanned ->
+                    if (hasScanned) return@ProbeContent
+                    val cfg = config ?: return@ProbeContent
+                    val target = cfg.match(scanned)
+                    if (target != null) {
+                        accept(target)
+                    } else {
+                        errorMessage = wrongCodeMessage(cfg)
+                    }
+                },
+            )
+        },
+    )
+}
+
+/** What to say when a scan matched nothing, phrased by how many things could have matched. */
+private fun wrongCodeMessage(config: ProbeConfig): String = when (config.targets.size) {
+    1 -> "That is not the one. Look for ${config.targets.first().label.ifBlank { "the marked point" }}."
+    else -> "That code is not part of this run. Find a marked point or a node sticker."
+}
+
+@Composable
+private fun ProbeContent(
+    config: ProbeConfig?,
+    sessionRunning: Boolean,
+    broadcasting: Boolean,
+    matched: ProbeTarget?,
+    remainingSeconds: Int,
+    errorMessage: String?,
+    onScan: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        when {
+            config == null || config.targets.isEmpty() -> ProbeNotice(
+                text = "This step has nothing to scan for. It cannot run — tell the operator.",
+                background = Color(0xFFFEE2E2),
+                foreground = Color(0xFF991B1B),
+            )
+
+            !sessionRunning -> ProbeNotice(
+                text = "The measurement session is not running, so nothing would record this " +
+                    "point. Retry the instrument from the warning banner, or tell the operator.",
+                background = Color(0xFFFEE2E2),
+                foreground = Color(0xFF991B1B),
+            )
+
+            // A dwell with the frame off is a participant standing still for no reason. The quest
+            // asked for a broadcast or it did not, and either way the person deserves to know.
+            matched != null && !broadcasting -> ProbeNotice(
+                text = "Your phone is NOT on air, so the receivers cannot hear you standing here. " +
+                    "Keep the app open, and tell the operator if this does not clear.",
+                background = Color(0xFFFEF3C7),
+                foreground = Color(0xFF92400E),
+            )
+
+            matched != null -> ProbeNotice(
+                text = "Hold still. Keep the app open and the screen on.",
+                background = Color(0xFFFEF3C7),
+                foreground = Color(0xFF92400E),
+            )
+        }
+
+        errorMessage?.let {
+            ProbeNotice(
+                text = it,
+                background = Color(0xFFFEE2E2),
+                foreground = Color(0xFF991B1B),
+            )
+        }
+
+        if (matched == null) {
+            // One target names what to look for. Many mean "whatever you are standing at", and
+            // listing twenty codes would be noise, not help.
+            config?.takeIf { it.targets.size == 1 }?.targets?.first()?.let { target ->
+                Text(
+                    text = buildString {
+                        append(target.label.ifBlank { target.value })
+                        if (target.room.isNotBlank()) append(" · ${target.room}")
+                    },
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF0F172A),
+                )
+            }
+
+            if (config != null && config.targets.isNotEmpty() && sessionRunning) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                ) {
+                    QrScanner(
+                        modifier = Modifier.fillMaxSize(),
+                        flashlightOn = false,
+                        cameraLens = CameraLens.Back,
+                        openImagePicker = false,
+                        onCompletion = onScan,
+                        imagePickerHandler = { /* Not used */ },
+                        onFailure = { /* Surfaced by the notices above, not per frame. */ },
+                    )
+                }
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(if (broadcasting) Color(0xFF22C55E) else Color(0xFFEF4444)),
+                )
+                Text(
+                    text = matched.label.ifBlank { matched.value },
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF0F172A),
+                )
+                if (matched.room.isNotBlank()) {
+                    Text(
+                        text = "· ${matched.room}",
+                        fontSize = 13.sp,
+                        color = Color(0xFF64748B),
+                    )
+                }
+            }
+
+            val total = config?.dwellSeconds ?: 0
+            LinearProgressIndicator(
+                progress = {
+                    if (total == 0) 0f else (total - remainingSeconds).toFloat() / total.toFloat()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                color = Color(0xFF5B6ECC),
+                trackColor = Color(0xFFE2E8F0),
+            )
+
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$remainingSeconds",
+                    fontSize = 72.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProbeNotice(text: String, background: Color, foreground: Color) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = background,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Text(
+            text = text,
+            fontSize = 13.sp,
+            color = foreground,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+}
