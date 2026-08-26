@@ -1,6 +1,7 @@
 package sk.martinvanco.monad.lab.data
 
 import io.github.aakira.napier.Napier
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -170,10 +171,31 @@ class LabTelemetryShipper(
         }
 
         flushJob = scope.launch {
+            // EXPONENTIAL BACKOFF, not a fixed interval. Measured 2026-08-26: the flush interval and
+            // the request timeout were both 15 s, so a handset with no route out held a pending
+            // request roughly half of every walk and re-sent the whole backlog each time — a courier
+            // competing with the measurement, which is the one thing it must never do. The interval
+            // is the floor; consecutive failures double it up to [MAX_BACKOFF_MILLIS], and the first
+            // success resets it.
+            var consecutiveFailures = 0
             while (true) {
-                delay(configService.config.value.telemetry.flushMillis)
-                runCatching { flush() }
-                    .onFailure { Napier.w("[lab-telemetry] flush failed: ${it.message}") }
+                val base = configService.config.value.telemetry.flushMillis
+                delay(backoffMillis(base, consecutiveFailures))
+                val outcome = runCatching { flush() }
+                if (outcome.isSuccess) {
+                    consecutiveFailures = 0
+                } else {
+                    consecutiveFailures++
+                    val next = backoffMillis(base, consecutiveFailures)
+                    Napier.w(
+                        "[lab-telemetry] flush failed (${outcome.exceptionOrNull()?.message}) — " +
+                            "attempt $consecutiveFailures, next try in ${next / 1000} s"
+                    )
+                    _posture.value = _posture.value.copy(
+                        consecutiveFailures = consecutiveFailures,
+                        nextAttemptInMillis = next,
+                    )
+                }
             }
         }
     }
@@ -361,8 +383,11 @@ class LabTelemetryShipper(
                 dropped = it.dropped + payload.dropped,
                 lastFlushWallMillis = currentTimeMillis(),
                 // lastError is NOT cleared. The bench question is "has this ever failed", and a
-                // field one lucky flush wipes cannot answer it.
+                // field one lucky flush wipes cannot answer it. The BACKOFF counters are cleared,
+                // because those describe what happens next rather than what happened.
                 lastError = it.lastError,
+                consecutiveFailures = 0,
+                nextAttemptInMillis = 0,
             )
         }
     }
@@ -378,8 +403,28 @@ class LabTelemetryShipper(
     private suspend fun send(sink: TelemetrySink, path: String, body: Any) {
         KtorClient.client.post(sink.endpoint.trimEnd('/') + path) {
             headers { append(HttpHeaders.Authorization, basicAuth(sink)) }
+            // ITS OWN timeout, and a short one. Inheriting the API client's 15 s was wrong for a
+            // courier: on a handset with no route out that is 15 s of pending request against a
+            // 15 s flush interval, so the shipper was in flight about half the time for the whole
+            // walk. A telemetry POST that has not completed in [SEND_TIMEOUT_MILLIS] is not slow,
+            // it is unreachable — and the samples are already safe in the buffer either way.
+            timeout { requestTimeoutMillis = SEND_TIMEOUT_MILLIS }
             setBody(body)
         }
+    }
+
+    /**
+     * Delay before attempt [failures] + 1, in milliseconds.
+     *
+     * [base] is the bundle's flush interval and is the floor: a healthy courier never waits longer
+     * than the operator asked for. Each consecutive failure doubles it, capped, so an unreachable
+     * collector costs one short request every few minutes instead of one every interval.
+     */
+    private fun backoffMillis(base: Long, failures: Int): Long {
+        if (failures <= 0) return base
+        var delay = base
+        repeat(failures.coerceAtMost(BACKOFF_DOUBLINGS)) { delay *= 2 }
+        return delay.coerceAtMost(MAX_BACKOFF_MILLIS)
     }
 
     /**
@@ -411,6 +456,22 @@ class LabTelemetryShipper(
          * misplacing history instead of admitting a gap. See the class doc.
          */
         const val MAX_BUFFERED = 600
+
+        /**
+         * Timeout for ONE telemetry POST. Five seconds.
+         *
+         * The measurement's clock, not the API's. A collector that has not answered in five seconds
+         * is unreachable from where this phone is standing, and waiting longer buys nothing: the
+         * samples are already buffered, and every second spent in flight is a second the courier is
+         * competing with ARKit and the capture streams for the same radio and the same runtime.
+         */
+        const val SEND_TIMEOUT_MILLIS = 5_000L
+
+        /** Longest gap between attempts when the collector is unreachable. Five minutes. */
+        const val MAX_BACKOFF_MILLIS = 300_000L
+
+        /** How many doublings the backoff may apply before the cap takes over. */
+        const val BACKOFF_DOUBLINGS = 8
     }
 }
 

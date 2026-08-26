@@ -60,6 +60,31 @@ class WaypointCodeTest {
     }
 
     @Test
+    fun theScannedGrammarSaysWhichKindOfPointItIs() {
+        // Read off the printed path, never inferred from the spelling. It is load-bearing: a dwell
+        // at a node sticker sits at ZERO distance from one end of every link that node terminates,
+        // which is the degenerate corner of the geometry, while a dwell at a card samples open
+        // floor. Pooling the two yields a statistic nobody can interpret.
+        assertEquals(
+            LabConsoleState.TARGET_NODE,
+            LabConsoleState.targetKindFrom("https://monad.dubec.dev/d/monad07"),
+        )
+        assertEquals(
+            LabConsoleState.TARGET_CARD,
+            LabConsoleState.targetKindFrom("https://monad.dubec.dev/m/MONAD-FP-07"),
+        )
+    }
+
+    @Test
+    fun aTypedCodeAssertsNoKindAtAll() {
+        // Null is a real answer and NOT the same as `card`: it says nothing asserted a kind, which
+        // is exactly what a null `target_kind` means in the payload. Guessing `card` here would
+        // silently label every hand-typed node dwell as open floor.
+        assertEquals(null, LabConsoleState.targetKindFrom("monad07"))
+        assertEquals(null, LabConsoleState.targetKindFrom("MONAD-FP-07"))
+    }
+
+    @Test
     fun bothPrintedGrammarsAreCovered() {
         // A mirror of infra/labels/*.toml. A third printed kind means a third prefix and a case here.
         assertEquals(listOf("/m/", "/d/"), LabConsoleState.SCAN_PREFIXES)

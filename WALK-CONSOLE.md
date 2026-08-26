@@ -91,13 +91,106 @@ disagreement on the Fresnel statistic (ρ = −0.22 walked vs +0.63 simulated).
 Analysis-side: `walk_info` lists the dwell windows; the co-validation selects CSI windows inside
 `dwell_start`…`dwell_end` and reads position from the card's surveyed location, not from odometry.
 
+## Protocol C — a SURVEY walk (2026-08-26)
+
+The walk that produces coordinates rather than consuming them. Run this once per room layout;
+every later walk rides its transform.
+
+**Why it exists.** A walk's session frame is metric, gravity-aligned and internally consistent —
+the 2026-08-26 library walk measured 99.91 % `normal` tracking, zero rejected jumps and zero gaps
+over one second across 235 m — but it is arbitrarily **placed**. The shape of the scanned points is
+a measurement; only its position and heading on the floor are unknown, and those are a rigid
+transform. **Two known points determine it.**
+
+**What may be used as a known point.** Two things, and nothing else:
+
+- **A node sticker.** `monad01` … `monad10` in the `exp: fiit-ground-fleet` layer of
+  `fiit-ground-0` are **surveyed** (operator-confirmed 2026-08-26). Their QR carries
+  `/d/<hostname>`, and the console reads that grammar as well as the cards' `/m/<slug>`.
+- **A tape measurement you take in the room**, typed into the survey-anchor field.
+
+**What may NOT.** Every `MONAD-FP` and door-card position in the same bundle layer
+(`exp: fiit-ground-markers`) is fiction placed in QGIS. The proof is in the walk itself:
+`OPEN-D1-OUT` and `SILENT-D1-IN` are the two sides of one doorway, the walk measures them 0.21 m
+apart, and the bundle places them 20.46 m apart. Every IN/OUT pair in the bundle is exactly 0.60 m
+apart, which is a template somebody typed.
+
+### The protocol
+
+1. Run **Check**. It now judges room geometry and live telemetry as well; grant anything red.
+2. Start the walk. Perimeter slowly first, phone **up and forward**, wait for `NORMAL`. That is the
+   technique that produced 99.91 % tracking — do not change it.
+3. Dwell ~30 s at **all ten nodes**. Point the phone at the node sticker; the "seeing" row fills
+   with `monad01`. Press **Dwell**. Scanning rather than typing matters here: the printed path
+   (`/d/` vs `/m/`) is what records `target_kind = node`, and a typed code asserts no kind. A node
+   dwell sits at zero distance from one end of every link that node terminates — the degenerate
+   corner of the geometry — so pooling it with card dwells yields a statistic nobody can read.
+4. Dwell ~30 s at **every card**, including the `MONAD-FP-09` … `FP-12` the first walk missed, and
+   the IN/OUT pairs.
+5. Optionally type a tape coordinate in the **surveyed site position** field before pressing Dwell
+   at two cards far apart, one per room. Belt and braces: it makes the fit independent of the node
+   survey entirely.
+6. Keep it **one continuous session**. Two sessions cannot share a transform.
+7. Stop. Read the close summary. Confirm the **anchored** count is at least 2 — the waypoint panel
+   counts them separately for exactly this reason.
+8. Check S3 for `mesh.ply` before leaving.
+
+### The error term that actually bounds this
+
+A dwell records **where the phone was**, not where the sticker is. Nodes sit at z = 90 cm, cards at
+z = 140 cm, and you hold the phone near neither. That offset — 0.2 to 0.5 m — dominates every other
+term in the chain.
+
+**A consistent offset does not average out.** Ten anchors reduce a *random* offset by roughly √10;
+standing on the same side of every sticker shifts the whole fit by the offset itself. So put the
+phone at the sticker's horizontal position, ideally touching the wall or post below it, **the same
+way every time**.
+
+Card positions from this path are good to roughly 0.2–0.3 m, not centimetres. That is comfortably
+inside what a position-labelled CSI feature for occupancy or counting needs, because those features
+are room-scale. It is **not** inside what a claim about wavelength-scale geometry needs, and no
+walk-derived position should be used for one.
+
+### Then, in a fresh session
+
+```
+walk_survey(source="app:1/<session>", floor="fiit-ground-0",
+            arrangement="<arrangement>", anchor_experiments="fiit-ground-fleet")
+```
+
+It solves the transform, reports a per-anchor residual and a scale ratio, validates the fit against
+`mesh.ply`, places every other dwelled code, and prints the exact `gis_place` calls. **It writes
+nothing** — you read every coordinate first, and the residual travels in `provenance` on each row.
+
+It refuses rather than guesses. Fewer than two anchors, a scale ratio that is not 1.00, or an
+anchor residual past 1 m each stop it before a coordinate exists.
+
 ## Analysis surfaces (monad-knowledge)
 
 - `walk_sessions` / `walk_info` / `walk_plot` (`overview`, `trajectory`, `quality`, `speed`,
   `site`) — MCP tools over the uploaded artefacts.
+- `walk_survey` — **the survey path.** Solves the transform from anchors the walk carries, so it
+  needs neither ICP to converge nor a mesh at all. Prints the `gis_place` calls; writes nothing.
 - `walk_register` — registers `mesh.ply` against a committed floor bundle (2-D trimmed ICP) and
   returns the session→site transform **with its RMS residual**. Quote the residual with any
-  position it produces.
+  position it produces. Now reports whether the descent *converged* or merely hit its cap — those
+  were the same reported state until 2026-08-26.
+
+**The mesh is better as a VALIDATOR than as a solver.** Solve on the anchors, apply the transform
+to the mesh, and measure how far its walls land from the plan's. Walls agree → the anchors, the
+tracking and the bundle are mutually consistent. Walls disagree → something upstream is wrong, and
+you know before writing positions rather than after. A solver that fails is silent about why; a
+validator that fails names the disagreement.
+
+The 2026-08-26 registration returned RMS 1.222 m at 23 % inliers and named none of five causes.
+Fixed: **1.222 m / 23 % → 0.347 m / 66 %, converged.** The five were area-weighted sampling instead
+of an index stride, `structures` as well as `walls` on the plan side (686 points for a 28 m building
+was starving the target set), a 200-iteration cap instead of 30, a class filter that degrades rather
+than empties — and the one nobody had listed: **the two frames have opposite handedness.** ARKit's
+`(x, z)` reads left-handed from above while the site frame is right-handed, and the solver forbids a
+fitted reflection on purpose, so the two constraints together made the fit unsatisfiable. The flip
+now lives in `register` and `Registration.apply` only, so callers pass raw `(x, z)` and no call site
+can be half-converted.
 
 ## The config row and the "Reload config" button
 
@@ -114,7 +207,8 @@ The button refetches `GET /api/lab/config`. The rows report what is loaded:
 | `from server (v3)` | Fetched this launch. The one unambiguous good state. |
 | `set by hand` | Typed in on the bench. |
 | `site: unset — walks cannot be placed on a floor` | No site slug, so a trajectory cannot be registered to a floor bundle afterwards. |
-| `telemetry: live` / `off` | Whether this walk is visible on dashboard `39 · Handset Instrument` while it runs, or invisible until it uploads. |
+| `telemetry: NOT SHIPPING …` | The bundle carries no collector endpoint. Read from the **courier**, not from the config — on 2026-08-26 the bundle on the server was correct and the handset shipped zero lines for 21 minutes, so a row reporting the config cannot tell "configured" from "working". |
+| `telemetry: N sample(s) in M flush(es)` | Actually shipping. `configured … nothing shipped yet` is the interesting middle state. |
 
 `v0` is not an error — it means the backend never set a version. That is why the version is no
 longer the headline.

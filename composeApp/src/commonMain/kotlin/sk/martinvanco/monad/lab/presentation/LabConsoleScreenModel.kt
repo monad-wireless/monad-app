@@ -321,7 +321,10 @@ class LabConsoleScreenModel(
             return
         }
         val anchor = state.pendingAnchor
-        instrument.markWaypoint(code, anchor = anchor)
+        // The kind travels with the fix, not with the dwell bracket: a node dwell and a card
+        // dwell are different geometry and the analysis has to be able to split them from the
+        // artefact alone. See `LabConsoleState.pendingTargetKind`.
+        instrument.markWaypoint(code, anchor = anchor, targetKind = state.pendingTargetKind)
             .onFailure {
                 message("dwell refused: ${it.message}")
                 return
@@ -377,7 +380,7 @@ class LabConsoleScreenModel(
             message("waypoint refused: $it")
             return
         }
-        instrument.markWaypoint(code, anchor = anchor)
+        instrument.markWaypoint(code, anchor = anchor, targetKind = mutableState.value.pendingTargetKind)
             .onSuccess { payload ->
                 message(
                     when {

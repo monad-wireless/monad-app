@@ -391,6 +391,23 @@ data class LabConsoleState(
         get() = detectedCard?.let(::waypointCodeFrom)?.isNotBlank() == true
 
     /**
+     * `node` or `card` when the camera's own grammar says which, null otherwise.
+     *
+     * NOT an inference from the code's spelling. The two printed kinds carry different URL paths
+     * (`/d/` for a fleet node sticker, `/m/` for a marker card), so the scan itself states the kind
+     * and this reads it off. A typed code asserts nothing and stays null — which is exactly what a
+     * null `target_kind` means in the payload, so the artefact stays honest either way.
+     *
+     * It is load-bearing rather than decorative. A dwell at a node sticker sits at ZERO distance
+     * from one end of every link that node terminates — the degenerate corner of the geometry,
+     * where the gradient along the line of sight vanishes — while a dwell at a card samples open
+     * floor. Pooling the two produces a statistic nobody can interpret, and the split has to be
+     * expressible from the artefact alone or the analysis cannot make it.
+     */
+    val pendingTargetKind: String?
+        get() = detectedCard?.let(Companion::targetKindFrom)
+
+    /**
      * The anchor the waypoint button will record, or null when the field is empty.
      *
      * Null also when the field will not parse, which is why [anchorError] exists beside it: an
@@ -570,6 +587,30 @@ data class LabConsoleState(
         }
 
         /**
+         * Which printed kind a scan came from, read off its own path prefix.
+         *
+         * `/d/` is a fleet node sticker, `/m/` is a marker card. Null for anything else — a typed
+         * code, a bare slug off a card, or a scan of something that is not ours. Null is a real
+         * answer: it says nothing asserted a kind, which is different from asserting `card`.
+         */
+        fun targetKindFrom(scanned: String): String? {
+            val trimmed = scanned.trim()
+            val node = trimmed.lastIndexOf(NODE_PREFIX)
+            val card = trimmed.lastIndexOf(CARD_PREFIX)
+            if (node < 0 && card < 0) return null
+            return if (node > card) TARGET_NODE else TARGET_CARD
+        }
+
+        /** A fleet node sticker — `monad01` … `monad10`, mounted at z = 90 cm. */
+        const val TARGET_NODE: String = "node"
+
+        /** A printed marker card, mounted at z = 140 cm. */
+        const val TARGET_CARD: String = "card"
+
+        const val NODE_PREFIX: String = "/d/"
+        const val CARD_PREFIX: String = "/m/"
+
+        /**
          * The printed QR path prefixes, mirrored from the label registries — `infra/labels/
          * markers.toml` and `infra/labels/fleet.toml`.
          *
@@ -581,7 +622,7 @@ data class LabConsoleState(
          * close — and the rest of the file becomes a comment, which presents as every declaration
          * after this one being unresolved.)
          */
-        val SCAN_PREFIXES: List<String> = listOf("/m/", "/d/")
+        val SCAN_PREFIXES: List<String> = listOf(CARD_PREFIX, NODE_PREFIX)
     }
 }
 

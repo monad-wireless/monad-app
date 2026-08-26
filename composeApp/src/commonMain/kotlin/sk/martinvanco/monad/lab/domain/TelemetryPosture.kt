@@ -30,6 +30,13 @@ data class TelemetryPosture(
     val lastError: String? = null,
     /** Wall clock of the last successful flush, or 0. */
     val lastFlushWallMillis: Long = 0,
+    /**
+     * Flushes that have failed in a row. Drives the backoff, and says whether the courier is
+     * *trying and failing* or simply between attempts.
+     */
+    val consecutiveFailures: Int = 0,
+    /** How long until the next attempt, under backoff. 0 when the courier is healthy. */
+    val nextAttemptInMillis: Long = 0,
 ) {
     /** The one line the console shows. */
     val line: String
@@ -38,17 +45,33 @@ data class TelemetryPosture(
                 "NOT SHIPPING — the lab bundle carries no telemetry endpoint, so this walk is " +
                     "invisible on the dashboard until it uploads"
 
-            flushes == 0 && lastError != null -> "configured ($endpoint) but FAILING: $lastError"
+            flushes == 0 && lastError != null ->
+                "configured ($endpoint) but FAILING: $lastError" + backoffSuffix
+
             flushes == 0 -> "configured ($endpoint), nothing shipped yet"
             lastError != null ->
                 "$samplesShipped sample(s) in $flushes flush(es) to $endpoint, $dropped dropped — " +
-                    "last error: $lastError"
+                    "last error: $lastError" + backoffSuffix
 
             else -> "$samplesShipped sample(s) in $flushes flush(es) to $endpoint, $dropped dropped"
         }
 
+    /**
+     * What the backoff is doing, appended to the line.
+     *
+     * A courier that is *waiting* looks identical to one that is *stuck* unless it says so, and the
+     * difference is the whole reason the backoff exists — an operator who cannot tell them apart
+     * reads a growing failure count as an app that is spinning.
+     */
+    private val backoffSuffix: String
+        get() = if (consecutiveFailures > 0 && nextAttemptInMillis > 0) {
+            " ($consecutiveFailures in a row, next try in ${nextAttemptInMillis / 1000} s)"
+        } else {
+            ""
+        }
+
     /** True when the courier is doing what it was asked to do. Drives one colour, nothing else. */
-    val healthy: Boolean get() = configured && flushes > 0 && lastError == null
+    val healthy: Boolean get() = configured && flushes > 0 && lastError == null && consecutiveFailures == 0
 
     companion object {
         /** Before the shipper has said anything. Distinct from "not configured", which is a finding. */
