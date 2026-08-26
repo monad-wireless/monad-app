@@ -529,24 +529,59 @@ data class LabConsoleState(
             "MONAD-FP-" + point.coerceIn(1, FINGERPRINT_CARD_COUNT).toString().padStart(2, '0')
 
         /**
-         * Pull the card slug out of whatever the camera decoded.
+         * Pull the slug out of whatever the camera decoded — **card or device sticker**.
          *
-         * The printed QR carries `https://monad.dubec.dev/m/<slug>` so that a scan works for somebody
-         * who has not installed the app. The slug is what the placement record names, so the slug is
-         * what a waypoint records — a full URL in the payload would make every analysis strip the same
-         * prefix, and one of them would forget.
+         * TWO PRINTED GRAMMARS, and a survey needs both. Marker cards carry
+         * `https://monad.dubec.dev/m/<slug>` (`infra/labels/markers.toml`); fleet node stickers carry
+         * `https://monad.dubec.dev/d/<slug>` (`infra/labels/fleet.toml`), where the slug is the
+         * hostname — `monad01` … `monad10`. Both exist so a scan does something useful for somebody
+         * who has not installed the app.
+         *
+         * The **node** stickers are what make a survey possible at all: their positions in the floor
+         * bundle's `exp: fiit-ground-fleet` layer are surveyed, while every marker-card position in
+         * the same layer is fiction placed in QGIS. So a walk that dwells at the ten nodes is a walk
+         * that can be placed, and this function is the step where that either works or silently does
+         * not — a `/d/` URL recorded verbatim would match nothing in the bundle, and the anchor
+         * lookup would come back empty with no error to read.
+         *
+         * The slug is what the placement record names, so the slug is what a waypoint records. A
+         * full URL in the payload would make every analysis strip the same prefix, and one of them
+         * would forget.
          */
         fun waypointCodeFrom(scanned: String): String {
             val trimmed = scanned.trim()
-            val marker = "/m/"
-            val index = trimmed.lastIndexOf(marker)
-            if (index < 0) return trimmed
-            return trimmed.substring(index + marker.length)
+            // Rightmost match wins across both grammars, so the slug is always the last path
+            // segment — one rule rather than a preference between the two printed kinds.
+            var bestAt = -1
+            var bestLength = 0
+            for (prefix in SCAN_PREFIXES) {
+                val at = trimmed.lastIndexOf(prefix)
+                if (at > bestAt) {
+                    bestAt = at
+                    bestLength = prefix.length
+                }
+            }
+            if (bestAt < 0) return trimmed
+            return trimmed.substring(bestAt + bestLength)
                 .substringBefore('?')
                 .substringBefore('#')
                 .trim()
                 .ifBlank { trimmed }
         }
+
+        /**
+         * The printed QR path prefixes, mirrored from the label registries — `infra/labels/
+         * markers.toml` and `infra/labels/fleet.toml`.
+         *
+         * A mirror rather than a source: the card on the wall is the contract. Adding a third
+         * printed kind means adding its prefix here, and a `WaypointCodeTest` case beside it.
+         *
+         * (Written as two paths rather than one glob on purpose. Kotlin nests block comments, so a
+         * `labels/star.toml` glob inside KDoc opens a comment that the closing marker does not
+         * close — and the rest of the file becomes a comment, which presents as every declaration
+         * after this one being unresolved.)
+         */
+        val SCAN_PREFIXES: List<String> = listOf("/m/", "/d/")
     }
 }
 

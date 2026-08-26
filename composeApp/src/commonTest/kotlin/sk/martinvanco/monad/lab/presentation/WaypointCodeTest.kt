@@ -41,6 +41,31 @@ class WaypointCodeTest {
     }
 
     @Test
+    fun aFleetNodeStickerYieldsItsHostname() {
+        // THE SURVEY CASE. Node stickers carry `/d/<hostname>` (infra/labels/fleet.toml), and their
+        // positions in the floor bundle's `exp: fiit-ground-fleet` layer are the only SURVEYED
+        // coordinates on the floor — every marker-card position in the same layer was placed in
+        // QGIS. So a walk that dwells at the ten nodes is a walk that can be placed at all.
+        //
+        // Recording the whole URL would match nothing in the bundle, and the anchor lookup would
+        // come back empty with nothing to read: a survey that produced no positions and no error.
+        assertEquals(
+            "monad01",
+            LabConsoleState.waypointCodeFrom("https://monad.dubec.dev/d/monad01"),
+        )
+        assertEquals(
+            "monad10",
+            LabConsoleState.waypointCodeFrom("https://monad.dubec.dev/d/monad10?src=sticker"),
+        )
+    }
+
+    @Test
+    fun bothPrintedGrammarsAreCovered() {
+        // A mirror of infra/labels/*.toml. A third printed kind means a third prefix and a case here.
+        assertEquals(listOf("/m/", "/d/"), LabConsoleState.SCAN_PREFIXES)
+    }
+
+    @Test
     fun aBareCodeIsPassedThroughUntouched() {
         // A card printed with the bare slug, or an operator typing it off the card. Both are the
         // identity already — rewriting them would be inventing a URL that was never scanned.
