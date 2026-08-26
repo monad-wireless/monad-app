@@ -60,18 +60,70 @@ data class WaypointMarkerPayload(
      * expressible from the artefact alone.
      */
     @SerialName("target_kind") val targetKind: String? = null,
+    /**
+     * A **surveyed** site-frame coordinate for this code, typed by the operator at the scan.
+     *
+     * THE ONE EXCEPTION to the paragraph above, and it is an exception on purpose. That paragraph
+     * refuses to carry the *placement record's* coordinate, because a coordinate copied into an
+     * artefact goes stale the first time a card is re-laid and nothing notices. This is the opposite
+     * direction: it is a measurement the operator took **in this session, with a tape**, and it is
+     * the only thing in the session that ties the walk's arbitrary session frame to the building.
+     *
+     * Without it a walk is a shape with no place. Two anchors fix a rigid transform (one rotation,
+     * one translation, scale pinned at 1), three make it a least-squares fit with a residual per
+     * card, and every other waypoint then rides that transform into the site frame. Before this
+     * field existed the anchors had to be written on paper and re-entered by hand afterwards, which
+     * is a step that gets skipped and a number that gets transcribed wrong.
+     *
+     * Null on every ordinary waypoint, and that is the normal case: most cards are the *targets* of
+     * the transform, not anchors for it.
+     */
+    val anchor: WaypointAnchor? = null,
 ) {
     companion object {
         /**
-         * v2 adds [room] and [targetKind] (IP-140).
+         * v3 adds [anchor] (2026-08-26).
          *
-         * A version rather than a silent addition because their **absence changes meaning**. A v2
-         * payload with `target_kind = null` says the waypoint came from somewhere with no quest to
-         * assert a kind — the walk console. A v1 payload says nothing at all about kind, because
-         * the build that wrote it could not express one. A reader that treats the two alike would
-         * count every pre-IP-140 waypoint as an untagged probe.
+         * v2 added [room] and [targetKind] (IP-140).
+         *
+         * A version rather than a silent addition, each time, because **absence changes meaning**. A
+         * v3 payload with `anchor = null` says the operator was asked and did not supply one. A v2
+         * payload says nothing at all about anchoring, because the build that wrote it could not
+         * express one — so a reader that treats the two alike would conclude that the 2026-08-26
+         * survey walk had no anchors when in fact it had no field to put them in.
+         *
+         * The same rule read forwards: a v2 payload with `target_kind = null` came from a surface
+         * with no quest to assert a kind (the walk console), while a v1 payload could not express a
+         * kind at all.
          */
-        const val SCHEMA: String = "monad-app/waypoint-marker/v2"
+        const val SCHEMA: String = "monad-app/waypoint-marker/v3"
+    }
+}
+
+/**
+ * A surveyed position in the **site** frame, metres, as the operator measured it.
+ *
+ * (x, y) rather than (x, z): this is the floor bundle's plane, not ARKit's. The pose in the same row
+ * is (x, y, z) with +y up, so the pair in one waypoint is exactly one correspondence between the two
+ * frames — session `(x, z)` against site `(x, y)`.
+ *
+ * [source] records HOW the number was obtained, because the error term differs by an order of
+ * magnitude and the analysis has to weight accordingly. A tape measure against a named origin is
+ * centimetres. A node sticker whose position came out of the fleet survey is centimetres too, but it
+ * is a different measurement by a different person on a different day. A coordinate read off a plan
+ * is decimetres at best. Recording "surveyed" without saying by what would make all three the same
+ * claim.
+ */
+@Serializable
+data class WaypointAnchor(
+    val x: Double,
+    val y: Double,
+    /** `tape` | `fleet-survey` | `plan`. Free-form, never parsed — read by a person. */
+    val source: String = SOURCE_TAPE,
+) {
+    companion object {
+        /** Measured in the room with a tape against the floor bundle's own origin. */
+        const val SOURCE_TAPE: String = "tape"
     }
 }
 

@@ -10,7 +10,9 @@ import sk.martinvanco.monad.lab.domain.LabInstrumentState
 import sk.martinvanco.monad.lab.domain.PoseTrackProgress
 import sk.martinvanco.monad.lab.domain.PoseTrackReport
 import sk.martinvanco.monad.lab.domain.ResidencyCheck
+import sk.martinvanco.monad.lab.domain.TelemetryPosture
 import sk.martinvanco.monad.lab.domain.TrackingQuality
+import sk.martinvanco.monad.lab.domain.WaypointAnchor
 import sk.martinvanco.monad.lab.domain.health.InstrumentHealth
 import sk.martinvanco.monad.lab.domain.preflight.PreflightReport
 import sk.martinvanco.monad.lab.domain.upload.FlushReport
@@ -158,6 +160,23 @@ data class LabConsoleState(
     val isScanning: Boolean = false,
 
     /**
+     * A surveyed site-frame coordinate for the card about to be recorded, as the operator typed it.
+     *
+     * `"12.34, 5.67"`, metres, in the floor bundle's frame. The one field that turns a walk from a
+     * shape into a survey: the session frame is metric and internally consistent but arbitrarily
+     * placed, so two of these fix its placement and three give it a residual per card.
+     *
+     * Before it existed the anchors were written on paper in the room and re-entered afterwards.
+     * That is a step that gets skipped and a number that gets transcribed wrong, and both failures
+     * are invisible until every card position is already in the register.
+     *
+     * **Cleared after every recorded waypoint** — see the screen model. An anchor left in the field
+     * would silently attach the same ground truth to the next card, and a wrong anchor biases the
+     * whole fit rather than one point.
+     */
+    val surveyAnchor: String = "",
+
+    /**
      * The card the operator is currently standing on, when a dwell is open.
      *
      * A dwell is the stationary probe arm: body parked on a surveyed card, held, so the CSI
@@ -185,6 +204,17 @@ data class LabConsoleState(
     val preflightRunning: Boolean = false,
     /** The last upload flush, so a failure is visible without opening the session list. */
     val lastFlush: FlushReport? = null,
+
+    /**
+     * What the handset's own telemetry courier is doing.
+     *
+     * On the console because **silence was the wrong behaviour** and it cost a walk's observability.
+     * On 2026-08-26 a 21-minute survey walk produced zero `{service_name="monad-app"}` lines in
+     * Loki while `log.tsv` uploaded fine: the shipper had no endpoint, so by design it said nothing
+     * — and an unconfigured courier looked exactly like a working one. A walk is then unobservable
+     * until it uploads, which is precisely the case a stuck upload cannot satisfy.
+     */
+    val telemetry: TelemetryPosture = TelemetryPosture.UNKNOWN,
 ) {
     val isRunning: Boolean get() = instrument.isRunning
     val residencyBlockers: List<ResidencyCheck> get() = residency.filterNot { it.satisfied }
@@ -232,6 +262,38 @@ data class LabConsoleState(
             lower.contains("not supported") || lower.contains("not implemented") ||
                 lower.contains("missing")
         } && trackerDiagnostics.isNotEmpty()
+
+    /**
+     * Whether this device claims it can record room geometry at all.
+     *
+     * Read out of the tracker's own diagnostics line rather than guessed from the model, because the
+     * two answers a reader has to tell apart are "this phone has no LiDAR" and "this phone has LiDAR
+     * and the mesh is not arriving". On 2026-08-26 those looked identical all the way downstream: a
+     * 103 MB `mesh.ply` was lost in the upload, `mesh.tsv` went up fine, and every tool read the
+     * absence as a device with no depth sensor. It was an iPhone 17 Pro.
+     */
+    val meshExpected: Boolean
+        get() = trackerDiagnostics.any {
+            it.startsWith("LiDAR scene reconstruction:") && it.contains("available")
+        }
+
+    /**
+     * A walk that expected geometry and has none, once past the grace period.
+     *
+     * A separate sentence from [coaching] because the fix is different in kind: coaching says hold
+     * the phone differently, this says the scan is not running and the walk will produce no room.
+     * Null when there is nothing to say.
+     */
+    val meshWarning: String?
+        get() {
+            if (!isRunning || !trackEnabled || poseReport == null) return null
+            if (!meshExpected) return null
+            if (mesh.hasGeometry) return null
+            if (elapsedMillis < MESH_GRACE_MILLIS) return null
+            return "NO ROOM GEOMETRY — this phone has LiDAR and the scan has produced no triangles " +
+                "in ${elapsedMillis / 1000} s. Point the camera at walls and furniture a few metres " +
+                "away, not at the floor."
+        }
 
     /** True once the clock has been disciplined at least once. */
     val clockSynced: Boolean get() = clock.samples > 0
@@ -328,6 +390,25 @@ data class LabConsoleState(
     val pendingCameFromCamera: Boolean
         get() = detectedCard?.let(::waypointCodeFrom)?.isNotBlank() == true
 
+    /**
+     * The anchor the waypoint button will record, or null when the field is empty.
+     *
+     * Null also when the field will not parse, which is why [anchorError] exists beside it: an
+     * unparseable anchor must **refuse** the waypoint rather than record it without one. A silently
+     * dropped anchor is the worst of the three outcomes — the operator believes the transform is
+     * pinned, and it is not.
+     */
+    val pendingAnchor: WaypointAnchor? get() = parseAnchor(surveyAnchor)
+
+    /** Why [surveyAnchor] will not parse, or null when it is empty or valid. */
+    val anchorError: String?
+        get() = when {
+            surveyAnchor.isBlank() -> null
+            pendingAnchor != null -> null
+            else -> "\"$surveyAnchor\" is not a site coordinate — type two metres values, " +
+                "e.g. `12.34, 5.67`"
+        }
+
     /** True while the operator is standing a dwell on a card. */
     val isDwelling: Boolean get() = dwellCode != null
 
@@ -351,6 +432,13 @@ data class LabConsoleState(
             if (trusted != null && poseProgress.samples >= TRUST_SAMPLE_FLOOR && trusted < TRUST_FLOOR) {
                 complaints += "only ${(trusted * 100).toInt()} % of the track is trusted — " +
                     "re-taking the walk now is cheaper than discarding it in analysis"
+            }
+            // The mesh is the largest artefact a walk produces and the only one that cannot be
+            // recovered afterwards from anything else. A walk that recorded none, on a phone that
+            // could have, is worth one sentence before the session closes.
+            if (meshExpected && !mesh.hasGeometry) {
+                complaints += "this phone has LiDAR and the walk recorded no room geometry — " +
+                    "the mesh cannot be reconstructed from the other artefacts"
             }
             if (complaints.isEmpty()) return null
             return "Stopping now: " + complaints.joinToString(", and ") + "."
@@ -395,6 +483,15 @@ data class LabConsoleState(
         /** How long `initializing` is normal before it becomes a coaching sentence. */
         const val INIT_GRACE_MILLIS = 10_000L
 
+        /**
+         * How long a LiDAR walk may produce no triangles before the console says so.
+         *
+         * 30 s. ARKit needs a few seconds of motion before the first mesh anchor appears, and a
+         * walk that starts standing still would otherwise trip the warning immediately. Half a
+         * minute into a 21-minute walk is still early enough to fix by walking the stretch again.
+         */
+        const val MESH_GRACE_MILLIS = 30_000L
+
         /** Waypoints needed for a site-frame transform plus a drift bound. */
         const val WAYPOINT_FLOOR = 3
 
@@ -403,6 +500,29 @@ data class LabConsoleState(
 
         /** Samples before the trusted fraction is worth warning about. ~30 s at the default rate. */
         const val TRUST_SAMPLE_FLOOR = 300L
+
+        /**
+         * Parse a typed site coordinate: `"12.34, 5.67"`, `"12.34 5.67"`, or `"12.34;5.67"`.
+         *
+         * Pure and total: it returns null for anything it cannot read, and the caller turns that
+         * into a refusal. Deliberately strict about the count — a single number, or three, is not a
+         * coordinate, and accepting "12.34" as (12.34, 0) would place an anchor on the origin line
+         * and bias the whole fit toward it.
+         *
+         * A comma decimal separator is NOT accepted, because `12,34` and `12, 34` are then the same
+         * string with two meanings. The keyboard offers a full stop and the operator is reading a
+         * tape, so this is a one-time habit rather than a recurring cost.
+         */
+        fun parseAnchor(typed: String): WaypointAnchor? {
+            val parts = typed.split(',', ';', ' ', '\t')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (parts.size != 2) return null
+            val x = parts[0].toDoubleOrNull() ?: return null
+            val y = parts[1].toDoubleOrNull() ?: return null
+            if (!x.isFinite() || !y.isFinite()) return null
+            return WaypointAnchor(x = x, y = y, source = WaypointAnchor.SOURCE_TAPE)
+        }
 
         /** The printed slug of numbered card [point]. See [FINGERPRINT_CARD_COUNT]. */
         fun fingerprintCode(point: Int): String =
@@ -438,6 +558,14 @@ data class WaypointRow(
     val x: Float?,
     val z: Float?,
     val quality: TrackingQuality,
+    /**
+     * The surveyed site coordinate recorded with this waypoint, or null.
+     *
+     * Shown in the list because an anchor is the one waypoint whose *absence* the operator cannot
+     * discover later: two are needed to place the walk at all, and a walk that closes with one is a
+     * walk with no site frame. Counting them on screen is what makes that checkable in the room.
+     */
+    val anchor: WaypointAnchor? = null,
 )
 
 data class SessionRow(
@@ -497,6 +625,14 @@ sealed interface LabConsoleEvent {
     // ---- waypoints --------------------------------------------------------------------
     data class SelectWaypointPoint(val point: Int) : LabConsoleEvent
     data class UpdateWaypointCode(val value: String) : LabConsoleEvent
+
+    /**
+     * Type a surveyed site coordinate for the next waypoint, `"12.34, 5.67"`.
+     *
+     * The field the survey turns on. Cleared by the screen model after every recorded waypoint, so
+     * an anchor cannot leak onto the card after it.
+     */
+    data class UpdateSurveyAnchor(val value: String) : LabConsoleEvent
 
     /** Record [code], or [LabConsoleState.pendingWaypointCode] when null. */
     data class MarkWaypoint(val code: String? = null) : LabConsoleEvent

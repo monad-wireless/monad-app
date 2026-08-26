@@ -3,6 +3,7 @@ package sk.martinvanco.monad.lab.domain
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -293,19 +294,27 @@ class WaypointMarkerPayloadTest {
                 pose = WaypointPose.of(pose(1_234, x = 1.5f, z = -2.25f)),
                 room = "library-open",
                 targetKind = "card",
+                anchor = WaypointAnchor(x = 10.772, y = 11.879),
             ),
         )
-        // v2 (IP-140) adds `room` and `target_kind`. The version moved rather than the fields
-        // being added quietly, because their ABSENCE changes meaning: a v2 payload with a null
-        // target_kind says "recorded outside a probe, so nothing asserted a kind", while a v1
-        // payload says "the build that wrote this could not express one". A reader that treats
-        // the two alike counts every pre-IP-140 waypoint as an untagged probe.
-        assertTrue(encoded.contains("\"schema\":\"monad-app/waypoint-marker/v2\""), encoded)
+        // v3 (2026-08-26) adds `anchor`; v2 (IP-140) added `room` and `target_kind`. The version
+        // moved each time rather than the fields being added quietly, because their ABSENCE
+        // changes meaning: a v3 payload with a null anchor says the operator was offered the field
+        // and did not use it, while a v2 payload says the build could not express one — so a
+        // reader that treats the two alike concludes the 2026-08-26 survey walk had no anchors
+        // when in fact it had nowhere to put them. Read forwards the same way: a v2 payload with a
+        // null target_kind was recorded outside a probe, a v1 payload could not express a kind.
+        assertTrue(encoded.contains("\"schema\":\"monad-app/waypoint-marker/v3\""), encoded)
         assertTrue(encoded.contains("\"code\":\"MONAD-FP-07\""), encoded)
         assertTrue(encoded.contains("\"pose_mono_ns\":1234"), encoded)
         assertTrue(encoded.contains("\"quality\":\"normal\""), encoded)
         assertTrue(encoded.contains("\"room\":\"library-open\""), encoded)
         assertTrue(encoded.contains("\"target_kind\":\"card\""), encoded)
+        // The anchor is in the SITE frame and its plane is (x, y), while the pose beside it is
+        // ARKit's (x, y, z) with +y up. The pair in one row IS the correspondence the fit reads,
+        // so mixing the two planes here would silently rotate every card position by 90°.
+        assertTrue(encoded.contains("\"anchor\":{\"x\":10.772,\"y\":11.879"), encoded)
+        assertTrue(encoded.contains("\"source\":\"tape\""), encoded)
 
         val decoded = json.decodeFromString(WaypointMarkerPayload.serializer(), encoded)
         assertEquals("MONAD-FP-07", decoded.code)
@@ -313,6 +322,26 @@ class WaypointMarkerPayloadTest {
         assertEquals(-2.25f, decoded.pose?.z)
         assertEquals("library-open", decoded.room)
         assertEquals("card", decoded.targetKind)
+        assertEquals(10.772, decoded.anchor?.x)
+        assertEquals(11.879, decoded.anchor?.y)
+    }
+
+    @Test
+    fun anOrdinaryWaypointCarriesNoAnchor() {
+        // Most cards are TARGETS of the transform, not anchors for it, so null is the normal case.
+        // It has to stay distinguishable from "anchored at the origin", which is a real position.
+        val json = kotlinx.serialization.json.Json { encodeDefaults = true }
+        val encoded = json.encodeToString(
+            WaypointMarkerPayload.serializer(),
+            WaypointMarkerPayload(code = "MONAD-FP-05"),
+        )
+        assertNull(json.decodeFromString(WaypointMarkerPayload.serializer(), encoded).anchor)
+
+        val atOrigin = json.encodeToString(
+            WaypointMarkerPayload.serializer(),
+            WaypointMarkerPayload(code = "MONAD-FP-05", anchor = WaypointAnchor(x = 0.0, y = 0.0)),
+        )
+        assertNotNull(json.decodeFromString(WaypointMarkerPayload.serializer(), atOrigin).anchor)
     }
 
     @Test

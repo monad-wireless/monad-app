@@ -127,13 +127,14 @@ val appModule = module {
     // worth caching, because the whole meaning of this number is how fresh it is.
     single<RoomTallyGateway> { GroundTruthTallyService() }
     // The upload path's rules — upload-then-delete, streams before sidecar, bounded retry — are
-    // about ordering and bookkeeping, not about HTTP. Naming the network as a one-method port is
-    // what lets those rules be tested against a real schema instead of believed.
+    // about ordering and bookkeeping, not about HTTP. Naming the network as a port is what lets
+    // those rules be tested against a real schema instead of believed. It carries two protocols
+    // because there are two: one body for a TSV, and parts for a mesh — see `PartedUpload`.
     single<ArtefactSink> { StorageArtefactSink(get()) }
     single { LabSessionUploader(get(), get(), get(), get(), get(), telemetry = get()) }
     // Pre-flight readiness. Holds the same singleton socket the instrument uses, so it refuses to
     // probe while a session is live and always resets the clock service afterwards.
-    single { PreflightService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { PreflightService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // Crash / kill / reboot recovery. A session left `open` is invisible to every upload path, so
     // this runs before anything else can read the backlog.
     single { LabSessionRecovery(get()) }
@@ -185,7 +186,7 @@ val appModule = module {
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }
-    factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get()) }
+    factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { GroundTruthScanScreenModel(get(), get(), get(), get()) }
     // "Am I recording?" — the participant surface for a backgrounded session.
     factory { SessionStatusScreenModel(get(), get(), get(), get(), get(), get()) }

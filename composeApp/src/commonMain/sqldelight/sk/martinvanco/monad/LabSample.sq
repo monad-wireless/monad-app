@@ -344,6 +344,21 @@ WHERE sessionId = ? ORDER BY name ASC;
 selectBlobBytes:
 SELECT bytes FROM SessionBlobRecord WHERE sessionId = ? AND name = ?;
 
+-- One byte range of one artefact, so a multipart upload never holds the whole thing.
+--
+-- `mesh.ply` reached 102.94 MB on the 2026-08-26 survey walk. `selectBlobBytes` would put all of it
+-- on the heap of a phone that is also running ARKit, and the parted upload only ever needs one part
+-- at a time. SQLite's `substr` operates on BLOB bytes with a 1-BASED offset — the caller passes a
+-- 0-based one and this query adds the one, so the off-by-one lives here rather than at every call
+-- site. The outer CAST is what keeps the result a BLOB (and therefore a ByteArray) rather than
+-- TEXT. The `min(...)` clamps a length that would run past the end — which SQLite tolerates
+-- silently — and, because SQLDelight types a bind argument from the expression it sits in, it is
+-- also what makes both arguments Long instead of String.
+selectBlobSlice:
+SELECT CAST(substr(bytes, :offset + 1, min(:length, sizeBytes - :offset)) AS BLOB)
+FROM SessionBlobRecord
+WHERE sessionId = :sessionId AND name = :name;
+
 countBlobsBySession:
 SELECT COUNT(*) FROM SessionBlobRecord WHERE sessionId = ?;
 

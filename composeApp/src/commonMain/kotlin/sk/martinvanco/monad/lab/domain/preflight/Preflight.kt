@@ -6,6 +6,7 @@ import sk.martinvanco.monad.lab.domain.ClockGate
 import sk.martinvanco.monad.lab.domain.ClockGateStatus
 import sk.martinvanco.monad.lab.domain.LabConfig
 import sk.martinvanco.monad.lab.domain.ResidencyCheck
+import sk.martinvanco.monad.lab.domain.TelemetryPosture
 import sk.martinvanco.monad.lab.domain.roundTo
 
 /**
@@ -31,6 +32,8 @@ import sk.martinvanco.monad.lab.domain.roundTo
  * | Collector | the probe could not reach it | best RTT above [RTT_WARN_MILLIS] |
  * | Clock gate | fewer than two sync samples, or residual past G4a | residual past G4b (T3 drops) |
  * | Storage | free space below the session estimate | below twice the estimate |
+ * | Room scan | — | this phone has LiDAR and the mesh is not being exported |
+ * | Telemetry | — | no collector endpoint, so the walk is invisible while it runs |
  * | Backlog | — | anything still unsent from a previous session |
  *
  * A FAIL is a blocker; a WARN is something to know. Nothing here refuses to let the operator start
@@ -102,6 +105,7 @@ object Preflight {
             if (inputs.intent == SessionIntent.WALK) {
                 add(advertise(inputs))
                 add(tracker(inputs))
+                add(roomScan(inputs))
                 // Asked for a walk too, because a walk that cannot be placed on the fleet's timeline is
                 // a trajectory and a mesh of nowhen. It was not asked before the reference-clock path
                 // existed, and the omission was invisible: the session simply recorded no clock samples
@@ -109,6 +113,9 @@ object Preflight {
                 add(clockGate(inputs))
             }
             add(storage(inputs))
+            // Asked for both modes: a session nobody can watch while it runs is a session whose
+            // failures are all discovered afterwards, and that is true of an illuminator run too.
+            add(telemetry(inputs))
             add(backlog(inputs))
         }
         return PreflightReport(
@@ -411,6 +418,93 @@ object Preflight {
         )
     }
 
+    /**
+     * Will there be a room?
+     *
+     * THE FAILURE THIS EXISTS TO NAME. On 2026-08-26 a 21-minute walk on an iPhone 17 Pro recorded
+     * 4 874 mesh-observation rows and shipped no geometry — the 102.94 MB `mesh.ply` was lost in the
+     * upload — and every tool downstream read the absence as "this device has no LiDAR". The two
+     * facts have to be separable *before* a walk, and the phone is the only thing that knows which
+     * it is.
+     *
+     * A WARN and never a FAIL. A walk with no mesh still carries its trajectory, its waypoints and
+     * its identity frame, and a floor whose geometry is already surveyed does not need a second scan.
+     * What is not acceptable is not knowing.
+     */
+    private fun roomScan(inputs: PreflightInputs): PreflightCheck {
+        val probe = inputs.tracker
+        if (!probe.requested) {
+            return PreflightCheck(
+                PreflightCheckId.ROOM_SCAN,
+                PreflightSeverity.WARN,
+                "tracking is off, so no geometry will be exported either",
+            )
+        }
+        return when (probe.meshAvailable) {
+            null -> PreflightCheck(
+                PreflightCheckId.ROOM_SCAN,
+                PreflightSeverity.WARN,
+                "this platform build cannot say whether it exports room geometry",
+                "a missing mesh afterwards will be indistinguishable from a device without LiDAR",
+            )
+
+            false -> PreflightCheck(
+                PreflightCheckId.ROOM_SCAN,
+                PreflightSeverity.WARN,
+                "no LiDAR on this device — the walk will carry no room geometry",
+                "tracking is camera and IMU only, so scale drifts further and there is no mesh to " +
+                    "register against the floor plan",
+            )
+
+            true -> PreflightCheck(
+                PreflightCheckId.ROOM_SCAN,
+                PreflightSeverity.PASS,
+                "LiDAR present — geometry will be exported. If the console reports no triangles " +
+                    "during the walk, the scan is not running and that is fixable in the room.",
+            )
+        }
+    }
+
+    /**
+     * Can anybody watch this session while it runs?
+     *
+     * On 2026-08-26 the answer was no and nothing said so: the handset shipped zero lines for a
+     * 21-minute walk because the bundle carried no telemetry endpoint, and a silent courier looked
+     * exactly like a working one. The walk was therefore unobservable until it uploaded — and that
+     * upload lost its largest artefact.
+     *
+     * A WARN. The measurement does not depend on it: every sample is on disk and every artefact
+     * still uploads. What is lost is the ability to notice a degraded walk while somebody is still
+     * standing in the room, which is worth one line before the walk starts.
+     */
+    private fun telemetry(inputs: PreflightInputs): PreflightCheck {
+        val posture = inputs.telemetry
+        return when {
+            !posture.configured -> PreflightCheck(
+                PreflightCheckId.TELEMETRY,
+                PreflightSeverity.WARN,
+                "no telemetry endpoint in the bundle — nothing about this session will be visible " +
+                    "until it uploads",
+                "press Reload config; if the endpoint is still absent, this deployment has no " +
+                    "public collector and the walk is observable only on this screen",
+            )
+
+            posture.lastError != null && posture.flushes == 0 -> PreflightCheck(
+                PreflightCheckId.TELEMETRY,
+                PreflightSeverity.WARN,
+                "configured for ${posture.endpoint} but nothing has shipped: ${posture.lastError}",
+                "usually a credential the collector rejects, or no route out from this network",
+            )
+
+            else -> PreflightCheck(
+                PreflightCheckId.TELEMETRY,
+                PreflightSeverity.PASS,
+                "shipping to ${posture.endpoint}" +
+                    if (posture.flushes > 0) " (${posture.samplesShipped} sample(s) so far)" else "",
+            )
+        }
+    }
+
     private fun storage(inputs: PreflightInputs): PreflightCheck {
         val required = estimateSessionBytes(inputs.commandedRateHz, inputs.plannedSessionSeconds)
         val available = inputs.storage.availableBytes
@@ -480,6 +574,13 @@ data class PreflightInputs(
     val referenceClock: ClockProbe = ClockProbe.NOT_ATTEMPTED,
     val broadcast: BroadcastProbe = BroadcastProbe.UNKNOWN,
     val tracker: TrackerProbe = TrackerProbe.NOT_REQUESTED,
+    /**
+     * What the handset's own telemetry courier is doing.
+     *
+     * Read from the shipper rather than probed, because the shipper is the only thing that knows —
+     * and its silence when unconfigured is precisely what made a whole walk invisible.
+     */
+    val telemetry: TelemetryPosture = TelemetryPosture.UNKNOWN,
     val storage: StorageProbe = StorageProbe.UNKNOWN,
     val backlogSessions: Long = 0,
     val backlogScans: Long = 0,
@@ -542,11 +643,19 @@ data class BroadcastProbe(
     }
 }
 
-/** What the platform says about odometry, and whether this walk asked for it. */
+/**
+ * What the platform says about odometry, and whether this walk asked for it.
+ *
+ * [meshAvailable] is nullable because "the build did not say" is a third answer, and the whole point
+ * of carrying it is to separate *that* from a definite no. A missing mesh afterwards is otherwise
+ * indistinguishable from a device that never had LiDAR — which is the 2026-08-26 confusion, on a
+ * phone that has one.
+ */
 data class TrackerProbe(
     val requested: Boolean,
     val available: Boolean = false,
     val detail: String? = null,
+    val meshAvailable: Boolean? = null,
 ) {
     companion object {
         val NOT_REQUESTED = TrackerProbe(requested = false)
@@ -589,6 +698,12 @@ enum class PreflightCheckId(val wire: String, val title: String) {
     ADVERTISE("advertise", "Identity frame"),
     /** Will there be a trajectory? Asked for a walk. */
     POSE_TRACKER("pose_tracker", "Pose tracking"),
+
+    /** Will there be a room? Asked for a walk. */
+    ROOM_SCAN("room_scan", "Room geometry"),
+
+    /** Can anybody watch this session while it runs? */
+    TELEMETRY("telemetry", "Live telemetry"),
     STORAGE("storage", "Storage headroom"),
     BACKLOG("backlog", "Upload backlog"),
 }

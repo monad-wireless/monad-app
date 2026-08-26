@@ -9,6 +9,8 @@ import sk.martinvanco.monad.lab.domain.GroundTruthEvent
 import sk.martinvanco.monad.lab.domain.LabArtefact
 import sk.martinvanco.monad.lab.domain.SessionStatus
 import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
+import sk.martinvanco.monad.lab.domain.upload.PartTag
+import sk.martinvanco.monad.lab.domain.upload.PartedUpload
 import sk.martinvanco.monad.lab.domain.upload.RetryPolicy
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -44,9 +46,71 @@ class LabSessionUploaderTest {
     /** Artefacts the sink refuses, to model a network that fails partway through a session. */
     private var failOn: MutableSet<String> = mutableSetOf()
 
-    private val sink = ArtefactSink { _, _, artefact, content, _, _ ->
-        if (artefact in failOn) throw IllegalStateException("no route to host")
-        stored += artefact to content.size
+    /** Parts the sink accepted, as `artefact#partNumber` to size. Order is send order. */
+    private val storedParts = mutableListOf<Pair<String, Int>>()
+
+    /** `artefact#partNumber` the sink refuses ONCE, to model a connection lost mid-transfer. */
+    private var failPartOnce: MutableSet<String> = mutableSetOf()
+
+    /** Multipart uploads that were opened, and whether each was completed or aborted. */
+    private val partedOutcome = mutableMapOf<String, String>()
+
+    private val sink = object : ArtefactSink {
+        override suspend fun put(
+            sessionId: String,
+            participantId: String,
+            artefact: String,
+            content: ByteArray,
+            contentType: String,
+            token: String,
+        ) {
+            if (artefact in failOn) throw IllegalStateException("no route to host")
+            stored += artefact to content.size
+        }
+
+        override suspend fun beginParts(
+            sessionId: String,
+            participantId: String,
+            artefact: String,
+            totalBytes: Long,
+            contentType: String,
+            token: String,
+        ): PartedUpload {
+            if (artefact in failOn) throw IllegalStateException("no route to host")
+            partedOutcome[artefact] = "open"
+            return PartedUpload(
+                sessionId = sessionId,
+                participantId = participantId,
+                artefact = artefact,
+                uploadId = "upload-$artefact",
+                totalBytes = totalBytes,
+                // The real store's floor. Kept here so the plan under test is the plan the field
+                // uses, rather than one a smaller test constant would produce.
+                minPartBytes = 5 * 1024 * 1024,
+            )
+        }
+
+        override suspend fun putPart(
+            upload: PartedUpload,
+            number: Int,
+            isLast: Boolean,
+            content: ByteArray,
+            token: String,
+        ): PartTag {
+            val key = "${upload.artefact}#$number"
+            if (failPartOnce.remove(key)) throw IllegalStateException("the network connection was lost")
+            storedParts += key to content.size
+            return PartTag(number = number, etag = "\"etag-$number\"")
+        }
+
+        override suspend fun completeParts(upload: PartedUpload, tags: List<PartTag>, token: String) {
+            partedOutcome[upload.artefact] = "completed:${tags.size}"
+            stored += upload.artefact to upload.totalBytes.toInt()
+        }
+
+        override suspend fun abortParts(upload: PartedUpload, token: String) {
+            partedOutcome[upload.artefact] = "aborted"
+        }
     }
 
     private class FakeTally(
@@ -72,7 +136,10 @@ class LabSessionUploaderTest {
         groundTruth = GroundTruthRepository(database)
         users = UserRepository(database)
         stored.clear()
+        storedParts.clear()
+        partedOutcome.clear()
         failOn = mutableSetOf()
+        failPartOnce = mutableSetOf()
         runBlocking { users.insertUser("backend-1", "op@example.org", "Operator", "token-1") }
     }
 
@@ -210,6 +277,149 @@ class LabSessionUploaderTest {
         // the payload.
         assertTrue(tsv.contains("blk-1"), tsv)
         assertEquals(1L, runBlocking { repository.counts("s-1") }.blocks)
+    }
+
+    // ---- large artefacts go up in parts ------------------------------------------------------
+    //
+    // The regression these pin: on 2026-08-26 a 21-minute survey walk uploaded nine artefacts and
+    // lost two. `mesh.ply` was 102.94 MB, the socket dropped mid-body, and all four retries
+    // restarted the same doomed request. Meanwhile `mesh.tsv` — the 4 874-row observation log —
+    // uploaded cleanly, so downstream read `mesh: False` as "this device has no LiDAR". It was an
+    // iPhone 17 Pro.
+
+    @Test
+    fun aLargeArtefactIsCutIntoPartsAndSealedOnce() {
+        closedSession()
+        val bytes = ByteArray(20 * 1024 * 1024) { (it % 251).toByte() }
+        runBlocking { repository.putBlob("s-1", "mesh.ply", "application/octet-stream", 1_000, 1L, bytes) }
+
+        val report = runBlocking { uploader().flush(purgeAfter = false) }
+
+        // 20 MiB at the 8 MiB part size: 8 + 8 + 4.
+        assertEquals(
+            listOf("mesh.ply#1" to 8 * 1024 * 1024, "mesh.ply#2" to 8 * 1024 * 1024, "mesh.ply#3" to 4 * 1024 * 1024),
+            storedParts,
+            "a short FINAL part is legal; a short interior one is not",
+        )
+        assertEquals("completed:3", partedOutcome["mesh.ply"])
+        assertTrue(report.isClean, report.headline)
+        assertEquals(1, report.sessionsUploaded)
+    }
+
+    @Test
+    fun aSmallBlobStillGoesUpAsOneBody() {
+        // The threshold is a stated boundary, not a preference. A `worldmap.armap` of a few hundred
+        // kilobytes has no reason to spend three round trips.
+        closedSession()
+        runBlocking {
+            repository.putBlob("s-1", "worldmap.armap", "application/octet-stream", 1_000, 1L, ByteArray(4_096))
+        }
+
+        runBlocking { uploader().flush(purgeAfter = false) }
+
+        assertTrue(storedParts.isEmpty(), "a 4 KiB artefact must not open a multipart upload")
+        assertEquals(null, partedOutcome["worldmap.armap"])
+        assertEquals(4_096, stored.first { it.first == "worldmap.armap" }.second)
+    }
+
+    @Test
+    fun aLostConnectionCostsONEPartAndNotTheWholeArtefact() {
+        // THE regression. Before the parted path, one dropped socket at 60 MB re-sent all 103 MB —
+        // four times — and then lost the artefact. Here part 2 fails once, is re-sent alone, and
+        // the artefact completes.
+        closedSession()
+        runBlocking {
+            repository.putBlob(
+                "s-1",
+                "mesh.ply",
+                "application/octet-stream",
+                1_000,
+                1L,
+                ByteArray(20 * 1024 * 1024),
+            )
+        }
+        failPartOnce = mutableSetOf("mesh.ply#2")
+
+        val report = runBlocking {
+            LabSessionUploader(
+                repository = repository,
+                sink = sink,
+                users = users,
+                groundTruth = groundTruth,
+                tallyService = FakeTally(GroundTruthIngestReceipt(accepted = 1)),
+                // Two attempts per PART. The point is that the budget is spent per part, so one
+                // retry rescues the artefact instead of restarting it.
+                retry = RetryPolicy(maxAttempts = 2, baseDelayMillis = 0),
+            ).flush(purgeAfter = false)
+        }
+
+        assertEquals(
+            listOf("mesh.ply#1", "mesh.ply#2", "mesh.ply#3"),
+            storedParts.map { it.first },
+            "part 1 must not be re-sent because part 2 failed",
+        )
+        assertEquals("completed:3", partedOutcome["mesh.ply"])
+        assertTrue(report.isClean, report.headline)
+    }
+
+    @Test
+    fun aPartThatExhaustsItsBudgetAbortsTheUploadAndRetainsEveryByte() {
+        closedSession()
+        runBlocking {
+            repository.putBlob(
+                "s-1",
+                "mesh.ply",
+                "application/octet-stream",
+                1_000,
+                1L,
+                ByteArray(20 * 1024 * 1024),
+            )
+        }
+        // Fails on every attempt: the set is only consumed on success, so re-adding is not needed —
+        // one attempt is configured by `uploader()`.
+        failPartOnce = mutableSetOf("mesh.ply#1")
+
+        val report = runBlocking { uploader().flush(purgeAfter = false) }
+
+        assertEquals(
+            "aborted",
+            partedOutcome["mesh.ply"],
+            "abandoned parts stay in the store, are billed, and appear in no listing — the abort " +
+                "is protocol, not tidy-up",
+        )
+        assertFalse(report.isClean)
+        assertEquals(0, report.sessionsUploaded)
+        // Upload-then-delete still holds, and the sidecar was never sent over a missing artefact.
+        assertEquals(
+            SessionStatus.FAILED,
+            SessionStatus.fromStorage(runBlocking { repository.byId("s-1") }?.status),
+        )
+        assertTrue(stored.none { it.first == LabArtefact.SIDECAR })
+        assertEquals(1L, runBlocking { repository.counts("s-1") }.blobs)
+        assertEquals(0, report.discarded)
+    }
+
+    @Test
+    fun onePartIsReadAtATimeRatherThanTheWholeArtefact() {
+        // Not a style point: `mesh.ply` was 102.94 MB and this phone is also running ARKit and the
+        // camera. Every part the sink saw must be at most the part size — a single 20 MiB body
+        // arriving here would mean the artefact had been materialised whole to cut it up.
+        closedSession()
+        runBlocking {
+            repository.putBlob(
+                "s-1",
+                "mesh.ply",
+                "application/octet-stream",
+                1_000,
+                1L,
+                ByteArray(20 * 1024 * 1024) { (it % 97).toByte() },
+            )
+        }
+
+        runBlocking { uploader().flush(purgeAfter = false) }
+
+        assertTrue(storedParts.all { it.second <= PartedUpload.PART_BYTES }, storedParts.toString())
+        assertEquals(20 * 1024 * 1024, storedParts.sumOf { it.second }, "every byte must reach the store once")
     }
 
     // ---- upload-then-delete ------------------------------------------------------------------

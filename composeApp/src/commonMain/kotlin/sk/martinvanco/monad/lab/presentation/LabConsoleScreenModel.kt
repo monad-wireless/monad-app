@@ -13,6 +13,7 @@ import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.lab.data.LabConfigService
 import sk.martinvanco.monad.lab.data.LabSessionRepository
 import sk.martinvanco.monad.lab.data.LabSessionUploader
+import sk.martinvanco.monad.lab.data.LabTelemetryShipper
 import sk.martinvanco.monad.lab.data.PreflightService
 import sk.martinvanco.monad.lab.domain.BackgroundResidency
 import sk.martinvanco.monad.lab.domain.LabInstrument
@@ -46,6 +47,14 @@ class LabConsoleScreenModel(
     private val residency: BackgroundResidency,
     private val users: UserRepository,
     private val preflight: PreflightService,
+    /**
+     * The handset's own telemetry courier, observed for its posture.
+     *
+     * Read-only here: the console never starts or stops it (it outlives the screen by design). What
+     * the console adds is the one thing that was missing on 2026-08-26 — a place where "this walk is
+     * shipping nothing" is visible before the walk rather than after it.
+     */
+    private val telemetry: LabTelemetryShipper,
 ) : StateScreenModel<LabConsoleState>(LabConsoleState()) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -147,6 +156,10 @@ class LabConsoleScreenModel(
         uploader.lastReport
             .onEach { mutableState.value = mutableState.value.copy(lastFlush = it) }
             .launchIn(screenModelScope)
+
+        telemetry.posture
+            .onEach { mutableState.value = mutableState.value.copy(telemetry = it) }
+            .launchIn(screenModelScope)
     }
 
     fun onEvent(event: LabConsoleEvent) {
@@ -246,6 +259,9 @@ class LabConsoleScreenModel(
             is LabConsoleEvent.UpdateWaypointCode ->
                 mutableState.value = mutableState.value.copy(waypointCode = event.value)
 
+            is LabConsoleEvent.UpdateSurveyAnchor ->
+                mutableState.value = mutableState.value.copy(surveyAnchor = event.value)
+
             is LabConsoleEvent.MarkWaypoint -> screenModelScope.launch {
                 markWaypoint(event.code ?: mutableState.value.pendingWaypointCode)
             }
@@ -298,7 +314,14 @@ class LabConsoleScreenModel(
             return
         }
         val code = state.pendingWaypointCode
-        instrument.markWaypoint(code)
+        // Same anchor rule as the plain waypoint: a dwell is a waypoint plus a condition edge, and
+        // an anchor typed for the card the operator is standing on belongs to that fix.
+        state.anchorError?.let {
+            message("dwell refused: $it")
+            return
+        }
+        val anchor = state.pendingAnchor
+        instrument.markWaypoint(code, anchor = anchor)
             .onFailure {
                 message("dwell refused: ${it.message}")
                 return
@@ -312,6 +335,9 @@ class LabConsoleScreenModel(
         mutableState.value = mutableState.value.copy(
             dwellCode = code,
             dwellStartedMonotonicNanos = monotonicNanos(),
+            // Cleared for the reason in [markWaypoint]: an anchor left in the field would attach
+            // this card's tape measurement to the next one.
+            surveyAnchor = if (anchor != null) "" else mutableState.value.surveyAnchor,
         )
         message("dwelling on $code — stand still until you end it")
         refreshWaypoints()
@@ -333,16 +359,39 @@ class LabConsoleScreenModel(
 
     // ---- waypoints -------------------------------------------------------------------------
 
+    /**
+     * Record one waypoint, with the typed survey anchor when there is one.
+     *
+     * TWO RULES, both about the anchor, both learned the expensive way:
+     *
+     * 1. **An unparseable anchor refuses the waypoint.** Recording it without the anchor would leave
+     *    the operator believing the transform is pinned when it is not, and that is discovered in
+     *    analysis, weeks later, with the cards already in the register.
+     * 2. **A recorded anchor clears the field.** A sticky anchor would silently attach the same
+     *    ground truth to the next card — and a wrong anchor does not cost one point, it biases every
+     *    position the fit produces.
+     */
     private suspend fun markWaypoint(code: String) {
-        instrument.markWaypoint(code)
+        val anchor = mutableState.value.pendingAnchor
+        mutableState.value.anchorError?.let {
+            message("waypoint refused: $it")
+            return
+        }
+        instrument.markWaypoint(code, anchor = anchor)
             .onSuccess { payload ->
                 message(
-                    if (payload.pose == null) {
-                        "waypoint ${payload.code} — no pose (nothing is tracking)"
-                    } else {
-                        "waypoint ${payload.code} recorded"
+                    when {
+                        payload.anchor != null ->
+                            "waypoint ${payload.code} recorded, ANCHORED at " +
+                                "(${payload.anchor.x}, ${payload.anchor.y})"
+
+                        payload.pose == null -> "waypoint ${payload.code} — no pose (nothing is tracking)"
+                        else -> "waypoint ${payload.code} recorded"
                     }
                 )
+                if (anchor != null) {
+                    mutableState.value = mutableState.value.copy(surveyAnchor = "")
+                }
                 refreshWaypoints()
             }
             .onFailure { message("waypoint refused: ${it.message}") }
@@ -390,6 +439,7 @@ class LabConsoleScreenModel(
             x = decoded?.pose?.x,
             z = decoded?.pose?.z,
             quality = TrackingQuality.fromWire(decoded?.pose?.quality),
+            anchor = decoded?.anchor,
         )
     }
 

@@ -860,6 +860,14 @@ class LabInstrument(
         annotation: String? = null,
         room: String? = null,
         targetKind: String? = null,
+        /**
+         * A surveyed site-frame coordinate for this code, when the operator has one in hand.
+         *
+         * The walk's session frame is metric and internally consistent but arbitrarily placed. Two
+         * of these fix its placement, three give it a residual, and every other waypoint then rides
+         * the same transform into the building. See [WaypointAnchor].
+         */
+        anchor: WaypointAnchor? = null,
     ): Result<WaypointMarkerPayload> {
         val sessionId = _state.value.sessionId?.takeIf { it.isNotEmpty() }
             ?: return Result.failure(IllegalStateException("no running session to place a waypoint in"))
@@ -873,6 +881,7 @@ class LabInstrument(
             pose = pose?.let { WaypointPose.of(it) },
             room = room?.trim()?.ifBlank { null },
             targetKind = targetKind?.trim()?.ifBlank { null },
+            anchor = anchor,
         )
         mark(
             kind = SessionMarker.Kind.WAYPOINT,
@@ -881,12 +890,23 @@ class LabInstrument(
             payload = json.encodeToString(WaypointMarkerPayload.serializer(), payload),
         )
         note(
-            if (pose == null) {
-                "waypoint $trimmed — no pose (nothing is tracking)"
-            } else {
-                "waypoint $trimmed at " +
-                    "(${format(pose.x.toDouble())}, ${format(pose.z.toDouble())}) m, " +
-                    "tracking ${pose.quality.wire}"
+            buildString {
+                append(
+                    if (pose == null) {
+                        "waypoint $trimmed — no pose (nothing is tracking)"
+                    } else {
+                        "waypoint $trimmed at " +
+                            "(${format(pose.x.toDouble())}, ${format(pose.z.toDouble())}) m, " +
+                            "tracking ${pose.quality.wire}"
+                    }
+                )
+                // Echoed into the instrument log, which is uploaded as `log.tsv`. An anchor typed
+                // wrong is the one error in this path that silently biases every card position the
+                // fit produces, so the number that was accepted is written down where the operator
+                // can read it back on the spot.
+                anchor?.let {
+                    append(" — ANCHOR (${format(it.x)}, ${format(it.y)}) site frame, ${it.source}")
+                }
             }
         )
         return Result.success(payload)

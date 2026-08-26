@@ -11,6 +11,8 @@ import sk.martinvanco.monad.lab.domain.LabArtefact
 import sk.martinvanco.monad.lab.domain.upload.ArtefactOutcome
 import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
 import sk.martinvanco.monad.lab.domain.upload.FlushReport
+import sk.martinvanco.monad.lab.domain.upload.PartTag
+import sk.martinvanco.monad.lab.domain.upload.PartedUpload
 import sk.martinvanco.monad.lab.domain.upload.PendingInventory
 import sk.martinvanco.monad.lab.domain.upload.RetryPolicy
 import sk.martinvanco.monad.lab.domain.upload.TallyOutcome
@@ -40,6 +42,16 @@ import sk.martinvanco.monad.lab.domain.upload.TallyOutcome
  *   construction and displayed anyway — a claim nobody displays is a claim nobody checks.
  * - **Pending inventory per artefact**, so "3 sessions pending" can be read as the rows it actually
  *   is.
+ *
+ * A fourth was added after the 2026-08-26 survey walk:
+ *
+ * - **Large artefacts go up in parts.** Nine artefacts uploaded and two did not — `mesh.ply`
+ *   (102.94 MB) and `worldmap.armap` (30.05 MB) — with no error in the app, the backend or the
+ *   bucket. The socket dropped mid-body and all four retries restarted the same doomed request, so
+ *   the walk's most expensive artefact was lost while `mesh.tsv` (its 4 874-row observation log)
+ *   uploaded cleanly and made the loss look like a device with no LiDAR. Anything at or above
+ *   [PartedUpload.THRESHOLD_BYTES] is now cut into parts and **a retry re-sends one part**, which is
+ *   the property that fixes it — see [attemptInParts].
  */
 class LabSessionUploader(
     private val repository: LabSessionRepository,
@@ -299,11 +311,38 @@ class LabSessionUploader(
         // `rows = 1`: a PLY is one artefact, not a row count. Reporting its size as rows would put a
         // vertex count into a column that every other line uses for records.
         for (blob in repository.blobs(sessionId)) {
-            val sent = step(blob.name, rows = 1, contentType = blob.contentType) {
-                repository.blobBytes(sessionId, blob.name)
-                    ?: throw IllegalStateException("blob ${blob.name} vanished between listing and read")
+            // Parted above the threshold, one body below it. The mesh and the world map are the only
+            // artefacts this app has ever written that exceed it; the branch is on measured size
+            // rather than on the artefact's name, so a future large artefact is covered by default.
+            val outcome = if (blob.sizeBytes >= PartedUpload.THRESHOLD_BYTES) {
+                attemptInParts(
+                    sessionId = sessionId,
+                    artefact = blob.name,
+                    totalBytes = blob.sizeBytes,
+                    contentType = blob.contentType,
+                    token = token,
+                    participantId = record.participantId,
+                    site = record.site.orEmpty(),
+                )
+            } else {
+                attempt(
+                    sessionId = sessionId,
+                    artefact = blob.name,
+                    rows = 1,
+                    content = repository.blobBytes(sessionId, blob.name)
+                        ?: ByteArray(0),
+                    contentType = blob.contentType,
+                    token = token,
+                    participantId = record.participantId,
+                    site = record.site.orEmpty(),
+                )
             }
-            if (!sent) return outcomes
+            outcomes += outcome
+            if (!outcome.succeeded) {
+                repository.markFailed(sessionId, "${blob.name}: ${outcome.error}")
+                Napier.w("[lab] session $sessionId upload failed at ${blob.name}, data retained")
+                return outcomes
+            }
         }
 
         val sidecarOutcome = attempt(
@@ -374,18 +413,7 @@ class LabSessionUploader(
             val error = result.exceptionOrNull()
             lastError = error?.message ?: error?.let { it::class.simpleName } ?: "unknown"
             Napier.w("[lab] $artefact attempt $attemptNumber/${retry.maxAttempts} failed: $lastError")
-            runCatching {
-                telemetry?.reportUploadFailure(
-                    sessionId = sessionId,
-                    participant = participantId,
-                    site = site,
-                    artefact = artefact,
-                    bytes = content.size,
-                    attempt = attemptNumber,
-                    maxAttempts = retry.maxAttempts,
-                    error = lastError,
-                )
-            }
+            report(sessionId, participantId, site, artefact, content.size, attemptNumber, lastError)
         }
         return ArtefactOutcome(
             sessionId = sessionId,
@@ -396,6 +424,172 @@ class LabSessionUploader(
             succeeded = false,
             error = lastError,
         )
+    }
+
+    /**
+     * One large artefact, in parts, with the retry budget spent **per part**.
+     *
+     * THE PROPERTY THAT MATTERS is not "multipart", it is the unit of loss. [attempt] retries a
+     * whole body, so on 2026-08-26 four attempts at a 103 MB `mesh.ply` were four attempts at the
+     * same doomed transfer — the socket dropped somewhere in the middle each time and nothing was
+     * kept. Here a dropped connection costs one part, the retry re-sends that part, and the parts
+     * already acknowledged stay acknowledged.
+     *
+     * Three further decisions, each load-bearing:
+     *
+     * - **Parts are read one at a time** (`repository.blobSlice`). Loading the artefact whole to cut
+     *   it up would put 103 MB on the heap of a phone that is also running ARKit and the camera,
+     *   which is the memory profile the parted path exists to avoid.
+     * - **A give-up aborts the upload.** Abandoned parts stay in the object store, are billed, and
+     *   never appear in a listing, so the abort is part of the protocol rather than tidy-up. It is
+     *   best-effort: a phone that has lost the network cannot abort either, and failing the artefact
+     *   twice would tell the operator nothing new.
+     * - **Resumption is within one flush, not across app restarts.** A killed process starts the
+     *   artefact again from part one. That is stated rather than hidden: the bytes are still on disk,
+     *   the realistic field failure is a Wi-Fi handover mid-flush, and persisting a part manifest
+     *   would buy the killed-process case at the price of a schema migration and a second source of
+     *   truth about what the store holds.
+     */
+    private suspend fun attemptInParts(
+        sessionId: String,
+        artefact: String,
+        totalBytes: Long,
+        contentType: String,
+        token: String,
+        participantId: String,
+        site: String,
+    ): ArtefactOutcome {
+        _progress.value = _progress.value?.copy(artefact = artefact)
+
+        val opened = runCatching {
+            sink.beginParts(
+                sessionId = sessionId,
+                participantId = participantId,
+                artefact = artefact,
+                totalBytes = totalBytes,
+                contentType = contentType,
+                token = token,
+            )
+        }
+        val upload = opened.getOrElse { error ->
+            val reason = error.message ?: error::class.simpleName ?: "unknown"
+            Napier.w("[lab] $artefact could not open a parted upload: $reason")
+            report(sessionId, participantId, site, artefact, totalBytes.toInt(), 1, reason)
+            return ArtefactOutcome(
+                sessionId = sessionId,
+                artefact = artefact,
+                rows = 1,
+                bytes = 0,
+                attempts = 1,
+                succeeded = false,
+                error = "parted upload refused at open: $reason",
+            )
+        }
+
+        val spans = upload.plan(PartedUpload.PART_BYTES)
+        val tags = mutableListOf<PartTag>()
+        var sentBytes = 0
+
+        for (span in spans) {
+            var lastError: String? = null
+            var tag: PartTag? = null
+            for (attemptNumber in 1..retry.maxAttempts) {
+                val wait = retry.delayBeforeMillis(attemptNumber)
+                if (wait > 0) delay(wait)
+                val slice = runCatching {
+                    repository.blobSlice(sessionId, artefact, span.offset, span.length)
+                        ?: throw IllegalStateException("$artefact vanished between listing and read")
+                }
+                val result = slice.mapCatching { bytes ->
+                    sink.putPart(upload, span.number, span.isLast, bytes, token).also {
+                        sentBytes += bytes.size
+                    }
+                }
+                if (result.isSuccess) {
+                    tag = result.getOrThrow()
+                    break
+                }
+                val error = result.exceptionOrNull()
+                lastError = error?.message ?: error?.let { it::class.simpleName } ?: "unknown"
+                Napier.w(
+                    "[lab] $artefact part ${span.number}/${spans.size} attempt " +
+                        "$attemptNumber/${retry.maxAttempts} failed: $lastError"
+                )
+                report(sessionId, participantId, site, artefact, span.length, attemptNumber, lastError)
+            }
+            if (tag == null) {
+                // Abort before returning, so the parts already in the store do not become invisible
+                // billed residue. Best-effort by construction — see the doc above.
+                runCatching { sink.abortParts(upload, token) }
+                    .onFailure { Napier.w("[lab] $artefact abort also failed: ${it.message}") }
+                return ArtefactOutcome(
+                    sessionId = sessionId,
+                    artefact = artefact,
+                    rows = 1,
+                    bytes = sentBytes,
+                    attempts = retry.maxAttempts,
+                    succeeded = false,
+                    error = "part ${span.number} of ${spans.size}: $lastError",
+                )
+            }
+            tags += tag
+        }
+
+        val sealed = runCatching { sink.completeParts(upload, tags, token) }
+        if (sealed.isFailure) {
+            val error = sealed.exceptionOrNull()
+            val reason = error?.message ?: error?.let { it::class.simpleName } ?: "unknown"
+            // A completion that fails leaves the parts in place with no object over them. Abort, so
+            // the next flush starts clean rather than inheriting an upload nothing will ever seal.
+            runCatching { sink.abortParts(upload, token) }
+                .onFailure { Napier.w("[lab] $artefact abort after failed completion: ${it.message}") }
+            report(sessionId, participantId, site, artefact, sentBytes, retry.maxAttempts, reason)
+            return ArtefactOutcome(
+                sessionId = sessionId,
+                artefact = artefact,
+                rows = 1,
+                bytes = sentBytes,
+                attempts = retry.maxAttempts,
+                succeeded = false,
+                error = "parted upload refused at completion: $reason",
+            )
+        }
+
+        Napier.i("[lab] $artefact uploaded in ${tags.size} part(s), $sentBytes byte(s)")
+        return ArtefactOutcome(
+            sessionId = sessionId,
+            artefact = artefact,
+            rows = 1,
+            bytes = sentBytes,
+            // The parts, not the attempts: "13" here means the artefact was cut thirteen ways, which
+            // is what an operator reading a flush report of a mesh wants to know.
+            attempts = tags.size,
+            succeeded = true,
+        )
+    }
+
+    /** Ship one failing attempt to the LGTM stack. Never fatal — a courier cannot fail a flush. */
+    private suspend fun report(
+        sessionId: String,
+        participantId: String,
+        site: String,
+        artefact: String,
+        bytes: Int,
+        attempt: Int,
+        error: String?,
+    ) {
+        runCatching {
+            telemetry?.reportUploadFailure(
+                sessionId = sessionId,
+                participant = participantId,
+                site = site,
+                artefact = artefact,
+                bytes = bytes,
+                attempt = attempt,
+                maxAttempts = retry.maxAttempts,
+                error = error,
+            )
+        }
     }
 
     private companion object {

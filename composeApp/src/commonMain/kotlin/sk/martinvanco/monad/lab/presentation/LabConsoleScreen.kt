@@ -237,6 +237,17 @@ private fun WalkPanel(state: LabConsoleState, model: LabConsoleScreenModel) = Pa
             color = MaterialTheme.colorScheme.error,
         )
     }
+    // Beside it, and not inside the mesh panel, because the mesh panel is below the fold on a walk.
+    // A phone that has LiDAR and is exporting nothing is the failure that cost the 2026-08-26 walk
+    // its room, and it is only fixable while the operator is still in the building.
+    state.meshWarning?.let {
+        Text(
+            it,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
 
     // What the tracking camera sees. The operator reading this console is why walk A's camera
     // stared at carpet; a preview held so it shows the room ahead is the fix, made visible.
@@ -289,18 +300,11 @@ private fun WalkPanel(state: LabConsoleState, model: LabConsoleScreenModel) = Pa
             state.config.site.ifBlank { "unset — walks cannot be placed on a floor" },
             warn = state.config.site.isBlank(),
         )
-        // Whether this walk will be visible on the dashboard while it runs. Silence from a
-        // handset is indistinguishable from a handset that is fine, so an operator about to
-        // walk out of the room should know which of the two they are about to be.
-        KeyValue(
-            "telemetry",
-            if (state.config.telemetry.isConfigured) {
-                "live — health streams to the lab collector"
-            } else {
-                "off — this walk will be invisible until it uploads"
-            },
-            warn = !state.config.telemetry.isConfigured,
-        )
+        // Whether this walk will be visible on the dashboard while it runs. Read from the
+        // COURIER rather than from the bundle field, and that is the fix: on 2026-08-26 the
+        // bundle on the server was correct and the handset shipped nothing for 21 minutes,
+        // so a row that reports the config cannot distinguish "configured" from "working".
+        KeyValue("telemetry", state.telemetry.line, warn = !state.telemetry.configured)
     }
 
     // Setup is an idle activity. Mid-walk these rows are all disabled — six lines of grey that
@@ -604,8 +608,12 @@ private fun MeshPanel(state: LabConsoleState) = Panel("mesh") {
         Note("Geometry comes with the trajectory. Switch on \"record trajectory\" to scan the room.")
         return@Panel
     }
+    // Two sources, deliberately. `depthAssisted` is what THIS SESSION configured; `meshExpected`
+    // is what the DEVICE can do, read from the tracker's diagnostics and answerable with nothing
+    // running. A reader needs both, because "no LiDAR" and "LiDAR that produced nothing" were
+    // indistinguishable on 2026-08-26 and the second one is a defect.
     val depth = state.poseReport?.depthAssisted
-    if (depth == false) {
+    if (depth == false || (state.poseReport == null && !state.meshExpected)) {
         Note(
             "No LiDAR on this device, so no geometry. The trajectory and the waypoints are unaffected — " +
                 "tracking is camera and IMU only and drifts further."
@@ -626,8 +634,9 @@ private fun MeshPanel(state: LabConsoleState) = Panel("mesh") {
     }
     if (state.isRunning && !state.mesh.hasGeometry) {
         Note(
-            "Nothing scanned yet. Scene reconstruction needs a few seconds and a surface within a few " +
-                "metres — point the phone at a wall rather than down a corridor."
+            state.meshWarning
+                ?: "Nothing scanned yet. Scene reconstruction needs a few seconds and a surface " +
+                "within a few metres — point the phone at a wall rather than down a corridor."
         )
     }
     Note(
@@ -661,10 +670,23 @@ private fun WaypointPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
     }
 
     KeyValue("recorded", state.waypoints.size.toString(), warn = state.waypoints.size < 3)
+    // ANCHORS, counted separately from waypoints, because they are the only thing on this screen
+    // whose absence cannot be repaired later. Twenty-three waypoints with no anchor is a shape with
+    // no place — which is exactly what the 2026-08-26 walk produced, and it took a tape measure and
+    // a second walk to fix. Two pin the transform, three give it a residual.
+    val anchors = state.waypoints.count { it.anchor != null }
+    KeyValue("anchored", "$anchors of ${state.waypoints.size}", warn = anchors < 2)
     if (state.waypoints.size < 3) {
         Note(
             "Under three waypoints the trajectory has a shape and no place: the transform into the " +
                 "building's frame is not determined and the drift between fixes is unbounded."
+        )
+    }
+    if (anchors < 2) {
+        Note(
+            "No site frame yet. Type a surveyed coordinate below at two cards you have measured " +
+                "with a tape, as far apart as possible. Without them every position this walk " +
+                "produces is relative to wherever tracking happened to start."
         )
     }
 
@@ -714,11 +736,49 @@ private fun WaypointPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
         modifier = Modifier.fillMaxWidth(),
     )
 
+    // ── The survey anchor ─────────────────────────────────────────────────────────────────────
+    //
+    // The field that turns a walk into a survey. The session frame is metric and internally
+    // consistent — 99.91 % tracking over 235 m on 2026-08-26 — but arbitrarily placed, so two typed
+    // coordinates fix its placement and three give it a residual per card. Before this field the
+    // anchors were written on paper and re-entered afterwards: a step that gets skipped and a number
+    // that gets transcribed wrong, both invisible until every card is already in the register.
+    //
+    // Empty is the normal case. Most cards are targets of the transform, not anchors for it.
+    OutlinedTextField(
+        value = state.surveyAnchor,
+        onValueChange = { model.onEvent(LabConsoleEvent.UpdateSurveyAnchor(it)) },
+        label = { Text("surveyed site position, metres — e.g. 12.34, 5.67", fontSize = 10.sp) },
+        singleLine = true,
+        isError = state.anchorError != null,
+        supportingText = {
+            state.anchorError?.let { Text(it, fontSize = 9.sp, color = MaterialTheme.colorScheme.error) }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (state.pendingAnchor != null) {
+        Note(
+            "This card will be recorded as an ANCHOR. Stand so the phone is directly at the " +
+                "sticker's horizontal position, the same way at every anchor — a consistent offset " +
+                "does not average out, it shifts the whole fit."
+        )
+    }
+
     Button(
         onClick = { model.onEvent(LabConsoleEvent.MarkWaypoint()) },
-        enabled = !state.isBusy && !state.isDwelling,
+        // An unparseable anchor disables the button rather than recording the waypoint without it.
+        // The screen model refuses too; this is so the operator sees WHY before pressing.
+        enabled = !state.isBusy && !state.isDwelling && state.anchorError == null,
         modifier = Modifier.fillMaxWidth(),
-    ) { Text("Record ${state.pendingWaypointCode}") }
+    ) {
+        Text(
+            if (state.pendingAnchor != null) {
+                "Record ${state.pendingWaypointCode} as anchor"
+            } else {
+                "Record ${state.pendingWaypointCode}"
+            }
+        )
+    }
 
     // The stationary probe arm: stand on a card, hold, end. Records the waypoint AND brackets the
     // interval with dwell markers, so the analysis reads the CSI statistic against a fixed position
@@ -738,9 +798,17 @@ private fun WaypointPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
     } else {
         OutlinedButton(
             onClick = { model.onEvent(LabConsoleEvent.StartDwell) },
-            enabled = !state.isBusy,
+            enabled = !state.isBusy && state.anchorError == null,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Dwell on ${state.pendingWaypointCode}") }
+        ) {
+            Text(
+                if (state.pendingAnchor != null) {
+                    "Dwell on ${state.pendingWaypointCode} (anchor)"
+                } else {
+                    "Dwell on ${state.pendingWaypointCode}"
+                }
+            )
+        }
     }
 
     if (state.isScanning) {
@@ -800,6 +868,18 @@ private fun WaypointPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
                         MaterialTheme.colorScheme.error
                     },
                 )
+                // The anchor, printed back. An anchor typed wrong biases every card position the
+                // fit produces rather than one point, so it is worth reading off the screen while
+                // the tape is still in hand.
+                row.anchor?.let { anchor ->
+                    Text(
+                        "ANCHOR site (${format(anchor.x)}, ${format(anchor.y)}) m  ${anchor.source}",
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             OutlinedButton(onClick = { model.onEvent(LabConsoleEvent.MarkWaypoint(row.code)) }) {
                 Text("again", fontSize = 10.sp)

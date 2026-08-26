@@ -279,9 +279,29 @@ class LabSessionRepository(
         }
     }
 
-    /** One artefact's bytes, loaded on demand — the upload path's only reason to hold a mesh. */
+    /** One artefact's bytes, loaded on demand — the instrument's read of its own mesh. */
     suspend fun blobBytes(sessionId: String, name: String): ByteArray? = withContext(Dispatchers.IO) {
         samples.selectBlobBytes(sessionId, name).executeAsOneOrNull()
+    }
+
+    /**
+     * One byte range of one artefact — what the parted upload path reads.
+     *
+     * The whole reason it exists: `mesh.ply` reached 102.94 MB on the 2026-08-26 survey walk, and
+     * [blobBytes] would put all of it on the heap of a phone that is also running ARKit and the
+     * camera. A parted upload needs one part at a time, so it reads one part at a time.
+     *
+     * [offset] is 0-based. SQLite's `substr` is 1-based and the query adds the one, so no caller
+     * has to remember which convention it is in.
+     */
+    suspend fun blobSlice(
+        sessionId: String,
+        name: String,
+        offset: Long,
+        length: Int,
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        samples.selectBlobSlice(offset = offset, length = length.toLong(), sessionId = sessionId, name = name)
+            .executeAsOneOrNull()
     }
 
     /** The recorder port's read — same query, named for the one thing the instrument reads. */

@@ -55,6 +55,13 @@ class PreflightService(
     private val broadcaster: IdentityBroadcaster,
     private val poseTracker: PoseTracker,
     private val referenceClock: ReferenceClock,
+    /**
+     * The telemetry courier, read for its posture.
+     *
+     * Not probed: the shipper is the only thing that knows whether the bundle named an endpoint,
+     * and its by-design silence when it did not is what made a whole walk invisible on 2026-08-26.
+     */
+    private val telemetry: LabTelemetryShipper,
 ) {
 
     /**
@@ -98,6 +105,7 @@ class PreflightService(
             referenceClock = reference,
             broadcast = probeBroadcast(config),
             tracker = probeTracker(trackRequested),
+            telemetry = telemetry.posture.value,
             storage = StorageProbe(
                 availableBytes = runCatching { availableStorageBytes() }.getOrDefault(0L),
                 totalBytes = runCatching { totalStorageBytes() }.getOrDefault(0L),
@@ -189,27 +197,68 @@ class PreflightService(
         )
     }
 
-    /** Runtime odometry availability. Never starts a session — [PoseTracker.probe] does not. */
+    /**
+     * Runtime odometry availability, and whether this device exports room geometry.
+     *
+     * Never starts a session — [PoseTracker.probe] does not, and the mesh answer comes off the
+     * tracker's own diagnostics rather than from a scan.
+     *
+     * The mesh half is read from a **diagnostics line** rather than from a flag, for the same reason
+     * the advertiser's posture is: the platforms disagree about what "has depth" means in ways a
+     * boolean cannot carry, and the tracker already prints the one sentence that settles it. Null
+     * when the build prints nothing, which is a third answer and not a no — a missing mesh afterwards
+     * is otherwise indistinguishable from a device that never had LiDAR.
+     */
     private suspend fun probeTracker(requested: Boolean): TrackerProbe {
         if (!requested) return TrackerProbe.NOT_REQUESTED
+        val mesh = meshAvailability()
         return when (val availability = runCatching { poseTracker.probe() }.getOrNull()) {
-            is LabSensorModule.Availability.Available ->
-                TrackerProbe(requested = true, available = true, detail = "pose tracking available")
+            is LabSensorModule.Availability.Available -> TrackerProbe(
+                requested = true,
+                available = true,
+                detail = "pose tracking available",
+                meshAvailable = mesh,
+            )
 
             is LabSensorModule.Availability.NeedsPermission -> TrackerProbe(
                 requested = true,
                 available = false,
                 detail = "pose tracking needs the ${availability.permission} permission",
+                meshAvailable = mesh,
             )
 
-            is LabSensorModule.Availability.Unsupported ->
-                TrackerProbe(requested = true, available = false, detail = availability.reason)
+            is LabSensorModule.Availability.Unsupported -> TrackerProbe(
+                requested = true,
+                available = false,
+                detail = availability.reason,
+                meshAvailable = mesh,
+            )
 
             null -> TrackerProbe(
                 requested = true,
                 available = false,
                 detail = "the tracker could not be probed on this build",
+                meshAvailable = mesh,
             )
+        }
+    }
+
+    /**
+     * Whether this device says it reconstructs room geometry. Null when it says nothing.
+     *
+     * Matches on the diagnostics key the tracker prints (`LiDAR scene reconstruction: …`). A rename
+     * there turns a definite answer into a null, which is the safe direction: the check then warns
+     * that the platform did not say, rather than claiming a device has no LiDAR.
+     */
+    private fun meshAvailability(): Boolean? {
+        val line = runCatching { poseTracker.diagnostics() }
+            .getOrDefault(emptyList())
+            .firstOrNull { it.startsWith(MESH_DIAGNOSTIC_KEY) }
+            ?: return null
+        return when {
+            line.contains("available") -> true
+            line.contains("absent") -> false
+            else -> null
         }
     }
 
@@ -285,6 +334,9 @@ class PreflightService(
     }
 
     private companion object {
+        /** The tracker's own key for the depth answer. Mirrored, not duplicated — see [meshAvailability]. */
+        const val MESH_DIAGNOSTIC_KEY = "LiDAR scene reconstruction:"
+
         /** Enough to exceed G4's two-sample threshold and leave one over for a residual. */
         const val PROBE_BURSTS = 3
 

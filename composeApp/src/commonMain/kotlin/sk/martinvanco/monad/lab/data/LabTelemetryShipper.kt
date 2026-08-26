@@ -10,6 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -23,6 +26,7 @@ import sk.martinvanco.monad.lab.domain.LabInstrument
 import sk.martinvanco.monad.lab.domain.TelemetrySink
 import sk.martinvanco.monad.lab.domain.monotonicNanos
 import sk.martinvanco.monad.lab.domain.health.InstrumentHealth
+import sk.martinvanco.monad.lab.domain.TelemetryPosture
 import sk.martinvanco.monad.lab.domain.health.StreamHealth
 
 /**
@@ -61,6 +65,18 @@ import sk.martinvanco.monad.lab.domain.health.StreamHealth
  * experiment and this is a courier: a courier that could fail a walk would be worse than no courier.
  * Every network call is wrapped, and a failure costs a log line.
  *
+ * IT IS SILENT ABOUT THE HOST, NOT ABOUT ITSELF
+ * ---------------------------------------------
+ * An unconfigured deployment must not produce a phone retrying a host that was never meant to exist.
+ * That reasoning was and is right, and the consequence was not: on 2026-08-26 a 21-minute survey
+ * walk produced **zero** `{service_name="monad-app"}` lines in Loki while `log.tsv` uploaded
+ * normally, and nothing anywhere said the courier had no endpoint. An unconfigured shipper looked
+ * exactly like a working one, so the walk was unobservable until it uploaded — which is precisely
+ * the case a lost upload cannot satisfy, and that walk lost its mesh.
+ *
+ * So [posture] is published, and the absence of an endpoint is stated **once** at start rather than
+ * per flush. Silence about a host is correct; silence about the courier's own state is the failure.
+ *
  * It also does not promise delivery. The buffer is capped at [MAX_BUFFERED]; when it overflows the
  * OLDEST sample is evicted and counted. That is the right direction for liveness — the newest sample
  * is the valuable one — and the count travels in the flush as `dropped`, so a gap is recorded rather
@@ -91,6 +107,16 @@ class LabTelemetryShipper(
     private val buffer = TelemetrySampleBuffer(MAX_BUFFERED)
     private val lock = Mutex()
 
+    /**
+     * What this courier is doing, for the console.
+     *
+     * Published rather than inferred from Loki, because the one question that could not be answered
+     * on 2026-08-26 was "is the shipper even configured?" — and the answer lived only in a bundle
+     * field nothing displayed.
+     */
+    private val _posture = MutableStateFlow(TelemetryPosture.UNKNOWN)
+    val posture: StateFlow<TelemetryPosture> = _posture.asStateFlow()
+
     private var collectJob: Job? = null
     private var flushJob: Job? = null
 
@@ -117,6 +143,24 @@ class LabTelemetryShipper(
      */
     fun start() {
         if (collectJob != null) return
+
+        // Announced ONCE, at start, and not per flush. A configured deployment gets one line naming
+        // the endpoint; an unconfigured one gets one line saying so, which is the line whose absence
+        // made a whole walk invisible on 2026-08-26. Repeating it per flush would be the retry noise
+        // the silence rule exists to avoid.
+        scope.launch {
+            val sink = configService.config.value.telemetry
+            _posture.value = TelemetryPosture(configured = sink.isConfigured, endpoint = sink.endpoint)
+            if (sink.isConfigured) {
+                Napier.i("[lab-telemetry] shipping to ${sink.endpoint} every ${sink.flushMillis / 1000} s")
+            } else {
+                Napier.w(
+                    "[lab-telemetry] NOT CONFIGURED — the lab bundle carries no telemetry endpoint, " +
+                        "so this handset is invisible on the dashboard until a session uploads. " +
+                        "Refetch the bundle from the lab console."
+                )
+            }
+        }
 
         collectJob = scope.launch {
             instrument.health.collect { health ->
@@ -257,10 +301,18 @@ class LabTelemetryShipper(
     private suspend fun flush() {
         val sink = configService.config.value.telemetry
         if (!sink.isConfigured) {
-            // No public collector in this deployment. Staying silent is correct: a bench build
-            // retrying a host that was never meant to exist is pure noise, and the samples stay
-            // buffered in case a bundle arrives mid-session.
+            // No public collector in this deployment. Staying silent on the WIRE is correct: a bench
+            // build retrying a host that was never meant to exist is pure noise, and the samples stay
+            // buffered in case a bundle arrives mid-session. The posture is still published, because
+            // that is a fact about this app rather than a request to a host.
+            _posture.value = _posture.value.copy(configured = false, endpoint = "")
             return
+        }
+        if (!_posture.value.configured) {
+            // A bundle arrived mid-run. Worth one line: the operator pressed Reload config and needs
+            // to know whether it took.
+            Napier.i("[lab-telemetry] endpoint appeared mid-run: ${sink.endpoint}")
+            _posture.value = _posture.value.copy(configured = true, endpoint = sink.endpoint)
         }
 
         // Drained under the lock rather than copied, so the in-flight samples are not also sitting in
@@ -292,7 +344,26 @@ class LabTelemetryShipper(
             TelemetryEncoder.logs(payload)?.let { send(sink, LOGS_PATH, it) }
         } catch (e: Throwable) {
             lock.withLock { buffer.restore(payload.samples, payload.dropped) }
+            _posture.value = _posture.value.copy(
+                configured = true,
+                endpoint = sink.endpoint,
+                lastError = e.message ?: e::class.simpleName ?: "unknown",
+            )
             throw e
+        }
+
+        _posture.value = _posture.value.let {
+            it.copy(
+                configured = true,
+                endpoint = sink.endpoint,
+                flushes = it.flushes + 1,
+                samplesShipped = it.samplesShipped + payload.samples.size,
+                dropped = it.dropped + payload.dropped,
+                lastFlushWallMillis = currentTimeMillis(),
+                // lastError is NOT cleared. The bench question is "has this ever failed", and a
+                // field one lucky flush wipes cannot answer it.
+                lastError = it.lastError,
+            )
         }
     }
 

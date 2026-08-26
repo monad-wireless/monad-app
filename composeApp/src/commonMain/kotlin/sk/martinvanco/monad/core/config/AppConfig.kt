@@ -49,6 +49,18 @@ object AppConfig {
     const val UPLOAD_REQUEST_TIMEOUT = 3_000_000L
 
     /**
+     * Request timeout for ONE part of a multipart artefact upload.
+     *
+     * Bounded work deserves a bounded clock. [UPLOAD_REQUEST_TIMEOUT] covers a whole artefact, so a
+     * 103 MB `mesh.ply` on a stalled connection could sit for fifty minutes before the client
+     * noticed anything was wrong — and the 2026-08-26 survey walk lost that artefact to a dropped
+     * socket that nobody saw. A part is at most a few megabytes, so five minutes is generous even on
+     * a bad uplink, and a part that exceeds it is a stall rather than a slow transfer: the retry
+     * re-sends that one part instead of the whole file.
+     */
+    const val UPLOAD_PART_TIMEOUT = 300_000L
+
+    /**
      * Marketing version of this build, e.g. `1.2.0`.
      *
      * Not a constant of this file any more, and deliberately so. It used to say `0.3.0-lab` while
