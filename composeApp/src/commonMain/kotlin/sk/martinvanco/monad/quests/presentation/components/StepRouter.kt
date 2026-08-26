@@ -92,6 +92,15 @@ fun StepRouter(
             )
         }
 
+        TaskType.OBSERVE -> {
+            ObserveStep(
+                stepNumber = stepNumber,
+                task = task,
+                onComplete = onComplete,
+                modifier = modifier
+            )
+        }
+
         TaskType.CONNECT_TO_AP -> {
             ConnectToApStep(
                 stepNumber = stepNumber,

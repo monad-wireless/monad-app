@@ -29,8 +29,6 @@ class OnboardingScreenModel(
                 goToNextPage()
             }
             OnboardingStep.BLUETOOTH,
-            OnboardingStep.LOCATION,
-            OnboardingStep.BACKGROUND_LOCATION,
             OnboardingStep.CAMERA -> {
                 val permission = currentState.currentStep.permission ?: return
                 if (permission in currentState.grantedPermissions) {

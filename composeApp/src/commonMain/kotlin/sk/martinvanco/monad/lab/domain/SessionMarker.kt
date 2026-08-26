@@ -121,6 +121,20 @@ data class SessionMarker(
 
         /** The operator finished the dwell. Payload adds the measured duration. */
         DWELL_END,
+
+        /**
+         * A person looked up and counted the people they could see (IP-140).
+         *
+         * The only marker in this stream that is a claim about **people** rather
+         * than about the instrument. Every other channel counts phones, and shares
+         * one blind spot: anybody not carrying the app. A human count does not, so
+         * the disagreement between this number and the BLE count is not an error to
+         * reconcile — it is the penetration bias, and measuring it is the point.
+         *
+         * `step_id` carries the reading's index within its step; the payload is a
+         * [HeadcountMarkerPayload].
+         */
+        HEADCOUNT,
         ;
 
         val wire: String
@@ -138,6 +152,7 @@ data class SessionMarker(
                 POSE_RESUMED -> "pose_resumed"
                 DWELL_START -> "dwell_start"
                 DWELL_END -> "dwell_end"
+                HEADCOUNT -> "headcount"
             }
 
         /** True for the two kinds that carry a [BlockMarkerPayload]. */
@@ -157,6 +172,7 @@ data class SessionMarker(
                 "pose_resumed" -> POSE_RESUMED
                 "dwell_start" -> DWELL_START
                 "dwell_end" -> DWELL_END
+                "headcount" -> HEADCOUNT
                 else -> ANNOTATION
             }
         }

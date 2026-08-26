@@ -115,6 +115,18 @@ enum class TaskType {
     @SerialName("probe")
     PROBE,
 
+    /**
+     * IP-140 — the human headcount.
+     *
+     * The one channel in this lab that counts *people* rather than phones. Every
+     * other stream observes a handset, and every other stream therefore shares the
+     * same blind spot: anybody without the app. A person looking up and counting
+     * does not, which is why the two must never be derived from each other — the
+     * gap between them is the quantity a later experiment measures.
+     */
+    @SerialName("observe")
+    OBSERVE,
+
     @SerialName("finish")
     FINISH,
 
@@ -135,6 +147,7 @@ enum class TaskType {
             SENSOR_CAPTURE -> "sensor_capture"
             BLE_ADVERTISE -> "ble_advertise"
             PROBE -> "probe"
+            OBSERVE -> "observe"
             FINISH -> "finish"
             INFO -> "info"
         }
@@ -151,6 +164,7 @@ enum class TaskType {
                 StepType.SENSOR_CAPTURE -> SENSOR_CAPTURE
                 StepType.BLE_ADVERTISE -> BLE_ADVERTISE
                 StepType.PROBE -> PROBE
+                StepType.OBSERVE -> OBSERVE
                 StepType.FINISH -> FINISH
                 // A step type this build predates: shown as a plain instruction card so the
                 // participant can still walk the quest.
@@ -304,6 +318,29 @@ data class ProbeConfig(
         }
     }
 }
+
+/**
+ * Configuration for the IP-140 headcount step.
+ *
+ * `minReadings` has no default here for the same reason the backend requires it: a
+ * count step that silently accepts one reading and completes is the difference
+ * between a measurement and an anecdote. The value comes from the quest or the
+ * step does not run.
+ */
+@Serializable
+data class ObserveConfig(
+    /** The question, asked the same way of every participant so the answers pool. */
+    val prompt: String = "",
+    /** How many separate readings the participant must record before the step completes. */
+    @SerialName("min_readings") val minReadings: Int = 0,
+    /**
+     * Ceiling on the counter, or null when nobody has stated the room's capacity.
+     *
+     * Null is a real answer. A fabricated ceiling would be a claim about the room
+     * that no survey supports, and the widget would enforce it silently.
+     */
+    @SerialName("max_count") val maxCount: Int? = null,
+) : TaskConfig
 
 /**
  * Configuration for `connect_to_ap`.

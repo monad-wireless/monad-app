@@ -19,16 +19,20 @@ actual suspend fun detectCapabilities(): DeviceCapabilities {
     val device = UIDevice.currentDevice
     val tokens = mutableSetOf(
         Capability.WIFI_ASSOCIATE,
-        // A CoreLocation beacon session is both the witness and the background residency, so on
-        // iOS these two are the same capability and are reported together.
-        Capability.BLE_WITNESS,
         // Every supported iPhone can play the peripheral role. The honest caveat — the frame is
         // readable by the fleet only while the app is foregrounded — is behavioural, enforced and
         // recorded by IdentityBroadcaster rather than hidden behind a withheld token.
         Capability.BLE_ADVERTISE,
-        Capability.BACKGROUND_RESIDENCY,
         Capability.CAMERA_QR,
         Capability.BAROMETER,
+        // BLE_WITNESS and BACKGROUND_RESIDENCY are NOT claimed here any more (2026-08-26).
+        //
+        // On iOS they were the same capability — one CoreLocation beacon session served as both —
+        // and this build has no location capability at all. Claiming them would not be a cosmetic
+        // overstatement: the capability set is sent to `GET /api/quests`, and the backend uses it
+        // to withhold quests a handset cannot run. An iPhone claiming a witness token would be
+        // offered a witness quest, start it, and record nothing, which is precisely the silent
+        // failure the capability filter exists to prevent.
     )
     // LiDAR and UWB are claimed only when their module's runtime probe agrees.
     tokens += availableModuleCapabilities()

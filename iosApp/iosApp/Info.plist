@@ -34,12 +34,6 @@
 	<string>The camera reads the printed codes on lab markers, and during a measurement walk you start yourself it also tracks the phone's own movement through the room so the recording knows where it was. No photographs or video are saved.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app sends UDP packets to devices on your local network for research data collection.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Always access is required so the app can record which zone you are in while it is in your pocket. "When In Use" is revoked the moment the app is backgrounded, which is when a lab session actually runs.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Always access is required so the app can record which zone you are in while it is in your pocket.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app uses your location to enable location-based quest features and Bluetooth scanning.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -47,7 +41,6 @@
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>location</string>
 		<string>bluetooth-central</string>
 		<!-- Keeps CBPeripheralManager alive across a brief app switch. It does NOT make the
 		     broadcast readable from the background: iOS moves the service UUID into its overflow
@@ -61,7 +54,6 @@
 	<array>
 		<string>arm64</string>
 		<string>bluetooth-le</string>
-		<string>location-services</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

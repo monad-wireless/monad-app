@@ -268,15 +268,44 @@ class LabInstrument(
         _state.value = LabInstrumentState.IDLE.copy(sessionId = sessionId, phase = Phase.STARTING)
         note("session $sessionId starting")
 
-        // 1 — residency before anything else.
-        val residencyResult = residency.acquire("MonadCount lab session")
-        if (residencyResult.isFailure) {
-            val why = residencyResult.exceptionOrNull()?.message ?: "unknown"
-            fail("background residency refused: $why")
-            return Result.failure(IllegalStateException("residency: $why"))
+        // 1 — background residency, but ONLY for a session that needs to survive the
+        // background.
+        //
+        // This used to be unconditional, and on iOS it made "Always" location a hard
+        // gate on every session in the app. `BackgroundResidency.ios.kt` throws unless
+        // `CLLocationManager.authorizationStatus() == AuthorizedAlways`, so a quest
+        // that only advertises a BLE frame and never touches a location API could not
+        // start — and the permission it demanded is one Android 11+ and iOS both
+        // refuse to grant from an in-app prompt (see `LabPermission.BACKGROUND_LOCATION`).
+        //
+        // Nothing on this deployment needs it. The two live roles are broadcaster
+        // (CoreBluetooth / BluetoothLeAdvertiser — no location on either platform) and
+        // track (ARKit — camera only), and both already take the `ForegroundWake` path
+        // immediately below, which is the correct mechanism for a session the
+        // participant is looking at. Residency exists for the *witness* role, where a
+        // backgrounded phone must be woken by a CoreLocation beacon-region crossing —
+        // and that role is inert here, because the lab bundle ships `beacons.zones: []`.
+        //
+        // So: ask for residency when the session actually plays that role, and treat a
+        // refusal as a warning rather than a failure. A witness session with no
+        // residency records less than it hoped to; a run that cannot start records
+        // nothing at all, and that is the worse of the two.
+        if (request.witness) {
+            val residencyResult = residency.acquire("MonadCount lab session")
+            if (residencyResult.isFailure) {
+                val why = residencyResult.exceptionOrNull()?.message ?: "unknown"
+                event("residency_refused", why)
+                note(
+                    "background residency refused: $why — the session will run, but anchor " +
+                        "witnessing stops when the phone is locked"
+                )
+            } else {
+                event("residency_acquired")
+                note("residency acquired")
+            }
+        } else {
+            note("residency not required — no background role in this session")
         }
-        event("residency_acquired")
-        note("residency acquired")
 
         // 1b — hold the screen, when the session's roles need the foreground.
         //

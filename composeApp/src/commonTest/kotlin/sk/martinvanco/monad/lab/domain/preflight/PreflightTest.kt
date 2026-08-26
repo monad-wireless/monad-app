@@ -14,6 +14,7 @@ import sk.martinvanco.monad.lab.domain.TrafficProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -126,7 +127,7 @@ class PreflightTest {
                 permissions = LabPermission.entries.map {
                     PermissionStatus(
                         it,
-                        granted = it != LabPermission.BACKGROUND_LOCATION,
+                        granted = it != LabPermission.BLUETOOTH,
                         deniedPermanently = false,
                     )
                 }
@@ -134,7 +135,7 @@ class PreflightTest {
         )
         val permissions = check(report, PreflightCheckId.PERMISSIONS)
         assertEquals(PreflightSeverity.FAIL, permissions.severity)
-        assertTrue(permissions.detail.contains("Always"), permissions.detail)
+        assertTrue(permissions.detail.contains("Bluetooth"), permissions.detail)
         assertFalse(report.isGo)
     }
 
@@ -143,7 +144,13 @@ class PreflightTest {
         // Named explicitly, because a witness with no Bluetooth contributes nothing at all and the
         // failure is silent — the session still records, it simply records no zone information.
         assertTrue(LabPermission.BLUETOOTH.required)
-        assertTrue(LabPermission.BACKGROUND_LOCATION.required)
+        assertTrue(LabPermission.CAMERA.required)
+        // Two permissions, and no location among them (2026-08-26). Location was
+        // `required = true`, which made every iOS session wait on a permission neither
+        // platform grants from an in-app prompt, for a role that is inert while the lab
+        // bundle ships `beacons.zones: []`. The app now has no code that reads a position.
+        assertEquals(2, LabPermission.entries.size)
+        assertTrue(LabPermission.entries.none { it.name.contains("LOCATION") })
     }
 
     @Test

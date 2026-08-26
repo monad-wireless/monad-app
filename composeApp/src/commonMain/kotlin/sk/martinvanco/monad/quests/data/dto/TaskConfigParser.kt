@@ -30,6 +30,7 @@ object TaskConfigParser {
             TaskType.SENSOR_CAPTURE -> null
             TaskType.BLE_ADVERTISE -> json.decodeFromJsonElement(BleAdvertiseConfig.serializer(), configJson)
             TaskType.PROBE -> json.decodeFromJsonElement(ProbeConfig.serializer(), configJson)
+            TaskType.OBSERVE -> json.decodeFromJsonElement(ObserveConfig.serializer(), configJson)
             TaskType.INFO -> null
         }
     }
@@ -58,6 +59,12 @@ object TaskConfigParser {
     fun getBleAdvertiseConfig(task: ActiveTaskDto): BleAdvertiseConfig? {
         return if (task.type == TaskType.BLE_ADVERTISE) {
             runCatching { parseConfig(task.type, task.config) as? BleAdvertiseConfig }.getOrNull()
+        } else null
+    }
+
+    fun getObserveConfig(task: ActiveTaskDto): ObserveConfig? {
+        return if (task.type == TaskType.OBSERVE) {
+            runCatching { parseConfig(task.type, task.config) as? ObserveConfig }.getOrNull()
         } else null
     }
 

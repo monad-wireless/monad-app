@@ -86,6 +86,10 @@ enum class StepType {
     @SerialName("probe")
     PROBE,
 
+    /** IP-140 — ask the participant how many people they can see, several times over. */
+    @SerialName("observe")
+    OBSERVE,
+
     @SerialName("finish")
     FINISH,
 
@@ -104,6 +108,7 @@ enum class StepType {
             SENSOR_CAPTURE -> "sensor_capture"
             BLE_ADVERTISE -> "ble_advertise"
             PROBE -> "probe"
+            OBSERVE -> "observe"
             FINISH -> "finish"
             UNKNOWN -> "unknown"
         }

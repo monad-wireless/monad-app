@@ -422,8 +422,6 @@ private fun getStepIcon(step: OnboardingStep): ImageVector {
     return when (step) {
         OnboardingStep.WELCOME -> Icons.Default.Rocket
         OnboardingStep.BLUETOOTH -> Icons.Default.Bluetooth
-        OnboardingStep.LOCATION -> Icons.Default.LocationOn
-        OnboardingStep.BACKGROUND_LOCATION -> Icons.Default.MyLocation
         OnboardingStep.CAMERA -> Icons.Default.CameraAlt
         OnboardingStep.TERMS -> Icons.Default.Security
         OnboardingStep.COMPLETE -> Icons.Default.CheckCircle

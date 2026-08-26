@@ -1,123 +1,70 @@
 package sk.martinvanco.monad.lab.domain
 
 import io.github.aakira.napier.Napier
-import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import platform.CoreLocation.CLLocationManager
-import platform.CoreLocation.kCLAuthorizationStatusAuthorizedAlways
-import platform.CoreLocation.kCLLocationAccuracyThreeKilometers
-import platform.Foundation.NSBundle
-import platform.UIKit.UIApplication
 
 /**
- * iOS residency — a live CoreLocation session.
+ * iOS residency — **not available on this build, and honestly so** (2026-08-26).
  *
- * iOS grants no general "keep running in the background" permission. What it does grant is
- * continuous runtime to an app holding an active location session with Always authorization and
- * the `location` background mode declared. So residency here is not a separate mechanism bolted
- * next to the witness: **it is the same location session**, which is why the instrument acquires
- * residency before it does anything else and why a phone that cannot witness also cannot
- * illuminate.
+ * iOS grants no general "keep running in the background" permission. The only thing it does grant
+ * is continuous runtime to an app holding an active CoreLocation session with Always authorization
+ * and the `location` background mode. This build has none of those: every location permission,
+ * usage description and background mode was removed, and the app now contains no code that can
+ * read a position.
  *
- * A significant-location-change subscription is used rather than continuous high-accuracy updates:
- * it is the cheapest session that still keeps the process alive, and the instrument does not want
- * the phone's coordinates — it wants the runtime.
+ * So this reports unavailable rather than pretending. Three reasons that is the right answer here
+ * and not a regression:
+ *
+ * 1. **Nothing on this deployment used it.** The two live roles are broadcaster (CoreBluetooth —
+ *    no location) and track (ARKit — camera only). Both hold the screen through [ForegroundWake],
+ *    which is the correct mechanism for a session the participant is looking at.
+ * 2. **It was a hard gate on every session in the app.** `LabInstrument.start()` used to acquire
+ *    residency unconditionally, and the old implementation threw unless the status was
+ *    `AuthorizedAlways` — so a quest that only advertised a BLE frame could not start at all.
+ * 3. **The permission was ungrantable anyway.** iOS defers the "Keep Allow Always?" prompt until
+ *    the app has already used location in the background, so it could never be granted from an
+ *    onboarding screen; the step hung for its timeout and reported a denial nobody had made.
+ *
+ * The role that wanted it — witnessing iBeacon anchors with the phone in a pocket — is inert while
+ * the lab bundle ships `beacons.zones: []` and the anchors are unflashed. **Reinstating it means
+ * bringing CoreLocation back**: the Always permission, the `location` background mode, the usage
+ * descriptions, and a line in the participant consent copy that currently says no location of any
+ * kind is recorded. That is a deliberate decision to take again, not an accident to drift into.
+ *
+ * Android is unaffected — its residency is a foreground service plus a battery-optimisation
+ * exemption, and touches no location API.
  */
-@OptIn(ExperimentalForeignApi::class)
 actual class BackgroundResidency actual constructor() {
-
-    private val manager = CLLocationManager()
 
     private val _isActive = MutableStateFlow(false)
     actual val isActive: Flow<Boolean> = _isActive.asStateFlow()
 
-    actual suspend fun acquire(reason: String): Result<Unit> = runCatching {
-        val status = CLLocationManager.authorizationStatus()
-        if (status != kCLAuthorizationStatusAuthorizedAlways) {
-            manager.requestAlwaysAuthorization()
-            throw IllegalStateException(
-                "Always location authorization is required — 'When In Use' is revoked the moment " +
-                    "the app leaves the foreground, which is the only state a session runs in"
-            )
-        }
-        if (!hasBackgroundMode(LOCATION_MODE)) {
-            throw IllegalStateException(
-                "Info.plist UIBackgroundModes is missing '$LOCATION_MODE'; the process will be " +
-                    "suspended on backgrounding"
-            )
-        }
-
-        manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
-        manager.allowsBackgroundLocationUpdates = true
-        manager.pausesLocationUpdatesAutomatically = false
-        manager.startMonitoringSignificantLocationChanges()
-
-        _isActive.value = true
-        Napier.i("[lab] ios residency acquired: $reason")
+    actual suspend fun acquire(reason: String): Result<Unit> {
+        Napier.i("[lab] ios residency unavailable (no location capability in this build): $reason")
+        return Result.failure(IllegalStateException(UNAVAILABLE))
     }
 
     actual fun release() {
-        manager.stopMonitoringSignificantLocationChanges()
-        manager.allowsBackgroundLocationUpdates = false
         _isActive.value = false
     }
 
-    actual fun diagnostics(): List<ResidencyCheck> {
-        val status = CLLocationManager.authorizationStatus()
-        val always = status == kCLAuthorizationStatusAuthorizedAlways
-        return listOf(
-            ResidencyCheck(
-                name = "location_always",
-                satisfied = always,
-                detail = if (always) "granted" else "NOT granted — background residency impossible",
-            ),
-            ResidencyCheck(
-                name = "background_mode_location",
-                satisfied = hasBackgroundMode(LOCATION_MODE),
-                detail = "Info.plist UIBackgroundModes",
-            ),
-            ResidencyCheck(
-                name = "background_mode_bluetooth",
-                satisfied = hasBackgroundMode(BLUETOOTH_MODE),
-                detail = "optional; CoreLocation carries the anchors, so this is belt-and-braces",
-            ),
-            ResidencyCheck(
-                name = "location_services_enabled",
-                satisfied = CLLocationManager.locationServicesEnabled(),
-                detail = "device-wide toggle",
-            ),
-            ResidencyCheck(
-                name = "session_active",
-                satisfied = _isActive.value,
-                detail = if (_isActive.value) "location session live" else "no session",
-            ),
-        )
-    }
+    actual fun diagnostics(): List<ResidencyCheck> = listOf(
+        ResidencyCheck(
+            name = "Background residency",
+            satisfied = false,
+            detail = UNAVAILABLE,
+        ),
+    )
 
-    actual suspend fun requestPrerequisites(): Result<Unit> = runCatching {
-        if (CLLocationManager.authorizationStatus() != kCLAuthorizationStatusAuthorizedAlways) {
-            manager.requestAlwaysAuthorization()
-        }
-        Unit
-    }
-
-    private fun hasBackgroundMode(mode: String): Boolean {
-        val modes = NSBundle.mainBundle.objectForInfoDictionaryKey("UIBackgroundModes") as? List<*>
-        return modes?.any { it as? String == mode } == true
-    }
-
-    /** Deep link to this app's settings pane, offered by the console when a check fails. */
-    fun openSettings() {
-        val url = platform.Foundation.NSURL.URLWithString(
-            platform.UIKit.UIApplicationOpenSettingsURLString
-        ) ?: return
-        UIApplication.sharedApplication.openURL(url)
-    }
+    actual suspend fun requestPrerequisites(): Result<Unit> =
+        Result.failure(IllegalStateException(UNAVAILABLE))
 
     private companion object {
-        const val LOCATION_MODE = "location"
-        const val BLUETOOTH_MODE = "bluetooth-central"
+        const val UNAVAILABLE =
+            "iOS background residency needs an Always-location session, and this build has no " +
+                "location capability at all. Sessions run in the foreground with the screen held " +
+                "awake instead."
     }
 }

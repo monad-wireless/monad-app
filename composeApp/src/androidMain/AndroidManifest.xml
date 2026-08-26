@@ -6,7 +6,16 @@
     <uses-permission android:name="android.permission.CAMERA"/>
 
     <!-- Bluetooth permissions for Android 12+ (API 31+) -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!--
+        neverForLocation (IP-140): this app does NOT derive position from scan
+        results, and saying so is what releases BLE scanning from ACCESS_FINE_LOCATION
+        on API 31+. Without the flag Android treats every scan result as
+        location-derived and withholds callbacks unless fine location is held —
+        which is why the app asked for a permission nothing here reads.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
@@ -14,11 +23,17 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
-    <!-- Location permissions. Background location is what lets the scan survive the screen
-         going off, which is the only state a field session runs in. -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!--
+        No location permissions (2026-08-26). Every one of ACCESS_FINE_LOCATION,
+        ACCESS_COARSE_LOCATION and ACCESS_BACKGROUND_LOCATION was removed: this app
+        contains no code that reads a position, and the participant consent copy in
+        every quest says so.
+
+        BLE still works without them. Advertising uses BLUETOOTH_ADVERTISE, and
+        scanning is released from the location requirement by neverForLocation on
+        BLUETOOTH_SCAN above. Restoring any of these means restoring the consent
+        text with it.
+    -->
 
     <!-- Network state, so the datagram socket can be pinned to the experiment AP's network -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
