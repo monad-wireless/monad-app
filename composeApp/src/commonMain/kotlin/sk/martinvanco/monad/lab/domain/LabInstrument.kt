@@ -71,6 +71,7 @@ class LabInstrument(
     private var broadcastActive: Boolean = false
     private var poseJob: Job? = null
     private var poseEventsJob: Job? = null
+    private var seenCardJob: Job? = null
     private var poseFlushJob: Job? = null
     private var meshJob: Job? = null
     private var meshRevisions: Long = 0
@@ -143,6 +144,17 @@ class LabInstrument(
      */
     private val _mesh = MutableStateFlow(MeshProgress.IDLE)
     val meshProgress: StateFlow<MeshProgress> = _mesh.asStateFlow()
+
+    /**
+     * The card the tracker's camera can read right now, or null.
+     *
+     * A StateFlow rather than the tracker's raw Flow because the console SAMPLES it on the display
+     * tick instead of collecting per emission — the same reason the pose and mesh readouts are
+     * sampled. Collecting a 2 Hz flow into Compose state would recompose the whole console twice a
+     * second on the device that is also running ARKit.
+     */
+    private val _seenCard = MutableStateFlow<String?>(null)
+    val seenCard: StateFlow<String?> = _seenCard.asStateFlow()
 
     val trafficStats: StateFlow<TrafficStats> get() = trafficGenerator.stats
     val clockEstimate: StateFlow<ClockEstimate> get() = clockSync.estimate
@@ -517,6 +529,13 @@ class LabInstrument(
             // no replay, so a pose emitted while nothing is collecting is dropped — and the sampler
             // begins polling inside start(). Collecting afterwards would silently lose the opening
             // moments of every walk, which are the ones a waypoint scanned at the start point needs.
+            // Subscribed with the pose stream and for the same reason: the tracker starts its own
+            // 2 Hz decode loop inside start(), and a card in view before the first collector is
+            // attached would go unoffered.
+            seenCardJob = poseTracker.seenCard
+                .onEach { code -> _seenCard.value = code }
+                .launchIn(newScope)
+
             poseJob = poseTracker.samples
                 .onEach { sample ->
                     lastPose = sample
@@ -1153,6 +1172,11 @@ class LabInstrument(
         poseTracker.stop()
         poseJob?.cancel()
         poseEventsJob?.cancel()
+        seenCardJob?.cancel()
+        seenCardJob = null
+        // A card left standing after the walk ends would offer the console something the camera is
+        // no longer looking at, and the operator's one tap would record it.
+        _seenCard.value = null
         poseFlushJob?.cancel()
         meshJob?.cancel()
         poseJob = null

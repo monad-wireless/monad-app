@@ -82,6 +82,11 @@ class LabConsoleScreenModel(
                     nowMonotonicNanos = monotonicNanos(),
                     poseProgress = instrument.poseProgress.value,
                     mesh = instrument.meshProgress.value,
+                    // Sampled here with the other high-rate readouts, for the reason in this
+                    // function's own doc: the decode runs at 2 Hz and collecting it per emission
+                    // would recompose the whole console twice a second. An offer a human reads is
+                    // fine at 1 Hz.
+                    detectedCard = instrument.seenCard.value,
                 )
                 delay(DISPLAY_TICK_MILLIS)
             }

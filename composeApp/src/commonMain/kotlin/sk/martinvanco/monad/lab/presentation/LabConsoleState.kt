@@ -144,6 +144,14 @@ data class LabConsoleState(
     val waypointPoint: Int = 1,
     /** Free-text code, for the named zone cards that are not in the numbered pool. */
     val waypointCode: String = "",
+    /**
+     * The card the tracker's camera can read right now, or null.
+     *
+     * Sampled on the display tick from the instrument, never collected — see
+     * `LabInstrument.seenCard`. Null covers "nothing in view" and "this device cannot see cards"
+     * identically, because the console does the same thing in both: fall back to the manual code.
+     */
+    val detectedCard: String? = null,
     /** Codes recorded during this session, newest first. One tap re-records a revisited point. */
     val waypoints: List<WaypointRow> = emptyList(),
     /** True while the inline QR scanner is open. Only reachable when the tracker is not running. */
@@ -302,11 +310,23 @@ data class LabConsoleState(
     /**
      * The code the waypoint button will record.
      *
-     * The typed field wins when it is not blank, so the eight named zone cards
-     * (`MONAD-A-IN`, …) are reachable without leaving the numbered pool behind.
+     * PRECEDENCE, AND WHY IT IS THIS WAY ROUND. What the camera can read wins, because the operator
+     * is standing in front of that card and pointing the phone at it — that is a stronger statement
+     * of intent than a stepper left where the last card put it. The typed field comes next, so the
+     * named zone cards (`MONAD-A-IN`, …) stay reachable. The numbered stepper is the floor.
+     *
+     * The stepper used to be the default and the camera was not an input at all: scanning opened a
+     * second capture session, which contends with ARKit, so the console refused it whenever a walk
+     * was tracking. Twenty cards were therefore dialled in by hand. The decode now rides ARKit's
+     * own frames, so the natural gesture — look at the card — is the one that works.
      */
     val pendingWaypointCode: String
-        get() = waypointCode.trim().ifBlank { fingerprintCode(waypointPoint) }
+        get() = detectedCard?.let(::waypointCodeFrom)?.takeIf { it.isNotBlank() }
+            ?: waypointCode.trim().ifBlank { fingerprintCode(waypointPoint) }
+
+    /** True when the pending code came from the camera rather than from a control. */
+    val pendingCameFromCamera: Boolean
+        get() = detectedCard?.let(::waypointCodeFrom)?.isNotBlank() == true
 
     /** True while the operator is standing a dwell on a card. */
     val isDwelling: Boolean get() = dwellCode != null

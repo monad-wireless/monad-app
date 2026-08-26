@@ -26,7 +26,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -98,12 +100,26 @@ actual class PoseTracker actual constructor() {
     )
     actual val samples: Flow<PoseSample> = _samples.asSharedFlow()
 
+    /**
+     * How often the card read runs. 500 ms — see the loop in [start] for why it is not the pose
+     * rate, and why half a second is imperceptible to somebody walking between cards.
+     */
+    private val BARCODE_POLL_MILLIS = 500L
+
     private val _events = MutableSharedFlow<PoseTrackerEvent>(replay = 0, extraBufferCapacity = 16)
     actual val events: Flow<PoseTrackerEvent> = _events.asSharedFlow()
+
+    /**
+     * The card the camera can read right now. StateFlow, not SharedFlow: this is a CONDITION the
+     * console renders, not an event it must not miss. A late subscriber wants what is in view now.
+     */
+    private val _seenCard = MutableStateFlow<String?>(null)
+    actual val seenCard: Flow<String?> = _seenCard.asStateFlow()
 
     private var session: ARSession? = null
     private var scope: CoroutineScope? = null
     private var job: Job? = null
+    private var barcodeJob: Job? = null
     private var running = false
     private var meshEnabled = false
 
@@ -316,6 +332,26 @@ actual class PoseTracker actual constructor() {
         val newScope = CoroutineScope(Dispatchers.Default)
         scope = newScope
         running = true
+
+        // ── The card read, on its OWN loop at 2 Hz ──────────────────────────────────────────
+        //
+        // Separate from the pose poll below, and that separation is deliberate. One Vision request
+        // on a 1920×1440 capture buffer costs tens of milliseconds; the pose poll's whole design is
+        // absolute scheduling against an origin so its phase never drifts, and putting a variable
+        // tens-of-ms cost inside it would make the delivered pose rate a measure of Vision's
+        // latency instead of the tracker's.
+        //
+        // 2 Hz because it is an offer to a human walking between cards, not a measurement. The
+        // operator stops at a card and looks at it; half a second to notice is imperceptible, and
+        // the cost is ~4% of one core rather than the ~40% a pose-rate decode would take.
+        barcodeJob = newScope.launch {
+            while (isActive) {
+                // Null is not an error and does not break the loop: no frame yet, nothing in view,
+                // and a shim that was never installed all mean the same thing to the console.
+                _seenCard.value = ArBarcodeShim.read(sessionPointer)
+                delay(BARCODE_POLL_MILLIS)
+            }
+        }
 
         job = newScope.launch {
             // Absolute scheduling against an origin, for the same reason the illuminator does it: a
@@ -797,6 +833,11 @@ actual class PoseTracker actual constructor() {
         running = false
         job?.cancel()
         job = null
+        barcodeJob?.cancel()
+        barcodeJob = null
+        // Cleared, not left standing. A code held from the last walk would offer the console a card
+        // the camera is no longer looking at, and the operator's one tap would record it.
+        _seenCard.value = null
         scope?.cancel()
         scope = null
         session?.pause()

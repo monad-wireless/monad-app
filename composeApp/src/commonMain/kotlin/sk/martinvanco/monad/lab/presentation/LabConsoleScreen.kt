@@ -668,6 +668,18 @@ private fun WaypointPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
         )
     }
 
+    // ── What the camera can see, when it can see one ──────────────────────────────────────────
+    //
+    // The decode rides ARKit's own frames (LabInstrument.seenCard), so unlike the old scanner it
+    // works precisely when a walk is tracking — which is the only time a waypoint is worth
+    // recording. It OFFERS and never records: a card glimpsed across the room must not open a
+    // dwell nobody asked for, so the operator's press is still what commits.
+    if (state.pendingCameFromCamera) {
+        KeyValue("seeing", state.pendingWaypointCode)
+    } else if (state.isRunning) {
+        Note("Point the phone at a card and its code appears here. Or set one by hand below.")
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -758,7 +770,11 @@ private fun WaypointPanel(state: LabConsoleState, model: LabConsoleScreenModel) 
             Text("Scan card")
         }
     } else {
-        Note("Scanning is unavailable while the camera is tracking. Tap or type the card code.")
+        // Tracking. The old text here told the operator that scanning was unavailable and to dial
+        // the card in by hand — true at the time, and the reason twenty cards were stepped through
+        // one press at a time. ARKit's frames are decoded directly now, so the camera IS the input:
+        // the "seeing" row above fills as soon as a card is in view.
+        Note("Reading cards from the tracker's camera. Point the phone at one.")
     }
 
     state.waypoints.take(10).forEach { row ->

@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.delay
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -31,6 +34,8 @@ import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform.getKoin
 import sk.martinvanco.monad.quests.data.dto.TaskStatus
 import sk.martinvanco.monad.quests.presentation.components.StepRouter
+import sk.martinvanco.monad.quests.presentation.components.QuestStepProgress
+import sk.martinvanco.monad.quests.presentation.components.CollapsedStepRow
 import sk.martinvanco.monad.quests.presentation.quest_completed.QuestCompletedScreen
 import sk.martinvanco.monad.quests.presentation.quest_ended.QuestEndedEarlyScreen
 
@@ -51,6 +56,24 @@ data class ActiveQuestScreen(
             getKoin().get<ActiveQuestScreenModel> { parametersOf(questId) }
         }
         val state by screenModel.state.collectAsState()
+
+        // Focus rail (IP-140 UX pass). One card open at a time, and the screen brings
+        // it into view when the step advances — a participant walking a 22-step hunt
+        // should never have to hunt for the step as well as the node.
+        val stepScroll = rememberScrollState()
+        var expandedOverride by remember { mutableStateOf<Int?>(null) }
+        var activeStepOffset by remember { mutableStateOf(0f) }
+        val liveIndex = state.tasks.indexOfFirst { it.status != TaskStatus.COMPLETED }
+
+        LaunchedEffect(liveIndex) {
+            // Keyed on the step, not on the offset: re-running whenever a card resized
+            // would yank the view mid-countdown. A short settle lets the new card lay
+            // out before its position is read.
+            if (liveIndex > 0) {
+                delay(120)
+                stepScroll.animateScrollTo((activeStepOffset - 24f).coerceAtLeast(0f).toInt())
+            }
+        }
 
         // Navigate home when requested
         LaunchedEffect(state.shouldNavigateHome) {
@@ -260,9 +283,9 @@ data class ActiveQuestScreen(
                             .weight(1f)
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.background)
-                            .verticalScroll(rememberScrollState())
+                            .verticalScroll(stepScroll)
                             .padding(horizontal = 24.dp, vertical = 32.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // Non-fatal instrument failure: the radio did not start, but the quest is
                         // still walkable. Shown as a banner above the steps rather than instead of
@@ -301,21 +324,56 @@ data class ActiveQuestScreen(
                             }
                         }
 
+                        // The step you are on: the first that is not done. Everything before
+                        // it collapses to a tick, everything after it to a number.
+                        val activeIndex = state.tasks
+                            .indexOfFirst { it.status != TaskStatus.COMPLETED }
+                            .let { if (it < 0) state.tasks.lastIndex else it }
+                        val doneCount = state.tasks.count { it.status == TaskStatus.COMPLETED }
+
+                        if (state.tasks.size > 3) {
+                            // Only when there is something to lose track of. A three-step quest
+                            // shows its own progress by being three steps long, and a bar over
+                            // the top of it is furniture.
+                            QuestStepProgress(done = doneCount, total = state.tasks.size)
+                        }
+
                         state.tasks.forEachIndexed { index, task ->
-                            StepRouter(
-                                stepNumber = index + 1,
-                                task = task,
-                                onComplete = {
-                                    screenModel.onEvent(ActiveQuestEvent.CompleteTask(index))
-                                },
-                                // Offered to every step and consumed by at most one: a probe
-                                // matches it against its own targets, and everything else ignores
-                                // it. Only the first pending step may take it, so a scan cannot
-                                // satisfy a later leg of a treasure hunt the participant has not
-                                // walked to yet.
-                                preScannedValue = preScannedValue
-                                    ?.takeIf { index == state.tasks.indexOfFirst { t -> t.status != TaskStatus.COMPLETED } },
-                            )
+                            val isOpen = index == activeIndex || index == expandedOverride
+                            if (!isOpen) {
+                                CollapsedStepRow(
+                                    stepNumber = index + 1,
+                                    task = task,
+                                    onClick = { expandedOverride = index },
+                                )
+                                return@forEachIndexed
+                            }
+
+                            Box(
+                                modifier = Modifier.onGloballyPositioned { coords ->
+                                    // Remembered so the screen can bring the open card to the
+                                    // top when the step advances. Measured rather than
+                                    // computed: cards differ in height by hundreds of pixels
+                                    // (a camera preview against a one-line instruction), so
+                                    // any arithmetic over an assumed row height would drift.
+                                    if (index == activeIndex) activeStepOffset = coords.positionInParent().y
+                                }
+                            ) {
+                                StepRouter(
+                                    stepNumber = index + 1,
+                                    task = task,
+                                    onComplete = {
+                                        expandedOverride = null
+                                        screenModel.onEvent(ActiveQuestEvent.CompleteTask(index))
+                                    },
+                                    // Offered to every step and consumed by at most one: a probe
+                                    // matches it against its own targets, and everything else
+                                    // ignores it. Only the first pending step may take it, so a
+                                    // scan cannot satisfy a later leg of a treasure hunt the
+                                    // participant has not walked to yet.
+                                    preScannedValue = preScannedValue?.takeIf { index == activeIndex },
+                                )
+                            }
                         }
                     }
                 }

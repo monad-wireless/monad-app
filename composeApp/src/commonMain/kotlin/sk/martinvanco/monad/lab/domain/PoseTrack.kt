@@ -408,6 +408,24 @@ expect class PoseTracker() {
     val events: Flow<PoseTrackerEvent>
 
     /**
+     * The card code the tracker's own camera can currently read, or null.
+     *
+     * DECODED FROM THE TRACKER'S FRAMES, NOT FROM A SECOND CAMERA. That distinction is the whole
+     * feature. The console used to offer a "Scan card" button backed by its own capture session,
+     * and it had to be refused while tracking — two sessions contend, the OS picks the loser, and
+     * the trajectory develops a hole exactly where the waypoint should anchor. So the operator
+     * dialled every card in on a numeric stepper instead.
+     *
+     * Null means "nothing in view" and "this platform cannot see cards" identically, because the
+     * console does the same thing in both cases: fall back to the code entered by hand. Android
+     * emits a permanent null.
+     *
+     * Emitting the SAME code repeatedly is expected and harmless — the console offers, it does not
+     * record, so a card held in view is one standing offer rather than a stream of waypoints.
+     */
+    val seenCard: Flow<String?>
+
+    /**
      * An opaque handle the platform camera preview can render from, or null when there is nothing
      * to show — no session running, or a platform with no tracker.
      *

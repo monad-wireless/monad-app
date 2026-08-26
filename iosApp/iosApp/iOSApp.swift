@@ -24,6 +24,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // tracker refuses to start if this line is missing.
         ArPoseShim.shared.install(pointer: UnsafeMutableRawPointer(mutating: MonadReadArPoseAddress()))
 
+        // The QR read, from the SAME ARKit frames. Opening a second AVCaptureSession to scan a card
+        // is what made the console's old "Scan card" button unusable while tracking, so the decode
+        // rides the session that is already running. Missing this line costs card detection only —
+        // the manual code entry still works and the walk is unaffected.
+        ArBarcodeShim.shared.install(pointer: UnsafeMutableRawPointer(mutating: MonadReadArBarcodeAddress()))
+
         if firebaseAvailable, FirebaseApp.app() == nil {
             FirebaseApp.configure()
         }

@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import sk.martinvanco.monad.core.util.ContextProvider
 
@@ -36,6 +37,13 @@ actual class PoseTracker actual constructor() {
     /** Never emits — there is no session to be interrupted. */
     private val _events = MutableSharedFlow<PoseTrackerEvent>(replay = 0, extraBufferCapacity = 1)
     actual val events: Flow<PoseTrackerEvent> = _events.asSharedFlow()
+
+    /**
+     * Permanently null: there is no tracker on Android, so there are no frames to decode a card
+     * from. The console reads null as "this device cannot see cards" and keeps manual entry, which
+     * is the same path every Android build has always taken.
+     */
+    actual val seenCard: Flow<String?> = flowOf(null)
 
     /** Nothing to preview: no tracker means no camera session to render. */
     actual fun previewHandle(): Any? = null

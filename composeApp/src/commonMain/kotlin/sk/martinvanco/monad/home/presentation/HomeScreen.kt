@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -51,6 +52,7 @@ import sk.martinvanco.monad.home.presentation.model.QuestCardDt
 import sk.martinvanco.monad.lab.domain.SessionReport
 import sk.martinvanco.monad.lab.presentation.GroundTruthScanScreen
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreen
+import sk.martinvanco.monad.scan.presentation.ScanShortcutScreen
 import sk.martinvanco.monad.lab.presentation.SessionStatusScreen
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 import sk.martinvanco.monad.ui.theme.Primary50
@@ -79,6 +81,13 @@ class HomeScreen : Screen {
                 onOpenLabConsole = { navigator.push(LabConsoleScreen()) },
                 onOpenCheckIn = { navigator.push(GroundTruthScanScreen()) },
             )
+
+            // The shortcut. Above the quest list on purpose: the commonest thing a
+            // participant does is walk past a code, and the slowest route to acting on
+            // it was open app, find quest, read quest, press start, press scan. This is
+            // one tap and then the camera. `Marker Placement Record.md` ranked it first
+            // of the app changes worth making.
+            ScanShortcutCard(onClick = { navigator.push(ScanShortcutScreen()) })
 
             // The participant's question, answered above the fold. A session runs for hours with
             // the app backgrounded; the whole interaction is somebody unlocking their phone and
@@ -197,6 +206,47 @@ class HomeScreen : Screen {
      * stream dies rather than only when the session stops: an instrument that says "recording"
      * while a stream is dead is the exact failure this pass exists to make impossible.
      */
+    /**
+     * One tap to the camera.
+     *
+     * Deliberately the largest thing on the screen after the greeting. Every live quest
+     * begins with a scan, and a participant holding a phone next to a code should not
+     * have to choose a quest first — [ScanShortcutScreen] works out which quest accepts
+     * the code and starts it with the scan already counted.
+     */
+    @Composable
+    private fun ScanShortcutCard(onClick: () -> Unit) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFF5B6ECC),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Scan a code",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = "Next to a marker or a grey box? Start here — thirty seconds is a " +
+                            "whole contribution.",
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = Color(0xFFDBE1FA),
+                    )
+                }
+                Text(text = "\u203A", fontSize = 28.sp, color = Color.White)
+            }
+        }
+    }
+
     @Composable
     private fun SessionStatusCard(
         state: HomeState,

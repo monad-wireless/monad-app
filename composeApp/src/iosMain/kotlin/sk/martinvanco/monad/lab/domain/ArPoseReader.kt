@@ -1,5 +1,6 @@
 package sk.martinvanco.monad.lab.domain
 
+import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CFunction
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
@@ -86,5 +87,67 @@ object ArPoseShim {
             trackingReason = scalars[3].toInt(),
             m = matrix,
         )
+    }
+}
+
+/**
+ * The bridge to the app-side ARKit **barcode** shim — see `iosApp/MonadArPoseShim.m`.
+ *
+ * Same rationale, same install mechanism and the same pool discipline as [ArPoseShim]; read that
+ * doc block first, because every reason it gives for not touching an ARFrame from Kotlin applies
+ * here and more so — a Vision request holds the capture buffer while it runs.
+ *
+ * WHY IT IS A SEPARATE POINTER rather than another field on the pose read. The two are polled at
+ * different rates on purpose: the pose at the tracker's own rate, the decode at ~2 Hz, because one
+ * Vision request on a 1920×1440 buffer costs tens of milliseconds and the pose stream's phase is
+ * something the analysis depends on. Folding the decode into the pose read would put that cost on
+ * every pose sample and make the delivered pose rate a measure of Vision's latency.
+ *
+ * A build that never calls [install] degrades to [isInstalled] false, which the console reads as
+ * "this device cannot see cards" and falls back to manual entry. That is also the Android path.
+ */
+@OptIn(ExperimentalForeignApi::class)
+object ArBarcodeShim {
+
+    /**
+     * Longest payload accepted, including the terminator.
+     *
+     * The printed cards carry `https://monad.dubec.dev/m/<slug>`, so 128 is generous by a factor of
+     * three. The shim REFUSES a payload that does not fit rather than truncating it: a half-copied
+     * URL folds to a different trailing path segment, which is a card code that resolves to the
+     * wrong card. Reading nothing is recoverable; reading the wrong card silently is not.
+     */
+    private const val PAYLOAD_CAPACITY = 128
+
+    private val installed = AtomicReference<COpaquePointer?>(null)
+
+    /** True once the app registered the shim. False means no card detection on this device. */
+    val isInstalled: Boolean get() = installed.value != null
+
+    /** Called from `iOSApp.swift` at startup with `MonadReadArBarcodeAddress()`. */
+    fun install(pointer: COpaquePointer) {
+        installed.value = pointer
+    }
+
+    /**
+     * The QR payload in the session's current frame, or null.
+     *
+     * Null covers every uninteresting case identically — shim absent, no frame yet, nothing in
+     * view, payload too long — because the caller does the same thing in all of them: keep the
+     * previously offered card, or none.
+     */
+    fun read(sessionPtr: COpaquePointer): String? {
+        val fn = installed.value ?: return null
+        val reader = fn.reinterpret<
+            CFunction<(COpaquePointer?, CPointer<ByteVar>?, Int) -> Int>
+        >()
+        val payload = ByteArray(PAYLOAD_CAPACITY)
+        val found = payload.usePinned { p ->
+            reader(sessionPtr, p.addressOf(0), PAYLOAD_CAPACITY)
+        }
+        if (found == 0) return null
+        val end = payload.indexOf(0).let { if (it < 0) payload.size else it }
+        if (end == 0) return null
+        return payload.decodeToString(0, end)
     }
 }
