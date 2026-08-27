@@ -213,6 +213,29 @@ actual class PoseTracker actual constructor() {
      */
     private val meshBank = mutableMapOf<String, MeshBlock>()
 
+    /**
+     * Anchors whose geometry has changed and has not been copied into [meshBank] yet.
+     *
+     * BANKING IS BOUNDED PER TICK, AND THAT IS THE FIX FOR A FROZEN APP. [block] reads every vertex,
+     * normal, index and classification of an anchor and then transforms each vertex into the session
+     * frame — its own comment calls a room mesh "hundreds of thousands of floats", and it was written
+     * for the close path where a few hundred milliseconds cost nobody anything. [observeMesh] then
+     * called it for *every changed anchor* on a 3-second timer, on the main thread, for the length of
+     * a walk.
+     *
+     * The cost grows with the room. Measured on 2026-08-27: two survey walks banked 71 993 and
+     * 167 032 faces, the app froze in periodic waves, and `pose.tsv` came back with a 39.3-second
+     * hole in a 54-second session. Standing still at a fingerprint card is the worst case, because
+     * holding the camera on one surface is exactly when scene reconstruction densifies it — so the
+     * freeze landed on the dwell, which is the one part of the protocol that has to work.
+     *
+     * So a tick banks at most [MESH_BANK_PER_TICK] anchors and leaves the rest here for the next
+     * one. The change *log* is still written the instant the change is seen, so the geometry's clock
+     * — the thing the log exists for — does not lag. Only the copy does, by a few seconds, and
+     * `snapshotMesh` merges the bank with whatever ARKit still holds at close.
+     */
+    private val meshBankPending = mutableSetOf<String>()
+
     actual suspend fun probe(): LabSensorModule.Availability = when {
         !ARWorldTrackingConfiguration.isSupported() ->
             LabSensorModule.Availability.Unsupported("this device does not support ARKit world tracking")
@@ -434,6 +457,7 @@ actual class PoseTracker actual constructor() {
                         // fingerprints refer to anchors the reset just removed.
                         meshRevisions.clear()
                         meshBank.clear()
+                        meshBankPending.clear()
                         _events.tryEmit(
                             PoseTrackerEvent.RelocalizationAbandoned(
                                 graceSeconds = RELOCALIZATION_GRACE_NANOS / 1e9,
@@ -479,9 +503,54 @@ actual class PoseTracker actual constructor() {
 
     // ---- mesh -------------------------------------------------------------------------------
 
-    actual suspend fun observeMesh(): List<MeshObservation> = withContext(Dispatchers.Main) {
-        if (!meshEnabled) return@withContext emptyList()
-        val frame = session?.currentFrame ?: return@withContext emptyList()
+    /**
+     * Detect which blocks moved, then bank a bounded number of them.
+     *
+     * TWO PHASES, BECAUSE THEY COST DIFFERENT AMOUNTS. Detection is O(anchors): counts, a transform
+     * and a 16-sample [fingerprint] each, and it must run on the main thread because it walks
+     * ARKit's live anchor set. Banking is O(vertices) per changed anchor and it is what froze the
+     * app — see [meshBankPending].
+     *
+     * The main thread is therefore entered once per phase and once per banked anchor, never once for
+     * the whole sweep. Between those hops the run loop is free, so the UI draws and the countdown
+     * ticks. The per-vertex transform runs off the main thread entirely: it touches no ARKit object,
+     * only the plain `FloatArray`s [readRawBlock] already copied out.
+     *
+     * Every mutation of [meshRevisions], [meshBank] and [meshBankPending] stays on the main thread.
+     * They are plain maps, they are now reached from two dispatchers, and confining the writes is
+     * cheaper and more obviously correct than making them concurrent.
+     */
+    actual suspend fun observeMesh(): List<MeshObservation> {
+        if (!meshEnabled) return emptyList()
+
+        val changed = withContext(Dispatchers.Main) { detectMeshChanges() }
+
+        var banked = 0
+        while (banked < MESH_BANK_PER_TICK) {
+            // Dequeue AND read in one main-thread hop, so the queue is never touched from this
+            // dispatcher. Dequeued before the read succeeds on purpose: a raw read that failed will
+            // not succeed on the next tick — the anchor is gone, or is not a triangulated
+            // three-component mesh — and retrying it forever would starve the anchors behind it. A
+            // block that still matters is re-queued the next time its fingerprint moves, and
+            // `snapshotMesh` tops the bank up from every live anchor at close regardless.
+            val taken = withContext(Dispatchers.Main) {
+                val id = meshBankPending.firstOrNull() ?: return@withContext null
+                meshBankPending.remove(id)
+                id to readRawBlock(id)
+            } ?: break
+
+            // Off the main thread: pure float maths over arrays already copied out of ARKit.
+            val block = taken.second?.let { transformBlock(it) } ?: run { banked++; continue }
+            withContext(Dispatchers.Main) { meshBank[taken.first] = block }
+            banked++
+        }
+
+        return changed
+    }
+
+    /** Phase one. Main thread, cheap, and it records the change log's timestamps. */
+    private fun detectMeshChanges(): List<MeshObservation> {
+        val frame = session?.currentFrame ?: return emptyList()
         val monotonic = monotonicNanos()
         val wall = currentTimeMillis()
         val changed = mutableListOf<MeshObservation>()
@@ -497,11 +566,9 @@ actual class PoseTracker actual constructor() {
 
             val revision = if (previous == null) 0 else previous.revision + 1
             meshRevisions[id] = MeshRevision(revision, print)
-            // Bank the geometry while the anchor is definitely alive. This is the only moment it
-            // is guaranteed readable, and it is why an interruption at close can no longer cost
-            // the room. Failure here is skipped rather than fatal: the change log still records
-            // that the block moved, and the previous banked revision stands.
-            runCatching { block(anchor) }.getOrNull()?.let { meshBank[id] = it }
+            // Queued, not copied. The block is banked by a later hop so that one tick cannot hold
+            // the main thread for the length of a room.
+            meshBankPending += id
             val translation = anchor.transform.useContents {
                 val m = columns.reinterpret<FloatVar>()
                 floatArrayOf(m[12], m[13], m[14])
@@ -519,8 +586,14 @@ actual class PoseTracker actual constructor() {
                 z = translation[2],
             )
         }
-        changed
+        return changed
     }
+
+    /** The live anchor for a queued id, or null when ARKit has since dropped it. Main thread. */
+    private fun anchorFor(id: String): ARMeshAnchor? =
+        session?.currentFrame?.anchors
+            ?.filterIsInstance<ARMeshAnchor>()
+            ?.firstOrNull { it.identifier.UUIDString == id }
 
     /**
      * On the main thread, deliberately.
@@ -599,7 +672,37 @@ actual class PoseTracker actual constructor() {
      * file whose blocks all sit on top of each other at the origin, and no reader has the transforms.
      * Normals get the rotation only — the anchor transform is rigid, so no inverse-transpose is needed.
      */
-    private fun block(anchor: ARMeshAnchor): MeshBlock? {
+    /**
+     * An anchor's geometry copied out of ARKit, still in the anchor's own frame.
+     *
+     * The seam between the half that must touch ARKit and the half that must not. Everything here is
+     * a plain array, so [transformBlock] is pure float maths and runs anywhere.
+     */
+    private class RawBlock(
+        val positions: FloatArray,
+        val normals: FloatArray?,
+        val indices: IntArray,
+        val classifications: ByteArray?,
+        val transform: FloatArray,
+        val vertexCount: Int,
+    )
+
+    /**
+     * Read one queued anchor's geometry. **Main thread only** — it reads ARKit's live Metal buffers.
+     *
+     * Returns null when ARKit has dropped the anchor since it was queued, which is normal: an anchor
+     * that no longer exists has whatever the bank already holds for it.
+     */
+    private fun readRawBlock(id: String): RawBlock? {
+        val anchor = anchorFor(id) ?: return null
+        return runCatching { readRawBlock(anchor) }.getOrNull()
+    }
+
+    /** The close path's whole-mesh read, and the one-anchor read, share this. Main thread. */
+    private fun block(anchor: ARMeshAnchor): MeshBlock? =
+        readRawBlock(anchor)?.let { transformBlock(it) }
+
+    private fun readRawBlock(anchor: ARMeshAnchor): RawBlock? {
         val geometry = anchor.geometry
         val vertexSource = geometry.vertices
         val faceElement = geometry.faces
@@ -630,6 +733,26 @@ actual class PoseTracker actual constructor() {
         val indices = readIndices(faceElement, faceCount) ?: return null
         val classifications = readClassifications(geometry.classification, faceCount)
 
+        return RawBlock(
+            positions = positions,
+            normals = normals,
+            indices = indices,
+            classifications = classifications,
+            transform = transform,
+            vertexCount = vertexCount,
+        )
+    }
+
+    /**
+     * Anchor frame to session frame. **Pure** — no ARKit object is reachable from here, which is what
+     * lets the caller run it off the main thread while the run loop draws.
+     */
+    private fun transformBlock(raw: RawBlock): MeshBlock {
+        val positions = raw.positions
+        val normals = raw.normals
+        val transform = raw.transform
+        val vertexCount = raw.vertexCount
+
         // In place: a room mesh is hundreds of thousands of floats and a second array would double the
         // peak allocation on the close path, next to the sidecar render and the upload.
         for (v in 0 until vertexCount) {
@@ -653,8 +776,8 @@ actual class PoseTracker actual constructor() {
         return MeshBlock(
             positions = positions,
             normals = normals,
-            indices = indices,
-            classifications = classifications,
+            indices = raw.indices,
+            classifications = raw.classifications,
         )
     }
 
@@ -848,6 +971,7 @@ actual class PoseTracker actual constructor() {
         meshEnabled = false
         meshRevisions.clear()
         meshBank.clear()
+        meshBankPending.clear()
         lastFrameTimestamp = Double.NEGATIVE_INFINITY
         Napier.i("[lab] pose tracking stopped")
     }
@@ -904,6 +1028,16 @@ actual class PoseTracker actual constructor() {
          * hundred anchors cost sixteen hundred strided reads per tick rather than millions.
          */
         const val FINGERPRINT_SAMPLES = 16
+
+        /**
+         * Anchors whose geometry may be copied into the bank in one observe tick.
+         *
+         * Two, against a 3-second cadence, so the bank keeps up with a room being scanned at
+         * walking pace while no single tick can hold the main thread for more than two blocks. The
+         * number that matters is not the throughput — it is the length of the longest hitch, and
+         * this is the knob that bounds it. See `meshBankPending`.
+         */
+        const val MESH_BANK_PER_TICK = 2
 
         /**
          * How long a loaded site map gets to relocalise before it is abandoned.

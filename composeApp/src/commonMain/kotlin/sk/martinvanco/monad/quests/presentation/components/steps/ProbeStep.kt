@@ -52,6 +52,24 @@ import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
  * participant one action, and an extra tap on every card is the friction that decides whether a
  * cohort completes the protocol or abandons it.
  *
+ * **IT NEVER OPENS A SECOND CAMERA, AND THAT IS NOT A PREFERENCE.** When a walk is tracking, the
+ * pose tracker's own session owns the rear camera. A `QrScanner` is a second capture session on the
+ * same device: the two contend, the OS picks the loser, and on iOS the loser is ARKit. The 2026-08-27
+ * survey walk measured it — `pose=stale` two seconds into the step, `pose=dead@0.0Hz` at sixteen,
+ * then two silences of 27 s and 47 s in which the handset shipped no telemetry at all, because the
+ * main thread was blocked tearing one capture session down while the other relocalised. The step
+ * froze exactly where the first card was read.
+ *
+ * So the code is read from the frames the tracker is already producing
+ * ([LabInstrument.seenCard], decoded off the ARKit frame at 2 Hz), and the standalone scanner is
+ * used **only where no tracker owns the camera** — which today means Android, whose pose tracker is
+ * not implemented and therefore holds nothing. The test is
+ * [LabInstrument.posePreviewHandle] being non-null, not a platform string: it asks the running
+ * instrument whether something already has the camera, which is the fact that matters.
+ *
+ * `PoseTrack.seenCard` carries the same warning for the walk console, which hit this first and was
+ * fixed for it. This step reintroduced the fault for participants.
+ *
  * Refuses to run without a session, on the same grounds as `BleAdvertiseStep`: a dwell recorded
  * while nothing is recording is thirty seconds of somebody's time spent on nothing, and it must say
  * so rather than complete.
@@ -109,6 +127,13 @@ fun ProbeStep(
     val instrumentState by instrument.state.collectAsState()
     val broadcasting by instrument.isBroadcasting.collectAsState(initial = false)
 
+    // Does something already own the rear camera? Re-asked whenever the session starts or stops,
+    // because that is the only thing that changes the answer. Non-null means the tracker is running
+    // its own capture session and this step must not open another one.
+    val trackerPreview = remember(instrumentState.isRunning) { instrument.posePreviewHandle() }
+    val trackerOwnsCamera = trackerPreview != null
+    val seenCard by instrument.seenCard.collectAsState()
+
     var matched by remember { mutableStateOf<ProbeTarget?>(null) }
     var remainingSeconds by remember { mutableStateOf(config?.dwellSeconds ?: 0) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -131,6 +156,27 @@ fun ProbeStep(
         val pre = preScannedValue ?: return@LaunchedEffect
         val target = config?.match(pre) ?: return@LaunchedEffect
         accept(target)
+    }
+
+    // The tracker's own decode. Runs only when the tracker owns the camera, which is the same
+    // condition under which this step declines to open one of its own.
+    //
+    // HELD IN VIEW, NOT GLIMPSED. `seenCard` reads whatever is in the tracking camera's frame for
+    // the whole walk, not just while somebody is aiming, so a card passed at two metres would
+    // otherwise open a dwell at a position nobody stood at — and a fingerprint labelled with the
+    // wrong point is worse than no fingerprint. Requiring the same code to survive one further
+    // decode (the poll is 500 ms) costs a participant who is standing at a card nothing, and drops
+    // one that swept through the frame. `seenCard` is a StateFlow and conflates repeats, so this
+    // effect is cancelled and relaunched exactly when the code CHANGES, which is what makes the
+    // re-read a real second observation rather than the same one twice.
+    LaunchedEffect(seenCard, config, trackerOwnsCamera) {
+        if (!trackerOwnsCamera || hasScanned) return@LaunchedEffect
+        val code = seenCard ?: return@LaunchedEffect
+        val cfg = config ?: return@LaunchedEffect
+        delay(600)
+        if (instrument.seenCard.value != code) return@LaunchedEffect
+        val target = cfg.match(code)
+        if (target != null) accept(target) else errorMessage = wrongCodeMessage(cfg)
     }
 
     // The dwell. Bracketed with markers so the analysis can select the still window without
@@ -183,6 +229,9 @@ fun ProbeStep(
                 matched = matched,
                 remainingSeconds = remainingSeconds,
                 errorMessage = errorMessage,
+                trackerPreview = trackerPreview,
+                trackerOwnsCamera = trackerOwnsCamera,
+                seenCard = seenCard,
                 onScan = { scanned ->
                     if (hasScanned) return@ProbeContent
                     val cfg = config ?: return@ProbeContent
@@ -212,6 +261,9 @@ private fun ProbeContent(
     matched: ProbeTarget?,
     remainingSeconds: Int,
     errorMessage: String?,
+    trackerPreview: Any?,
+    trackerOwnsCamera: Boolean,
+    seenCard: String?,
     onScan: (String) -> Unit,
 ) {
     Column(
@@ -275,18 +327,30 @@ private fun ProbeContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .then(if (trackerOwnsCamera) Modifier else Modifier.height(300.dp))
                         .clip(RoundedCornerShape(8.dp)),
                 ) {
-                    QrScanner(
-                        modifier = Modifier.fillMaxSize(),
-                        flashlightOn = false,
-                        cameraLens = CameraLens.Back,
-                        openImagePicker = false,
-                        onCompletion = onScan,
-                        imagePickerHandler = { /* Not used */ },
-                        onFailure = { /* Surfaced by the notices above, not per frame. */ },
-                    )
+                    if (trackerOwnsCamera) {
+                        // DELIBERATELY NO VIEWFINDER. An ARSCNView here would render the tracker's
+                        // session at 60 fps through a UIKit interop, and it would be mounted and
+                        // unmounted at exactly the instant this step is most fragile — the read.
+                        // That is the shape of the fault this step already had once. The camera is
+                        // pointed wherever the phone is pointed, and the line below says what it can
+                        // read, twice a second, which is the information a participant actually
+                        // needs. If a viewfinder is ever wanted here, it is a measurement, not a
+                        // guess: put it back and watch the main thread.
+                        ProbeAimHint(seenCard)
+                    } else {
+                        QrScanner(
+                            modifier = Modifier.fillMaxSize(),
+                            flashlightOn = false,
+                            cameraLens = CameraLens.Back,
+                            openImagePicker = false,
+                            onCompletion = onScan,
+                            imagePickerHandler = { /* Not used */ },
+                            onFailure = { /* Surfaced by the notices above, not per frame. */ },
+                        )
+                    }
                 }
             }
         } else {
@@ -341,6 +405,23 @@ private fun ProbeContent(
             }
         }
     }
+}
+
+/**
+ * What the tracking camera can read right now.
+ *
+ * The only feedback a participant gets while aiming, because this step mounts no viewfinder — see
+ * the note at the call site. It is a CONDITION, refreshed at the tracker's 2 Hz decode, so "nothing
+ * yet" and "reading the wrong thing" are distinguishable without a tap.
+ */
+@Composable
+private fun ProbeAimHint(seenCard: String?) {
+    Text(
+        text = seenCard?.let { "Reading $it \u2014 hold it there" }
+            ?: "Point the phone at a code on a card or a grey box, and hold it steady.",
+        fontSize = 13.sp,
+        color = Color(0xFF64748B),
+    )
 }
 
 @Composable
