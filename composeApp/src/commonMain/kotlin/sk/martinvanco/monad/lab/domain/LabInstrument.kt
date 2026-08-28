@@ -88,6 +88,17 @@ class LabInstrument(
      */
     private var stallDetector: PoseStallDetector? = null
 
+    /**
+     * Origin-reset detection for the pose stream. Null when the session does not track.
+     *
+     * A stall says the stream stopped. This says the stream came back **in a different coordinate
+     * system**, which is the failure that cost the 2026-08-28 survey its last six waypoints and got
+     * a perfectly good fleet node written up as a mis-scanned sticker. The platform raised nothing:
+     * the samples either side were both `normal`, so only the arithmetic knew. See
+     * [FrameResetDetector].
+     */
+    private var frameResetDetector: FrameResetDetector? = null
+
     /** Monotonic stamp of the last accepted pose, or of tracking start before the first one. */
     private var lastPoseAdvanceNanos: Long = 0
 
@@ -261,6 +272,7 @@ class LabInstrument(
         pendingLog.clear()
         logSessionId = sessionId
         stallDetector = null
+        frameResetDetector = null
         lastPoseAdvanceNanos = 0
         meshRevisions = 0
         _poseProgress.value = PoseTrackProgress.IDLE
@@ -554,6 +566,11 @@ class LabInstrument(
                             )
                         }
                     }
+                    // The origin moved. Everything recorded from here is in a new frame, and the
+                    // operator has to know now: the remedy is to re-dwell the affected cards before
+                    // leaving the room, and it costs a minute. Discovering it in the reduction three
+                    // days later costs the walk.
+                    frameResetDetector?.onPose(sample)?.let { reset -> recordFrameReset(reset) }
                     // Buffered under the same lock-free discipline as traffic: the sampler must keep
                     // its phase, so nothing on its path waits for SQLite.
                     pendingPose += sample
@@ -642,6 +659,7 @@ class LabInstrument(
                 .onSuccess { report ->
                     poseReport = report
                     stallDetector = PoseStallDetector(report.commandedRateHz)
+                    frameResetDetector = FrameResetDetector()
                     lastPoseAdvanceNanos = monotonicNanos()
                     event("pose_tracking_started", "${report.implementation} @ ${report.commandedRateHz} Hz")
                     note(
@@ -759,15 +777,28 @@ class LabInstrument(
         label: String,
         stepId: String? = null,
         payload: String? = null,
+        /**
+         * When the marked thing happened, if that is not now.
+         *
+         * Every marker but one is raised at the instant it describes. A frame reset is not: it is
+         * confirmed a few seconds after the jump, because a displacement has to stand before it is
+         * one (see [FrameResetDetector]). Stamping the confirmation would put the marker where the
+         * pose track has nothing, and the offline reduction finds the discontinuity by arithmetic on
+         * `pose.tsv` — so the two records would disagree about when the frame changed.
+         */
+        atMonotonicNanos: Long? = null,
     ) {
         val sessionId = _state.value.sessionId?.takeIf { it.isNotEmpty() } ?: return
+        val nowNanos = monotonicNanos()
+        val stampNanos = atMonotonicNanos ?: nowNanos
         val marker = SessionMarker(
             kind = kind,
             label = label,
             stepId = stepId,
             payload = payload,
-            monotonicNanos = monotonicNanos(),
-            wallMillis = currentTimeMillis(),
+            monotonicNanos = stampNanos,
+            // Carried back on the same offset, so the two clocks stay consistent for a past instant.
+            wallMillis = currentTimeMillis() - (nowNanos - stampNanos) / 1_000_000,
         )
         runCatching { repository.appendMarker(sessionId, marker) }
             .onFailure { Napier.w("[lab] marker dropped: ${it.message}") }
@@ -1189,6 +1220,11 @@ class LabInstrument(
         // window, and reading it first would leave the final row outside the window it belongs to.
         val meshSpan = repository.meshSpan(sessionId)
 
+        // A reset in the last seconds of a walk is still a reset. The detector holds a candidate
+        // until a later pose confirms it, and at close no later pose is coming — so it is released
+        // here rather than swallowed, which would leave the sidecar counting a frame the timeline
+        // never named.
+        frameResetDetector?.flush()?.let { recordFrameReset(it) }
         poseTracker.stop()
         poseJob?.cancel()
         poseEventsJob?.cancel()
@@ -1204,6 +1240,7 @@ class LabInstrument(
         poseFlushJob = null
         meshJob = null
         stallDetector = null
+        frameResetDetector = null
         witnessJob?.cancel()
         resyncJob?.cancel()
         heartbeatJob?.cancel()
@@ -1661,6 +1698,36 @@ class LabInstrument(
             .onFailure { Napier.w("[lab] log lines dropped: ${it.message}") }
     }
 
+    /**
+     * Write down that the tracker re-created its origin.
+     *
+     * Three records, because the three readers are different people at different times. The log line
+     * is for the operator standing in the room, who can still re-dwell the affected cards. The
+     * marker is for the reduction, and carries the instant so it lands on the discontinuity that
+     * `pose.tsv` shows independently. The session event is for the sidecar.
+     */
+    private suspend fun recordFrameReset(reset: FrameResetDetector.Reset) {
+        event("frame_reset", "${reset.displacementMetres} m")
+        note(
+            "TRACKING FRAME RESET — the origin moved ${formatMetres(reset.displacementMetres)} m. " +
+                "Poses before and after this instant are in DIFFERENT coordinate systems, and no fit " +
+                "may span them. Re-dwell the cards you have visited since, before you leave."
+        )
+        mark(
+            kind = SessionMarker.Kind.FRAME_RESET,
+            label = "tracking frame reset",
+            payload = "{\"displacement_m\":${reset.displacementMetres}," +
+                "\"gap_s\":${reset.gapSeconds}}",
+            atMonotonicNanos = reset.atMonotonicNanos,
+        )
+    }
+
+    /** Two decimals, without pulling a formatter in for one log line. */
+    private fun formatMetres(value: Double): String {
+        val hundredths = kotlin.math.round(value * 100).toLong()
+        return "${hundredths / 100}.${(hundredths % 100).toString().padStart(2, '0')}"
+    }
+
     private fun event(kind: String, detail: String = "") {
         sessionEvents += SessionEvent(monotonicNanos(), currentTimeMillis(), kind, detail)
     }
@@ -1685,6 +1752,7 @@ class LabInstrument(
         poseFlushJob?.cancel()
         poseFlushJob = null
         stallDetector = null
+        frameResetDetector = null
         wake.release()
         heartbeatJob?.cancel()
         heartbeatJob = null

@@ -109,6 +109,23 @@ data class SessionMarker(
         POSE_RESUMED,
 
         /**
+         * The tracker re-created its origin. **Every pose after this instant is in a different
+         * coordinate system from every pose before it**, and no fit may span the two.
+         *
+         * Distinct from [POSE_STALLED], which says the stream stopped, and from the
+         * `tracking_resumed` annotation, which the platform raises when it knows. This one is
+         * *inferred* from the poses themselves, because on 2026-08-28 the platform said nothing:
+         * both samples either side were `normal`, no interruption fired, and the walk recorded a
+         * 15.12 m jump to exactly `(0, 0)` in silence. The six waypoints after it were fitted
+         * against the thirty-one before it, and the resulting 16.75 m residual on one fleet node was
+         * written up as a mis-scanned sticker.
+         *
+         * Payload carries the displacement and the dropout it arrived with — see
+         * [FrameResetDetector].
+         */
+        FRAME_RESET,
+
+        /**
          * The operator started standing still on a surveyed card — the stationary probe arm.
          *
          * A dwell is a different measurement from a walk: the body parked at a known distance from
@@ -150,6 +167,7 @@ data class SessionMarker(
                 WAYPOINT -> "waypoint"
                 POSE_STALLED -> "pose_stalled"
                 POSE_RESUMED -> "pose_resumed"
+                FRAME_RESET -> "frame_reset"
                 DWELL_START -> "dwell_start"
                 DWELL_END -> "dwell_end"
                 HEADCOUNT -> "headcount"
@@ -170,6 +188,7 @@ data class SessionMarker(
                 "waypoint" -> WAYPOINT
                 "pose_stalled" -> POSE_STALLED
                 "pose_resumed" -> POSE_RESUMED
+                "frame_reset" -> FRAME_RESET
                 "dwell_start" -> DWELL_START
                 "dwell_end" -> DWELL_END
                 "headcount" -> HEADCOUNT

@@ -150,6 +150,20 @@ data class PoseTrackSummary(
     @SerialName("rejected_jumps") val rejectedJumps: Long = 0,
     /** Metres discarded with those jumps. Together with the count, the whole rejection. */
     @SerialName("rejected_jump_m") val rejectedJumpMetres: Double = 0.0,
+    /**
+     * Origin resets the tracker made mid-walk — see [FrameResetDetector].
+     *
+     * **The number that decides whether this walk can be placed at all.** Zero means the whole track
+     * is one coordinate system and one transform carries every waypoint into the site frame.
+     * Anything else means the walk holds that many + 1 frames, no fit may span two of them, and a
+     * reader who treats the track as one thing will get a rotation out of thin air.
+     *
+     * Separate from [rejectedJumps], which counts every displacement excluded from the path length —
+     * transient glitches included. A glitch is undone and costs nothing; a reset stands and costs
+     * the frame. On 2026-08-28 the same walk had seven rejected jumps and two resets, and only the
+     * second number explained why the survey refused.
+     */
+    @SerialName("frame_resets") val frameResets: Long = 0,
     /** Bounding-box side lengths of the horizontal extent, metres. */
     @SerialName("extent_x_m") val extentXMetres: Double,
     @SerialName("extent_z_m") val extentZMetres: Double,
@@ -207,7 +221,12 @@ data class PoseTrackSummary(
             var previous: PoseSample? = null
             var jumps = 0L
             var jumpMetres = 0.0
+            // The same detector the live session runs, replayed over the finished list, so the
+            // sidecar and the markers cannot disagree about how many frames the walk holds.
+            val resets = FrameResetDetector()
+            var frameResets = 0L
             samples.forEach { sample ->
+                if (resets.onPose(sample) != null) frameResets++
                 if (sample.quality == TrackingQuality.NORMAL) normal++
                 if (sample.x < minX) minX = sample.x
                 if (sample.x > maxX) maxX = sample.x
@@ -233,12 +252,14 @@ data class PoseTrackSummary(
                 }
                 previous = sample
             }
+            if (resets.flush() != null) frameResets++
             return PoseTrackSummary(
                 samples = samples.size.toLong(),
                 normalFraction = normal.toDouble() / samples.size,
                 pathLengthMetres = length,
                 rejectedJumps = jumps,
                 rejectedJumpMetres = jumpMetres,
+                frameResets = frameResets,
                 extentXMetres = (maxX - minX).toDouble(),
                 extentZMetres = (maxZ - minZ).toDouble(),
                 extentYMetres = (maxY - minY).toDouble(),
