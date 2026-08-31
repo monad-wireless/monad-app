@@ -326,7 +326,13 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "sk.martinvanco.monad"
+        // The store identity, and deliberately not `namespace` above. `namespace` names the
+        // generated R and BuildConfig classes and tracks the Kotlin source package, which no
+        // store ever sees. `applicationId` is what Google Play registers and what a logcat
+        // package filter matches. It moved because `sk.martinvanco.monad` is Martin's
+        // namespace and its Apple App ID is registered to team 3D6D8LQ6F2, and an App ID
+        // cannot be claimed by two teams. Changing this orphans every existing install.
+        applicationId = "dev.dubec.monad"
         // 29: WifiNetworkSpecifier + Network.bindSocket are the app-scoped association and
         // socket-pinning primitives the lab instrument is built on, and WifiConnectionServiceV2 is
         // already @RequiresApi(Q). Declaring 24 promised a compatibility the code never had.

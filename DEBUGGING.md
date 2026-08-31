@@ -63,7 +63,7 @@ println("Debug: Login clicked")
 
 In Android Studio:
 - Click **Logcat** tab at bottom
-- Filter by package: `sk.martinvanco.monad`
+- Filter by package: `dev.dubec.monad` (the `applicationId`, not the source package)
 - Or filter by tag: `LoginScreen`, `Auth`, etc.
 
 #### 2. Set Breakpoints

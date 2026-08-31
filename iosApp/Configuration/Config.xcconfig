@@ -1,5 +1,13 @@
+// Identity.
+//
+// BUNDLE_ID is the simulator build's identifier (the pbxproj appends TEAM_ID to it, which is
+// empty here). DEVICE_BUNDLE_ID below is the device build's, and it is the one that becomes an
+// App ID in the developer portal. Both read dev.dubec.monad because the two previous names are
+// closed: sk.martinvanco.monad is Martin's namespace, and sk.jakubdubec.monad is registered to
+// team 3D6D8LQ6F2. An App ID cannot be claimed by two teams, so a new membership needs a name
+// no other team holds.
 TEAM_ID=
-BUNDLE_ID=sk.martinvanco.monad
+BUNDLE_ID=dev.dubec.monad
 APP_NAME=Monad Scan
 OTHER_LDFLAGS = $(inherited) -lsqlite3
 
@@ -13,7 +21,7 @@ OTHER_LDFLAGS = $(inherited) -lsqlite3
 // A personal-account build overrides these three in Local.xcconfig, which is gitignored:
 // nobody else's phone, and nobody's CI, inherits a developer's private signing identity.
 SIGNING_TEAM = 3D6D8LQ6F2
-DEVICE_BUNDLE_ID = sk.jakubdubec.monad
+DEVICE_BUNDLE_ID = dev.dubec.monad
 ENTITLEMENTS_FILE = iosApp/iosApp.entitlements
 
 #include? "Local.xcconfig"
