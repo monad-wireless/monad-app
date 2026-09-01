@@ -221,6 +221,9 @@ fun ProbeStep(
         description = task.description,
         status = task.status,
         modifier = modifier,
+        // A probe can carry a plan too — the same generator that marks the next stop can mark
+        // the one being stood at. Null when it does not, which is the common case.
+        imageUrl = TaskConfigParser.stepImageUrl(task),
         content = {
             ProbeContent(
                 config = config,

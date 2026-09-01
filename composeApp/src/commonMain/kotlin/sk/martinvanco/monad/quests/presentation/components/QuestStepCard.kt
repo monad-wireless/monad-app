@@ -14,10 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import sk.martinvanco.monad.quests.data.dto.TaskStatus
 
 /**
@@ -28,6 +30,9 @@ import sk.martinvanco.monad.quests.data.dto.TaskStatus
  * @param title The step title/name
  * @param description The step description/instructions
  * @param status Current execution status of the step
+ * @param imageUrl Optional guidance image — a plan of where this step is. Rendered only while
+ *   the step is ACTIVE, for the same reason the content slot is: a quest of twenty stops would
+ *   otherwise show twenty floor plans at once, and the one that matters would be off screen.
  * @param content Composable slot for step-specific UI (camera, timer, etc.)
  * @param actions Composable slot for step-specific action buttons
  */
@@ -38,6 +43,7 @@ fun QuestStepCard(
     description: String,
     status: TaskStatus,
     modifier: Modifier = Modifier,
+    imageUrl: String? = null,
     content: (@Composable () -> Unit)? = null,
     actions: (@Composable () -> Unit)? = null
 ) {
@@ -136,6 +142,25 @@ fun QuestStepCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Guidance plan, above the step's own UI: it answers "where am I going",
+                    // which the participant needs before the camera, not after it.
+                    //
+                    // ContentScale.Fit, never Crop. The quest banner crops because it is
+                    // decoration and losing its edges costs nothing. This is a floor plan, and
+                    // a cropped floor plan silently removes the corner of the room the walker
+                    // was being sent to.
+                    imageUrl?.let { url ->
+                        AsyncImage(
+                            model = url,
+                            contentDescription = "Where this step is, on the floor plan",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+
                     // Step-specific content
                     content?.invoke()
 

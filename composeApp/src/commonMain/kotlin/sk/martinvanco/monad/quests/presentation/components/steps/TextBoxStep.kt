@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
+import sk.martinvanco.monad.quests.data.dto.TaskConfigParser
 import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
 
 /**
@@ -30,6 +31,9 @@ fun TextBoxStep(
         description = task.description,
         status = task.status,
         modifier = modifier,
+        // This composable renders WALK_TO, so it is the step that most needs a plan: "go to
+        // Node monad07" is only actionable if the walker knows which corner that is.
+        imageUrl = TaskConfigParser.stepImageUrl(task),
         // No content slot: QuestStepCard already renders the description, and an informational
         // step has no step-specific UI of its own. Passing it here as well printed every briefing
         // twice — invisible while descriptions were empty, obvious the moment they were plumbed in.

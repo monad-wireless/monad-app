@@ -2,6 +2,8 @@ package sk.martinvanco.monad.quests.data.dto
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import sk.martinvanco.monad.lab.domain.QuestFeatures
 
 /**
@@ -33,6 +35,34 @@ object TaskConfigParser {
             TaskType.OBSERVE -> json.decodeFromJsonElement(ObserveConfig.serializer(), configJson)
             TaskType.INFO -> null
         }
+    }
+
+    /**
+     * The guidance image a step may carry, or null.
+     *
+     * Deliberately NOT part of any per-type config class. An image is chrome — it says
+     * "here is where this is" — and every step type can want one, so binding it to
+     * [TaskType.WALK_TO] would mean a new config class and an app release the first time a
+     * probe wanted a photo of the card it is asking for.
+     *
+     * Read straight off the raw config for the same reason the sensor config is untyped:
+     * the backend stores step config as free-form JSON, so a field the app does not know
+     * about costs nothing, and a field the app does know about costs no schema migration.
+     *
+     * The URL is generated from PostGIS at publish time and is expected to change whenever a
+     * card moves. Nothing here caches it beyond Coil's own disk cache, on purpose — a stale
+     * map of where a marker used to be is worse than no map.
+     */
+    fun stepImageUrl(task: ActiveTaskDto): String? {
+        val url = (task.config as? JsonObject)
+            ?.get("image")
+            ?.let { it as? JsonPrimitive }
+            ?.takeIf { it.isString }
+            ?.content
+            ?.trim()
+        // An empty string is a generator that had nothing to draw, not a request to render
+        // a broken image placeholder in the middle of a step.
+        return url?.takeIf { it.isNotEmpty() }
     }
 
     /**
