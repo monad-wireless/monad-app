@@ -26,6 +26,16 @@ object AppConfig {
     val BASE_URL: String = apiBaseUrlOverride()?.takeIf { it.isNotBlank() } ?: DEFAULT_BASE_URL
 
     /**
+     * The public site, which serves the rendered plans (`/lab/step-map.svg`,
+     * `/lab/coverage.svg`).
+     *
+     * Derived from [BASE_URL] rather than declared separately, so a build pointed at a
+     * staging API does not silently fetch its pictures from production. The two are the same
+     * host with and without the `api.` prefix, behind one nginx.
+     */
+    val SITE_URL: String = BASE_URL.replace("://api.", "://")
+
+    /**
      * Request timeout in milliseconds.
      *
      * Deliberately generous compared with a consumer app: a phone joined to an experiment AP

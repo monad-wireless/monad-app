@@ -2,6 +2,8 @@ package sk.martinvanco.monad.my_account.presentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +24,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
+import sk.martinvanco.monad.core.config.AppConfig
+import sk.martinvanco.monad.profile.presentation.ContributionSection
+import sk.martinvanco.monad.profile.presentation.ProfileScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
@@ -46,6 +50,8 @@ class MyAccountScreen : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = koinScreenModel<MyAccountScreenModel>()
+        val profileModel = koinScreenModel<ProfileScreenModel>()
+        val profileState by profileModel.state.collectAsState()
         val state by screenModel.state.collectAsState()
 
         ScreenWithBackNavigation(
@@ -60,12 +66,17 @@ class MyAccountScreen : Screen {
                     CircularProgressIndicator()
                 }
             } else {
+                // Scrolls, and no longer SpaceBetween. The screen used to hold an identity
+                // block and two buttons, so pinning them to the ends was fine; it now carries
+                // the contribution section between them and SpaceBetween would push the
+                // destructive actions off the fold on a small handset.
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                    verticalArrangement = Arrangement.spacedBy(32.dp)
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -108,6 +119,17 @@ class MyAccountScreen : Screen {
                         )
                     }
 
+                    // IP-145. The thing somebody opens this tab to look at, placed above the
+                    // thing they open it to avoid.
+                    ContributionSection(
+                        stats = profileState.stats,
+                        isLoading = profileState.isLoading,
+                        error = profileState.error,
+                        totalPoints = profileState.stats?.pointsTotal?.toInt() ?: 0,
+                        siteUrl = AppConfig.SITE_URL,
+                        onRetry = profileModel::load,
+                    )
+
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -138,23 +160,6 @@ class MyAccountScreen : Screen {
                                     color = Color.White
                                 )
                             }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // IP-145. Placed above the destructive actions rather than beside
-                        // them: this is the thing somebody opens the account tab to look at,
-                        // and "delete my account" is the thing they open it to avoid.
-                        OutlinedButton(
-                            onClick = { screenModel.onEvent(MyAccountEvent.ViewProfileClick) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = "Your contribution",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))

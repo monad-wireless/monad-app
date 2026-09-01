@@ -27,6 +27,11 @@ data class ContributionDto(
     val dwells: Int = 0,
     @SerialName("dwell_seconds") val dwellSeconds: Int = 0,
     @SerialName("distinct_points") val distinctPoints: Int = 0,
+    /**
+     * The surveyed points this person has stood at, by key. Drawn as the coverage plan.
+     * Sorted server-side so two people who walked the same set request the same image.
+     */
+    @SerialName("points_visited") val pointsVisited: List<String> = emptyList(),
 )
 
 @Serializable
