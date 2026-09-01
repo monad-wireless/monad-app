@@ -73,8 +73,13 @@ class MyAccountScreen : Screen {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        // A slightly grey ground, so the white dashboard panels read as
+                        // panels. Same relationship monad-defense's StatsView has with
+                        // `.background.secondary`; without it the cards vanish into the page
+                        // and the whole thing reads as one long list.
+                        .background(Color(0xFFF1F5F9))
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
+                        .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(32.dp)
                 ) {
@@ -125,7 +130,6 @@ class MyAccountScreen : Screen {
                         stats = profileState.stats,
                         isLoading = profileState.isLoading,
                         error = profileState.error,
-                        totalPoints = profileState.stats?.pointsTotal?.toInt() ?: 0,
                         siteUrl = AppConfig.SITE_URL,
                         onRetry = profileModel::load,
                     )

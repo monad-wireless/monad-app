@@ -16,6 +16,15 @@ data class ProfileStatsDto(
     @SerialName("quests_completed") val questsCompleted: Int = 0,
     val contribution: ContributionDto = ContributionDto(),
     val history: List<HistoryEntryDto> = emptyList(),
+    /** Six weeks of daily dwell counts, oldest first, every day present including zeros. */
+    val activity: List<ActivityDayDto> = emptyList(),
+)
+
+@Serializable
+data class ActivityDayDto(
+    /** `Y-m-d`. */
+    val date: String,
+    val dwells: Int = 0,
 )
 
 /**
