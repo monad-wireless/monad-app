@@ -49,6 +49,8 @@ import sk.martinvanco.monad.lab.presentation.GroundTruthScanScreenModel
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreenModel
 import sk.martinvanco.monad.lab.presentation.SessionStatusScreenModel
 import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
+import sk.martinvanco.monad.profile.data.api.ProfileService
+import sk.martinvanco.monad.profile.presentation.ProfileScreenModel
 import sk.martinvanco.monad.news.presentation.NewsScreenModel
 import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
 import sk.martinvanco.monad.onboarding.presentation.OnboardingScreenModel
@@ -78,6 +80,7 @@ val appModule = module {
     single { KtorClient }
     single { AuthService(get()) }
     single { QuestsService(get()) }
+    single { ProfileService(get()) }
     single { DeviceService(get()) }  // IP-128 — public device read behind a scanned label
     single { StorageService(get()) }
 
@@ -186,6 +189,7 @@ val appModule = module {
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }
+    factory { ProfileScreenModel(get()) }
     factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { GroundTruthScanScreenModel(get(), get(), get(), get()) }
     // "Am I recording?" — the participant surface for a backgrounded session.

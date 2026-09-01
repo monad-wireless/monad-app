@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.domain.AuthManager
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.navigation.NavigationManager
+import sk.martinvanco.monad.profile.presentation.ProfileScreen
 
 class MyAccountScreenModel(
     private val authManager: AuthManager,
@@ -32,6 +33,7 @@ class MyAccountScreenModel(
 
     fun onEvent(event: MyAccountEvent) {
         when (event) {
+            MyAccountEvent.ViewProfileClick -> navigationManager.navigateTo(ProfileScreen())
             MyAccountEvent.LogoutClick -> logout()
             MyAccountEvent.DeleteAccountClick -> {
                 mutableState.value = state.value.copy(showDeleteDialog = true, deleteError = null)

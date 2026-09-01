@@ -22,6 +22,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -137,6 +138,23 @@ class MyAccountScreen : Screen {
                                     color = Color.White
                                 )
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // IP-145. Placed above the destructive actions rather than beside
+                        // them: this is the thing somebody opens the account tab to look at,
+                        // and "delete my account" is the thing they open it to avoid.
+                        OutlinedButton(
+                            onClick = { screenModel.onEvent(MyAccountEvent.ViewProfileClick) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "Your contribution",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
