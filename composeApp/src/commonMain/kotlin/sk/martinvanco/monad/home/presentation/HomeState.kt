@@ -49,4 +49,21 @@ data class HomeState(
     /** Age of the freshest event across every stream, in milliseconds, or null if nothing yet. */
     val lastEventAgeMillis: Long?
         get() = health.streams.filter { it.everProduced }.minOfOrNull { it.silenceMillis }
+
+    /**
+     * The quests a student is meant to walk.
+     *
+     * Split from the operator takes rather than badged among them. An operator quest is a
+     * different KIND of thing — it is the person running the session measuring the room, not a
+     * participant contributing to it — and the two read as alternatives when they share a list.
+     * A participant never receives one at all (the backend withholds them), so this split is
+     * visible only on the operator's own phone, which is exactly where it was needed.
+     */
+    val participantQuests: List<QuestCardDt> get() = quests.filterNot { it.isOperatorOnly }
+
+    /** Operator takes. Empty for everybody but a superadmin. */
+    val operatorQuests: List<QuestCardDt> get() = quests.filter { it.isOperatorOnly }
+
+    /** Points on offer across the quests a student can see — the board's headline figure. */
+    val pointsOnOffer: Float get() = participantQuests.sumOf { it.points.toDouble() }.toFloat()
 }

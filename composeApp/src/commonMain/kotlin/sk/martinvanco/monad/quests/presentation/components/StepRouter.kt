@@ -14,7 +14,11 @@ import sk.martinvanco.monad.quests.presentation.components.steps.*
  *
  * @param stepNumber Sequential number of this step in the quest
  * @param task The active task to render
- * @param onComplete Callback when step is completed
+ * @param onComplete Callback when the step is completed, carrying what the step OBSERVED as JSON,
+ *   or null when it observed nothing. Only a [TaskType.PROBE] reports anything today — the
+ *   surveyed point it consumed — and that payload is the only record of where a dwell happened
+ *   that leaves the device. Every other step passes null, explicitly rather than by omission, so
+ *   adding an observation to one of them is a change at that step and nowhere else.
  * @param preScannedValue a code the participant already scanned outside the quest — the QR deep
  *   link that opened the app. Only a [TaskType.PROBE] consumes it, and only when it matches one of
  *   that step's targets, so it can never satisfy a step the participant did not stand in front of.
@@ -23,7 +27,7 @@ import sk.martinvanco.monad.quests.presentation.components.steps.*
 fun StepRouter(
     stepNumber: Int,
     task: ActiveTaskDto,
-    onComplete: () -> Unit,
+    onComplete: (stepData: String?) -> Unit,
     modifier: Modifier = Modifier,
     preScannedValue: String? = null,
 ) {
@@ -32,7 +36,7 @@ fun StepRouter(
             QrCodeStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -41,7 +45,7 @@ fun StepRouter(
             BleDeviceStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -50,7 +54,7 @@ fun StepRouter(
             WaitStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -59,7 +63,7 @@ fun StepRouter(
             TextBoxStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -68,7 +72,7 @@ fun StepRouter(
             SensorCaptureStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -77,7 +81,7 @@ fun StepRouter(
             BleAdvertiseStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -96,7 +100,7 @@ fun StepRouter(
             ObserveStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -105,7 +109,7 @@ fun StepRouter(
             ConnectToApStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }
@@ -114,7 +118,7 @@ fun StepRouter(
             TextBoxStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = onComplete,
+                onComplete = { onComplete(null) },
                 modifier = modifier
             )
         }

@@ -1,0 +1,1888 @@
+{
+  "facts": [
+    {
+      "body": "Twice the negative log-likelihood of the fitted model, plus two for every free parameter it was allowed to tune.",
+      "card_id": "abbr-0001",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0001:foundation",
+      "surprise": false,
+      "title": "AIC"
+    },
+    {
+      "body": "The rule of thumb the formula gives you, and it is worth memorising because it settles arguments: **a new parameter must buy more than two points of −2 log L to be worth keeping.** Concretely, fitting occupancy against signal variability. The straight line has two free parameters and the saturating curve has three.",
+      "card_id": "abbr-0001",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0001:wild",
+      "surprise": false,
+      "title": "AIC"
+    },
+    {
+      "body": "The phase difference between two antennas is set by how much further the wave had to travel to reach the second one, so measuring that difference gives the bearing.",
+      "card_id": "abbr-0002",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0002:foundation",
+      "surprise": false,
+      "title": "AoA"
+    },
+    {
+      "body": "Numbers on our own band. At 5 GHz the wavelength is about 6 cm, so the standard spacing is 3 cm. A wave arriving 30° off broadside travels an extra d·sin30° = 1.5 cm, which is a quarter of a wavelength — a phase difference of exactly **90°**. Now the reason we get no bearing from it.",
+      "card_id": "abbr-0002",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0002:wild",
+      "surprise": false,
+      "title": "AoA"
+    },
+    {
+      "body": "Access Point. The precise definition is more interesting than \"the hub\": an AP is itself a **station**. In 802.11 a station (STA) is an addressable destination, not necessarily at a fixed location — and a STA may be a mobile terminal, an AP terminal, or something else again. What makes it an AP is its ROLE.",
+      "card_id": "abbr-0003",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0003:foundation",
+      "surprise": false,
+      "title": "AP"
+    },
+    {
+      "body": "Roaming is the everyday demonstration that an AP is a role rather than a box. Walk down a corridor with two ceiling APs on one extended service set and the phone hands over between them without dropping the call — same network, different AP, because the distribution system joins their basic service sets. And the negative case, on our own hardware: the fleet has nothing to roam between, because it has no AP at all.",
+      "card_id": "abbr-0003",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0003:wild",
+      "surprise": false,
+      "title": "AP"
+    },
+    {
+      "body": "The area under the curve traced by true-positive rate against false-positive rate as the decision threshold is swept from one extreme to the other.",
+      "card_id": "abbr-0004",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0004:foundation",
+      "surprise": false,
+      "title": "AUC"
+    },
+    {
+      "body": "One classifier, one threshold, read as a point on the curve. Set the threshold so the detector catches **95% of occupied windows**; on our kind of data it will also flag some fraction of the empty ones — say **40%**. That single pair (0.95, 0.40) is one point on the ROC, and moving the threshold slides along the whole line.",
+      "card_id": "abbr-0004",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0004:wild",
+      "surprise": false,
+      "title": "AUC"
+    },
+    {
+      "body": "Bluetooth Low Energy: a short-range protocol on the 2.4–2.4835 GHz band, divided into **forty 2 MHz channels**. It shares upper protocol layers with classic Bluetooth but its physical layer is different and not compatible. Four ROLES, and the distinction matters. A **broadcaster** transmits only — a one-way beacon. An **observer** receives only. A **peripheral** is simple and holds one connection.",
+      "card_id": "abbr-0005",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0005:foundation",
+      "surprise": false,
+      "title": "BLE"
+    },
+    {
+      "body": "A shop beacon is the reference instance. It advertises every **100 ms** on channels 37, 38 and 39, carries a few dozen bytes, and runs for **years** on one coin cell — because it never listens, never connects and never negotiates. Our nodes are the observers of exactly that pattern, and the counting problem is visible in it.",
+      "card_id": "abbr-0005",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0005:wild",
+      "surprise": true,
+      "title": "BLE"
+    },
+    {
+      "body": "The measured phase is the true channel phase plus a rotation that grows with the frequency offset and with elapsed time.",
+      "card_id": "abbr-0006",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0006:foundation",
+      "surprise": false,
+      "title": "CFO"
+    },
+    {
+      "body": "Do the arithmetic on our own band and the size of the problem is obvious. Two commodity crystals 20 parts per million apart, at 5 GHz, differ by **100 kHz**. One OFDM symbol including its guard interval lasts 4 µs, so during a single symbol the phase winds by 100 kHz × 4 µs = **0.4 of a cycle**, about 144°. Over a 100 µs frame it winds through **ten full cycles**.",
+      "card_id": "abbr-0006",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0006:wild",
+      "surprise": true,
+      "title": "CFO"
+    },
+    {
+      "body": "The channel at a frequency is the sum of every arriving copy of the signal, each with its own strength and its own delay.",
+      "card_id": "abbr-0007",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0007:foundation",
+      "surprise": false,
+      "title": "CFR"
+    },
+    {
+      "body": "Why bandwidth decides what you can see, in one calculation. A direct path of 5 m and a wall bounce of 8 m differ by 3 m, which is a delay of **10 ns**. The resulting ripple in the frequency response has a period of 1/10 ns = **100 MHz**. On a 20 MHz channel you therefore observe only a fifth of one ripple — which looks like a gentle tilt, not a null, and is easily mistaken for a gain change.",
+      "card_id": "abbr-0007",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0007:wild",
+      "surprise": false,
+      "title": "CFR"
+    },
+    {
+      "body": "The interval computed from the sample traps the fixed true value with probability at least one minus alpha.",
+      "card_id": "abbr-0008",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0008:foundation",
+      "surprise": false,
+      "title": "CI"
+    },
+    {
+      "body": "The arithmetic of \"just run a few more sessions\", which is usually the wrong plan. Interval width shrinks like one over the square root of the sample. Going from **25 sessions to 100** halves it. Halving it again needs **400**. So a team whose interval is twice as wide as it needs is not a few sessions short — it is a factor of four short.",
+      "card_id": "abbr-0008",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0008:wild",
+      "surprise": false,
+      "title": "CI"
+    },
+    {
+      "body": "Channel Impulse Response: the channel described in TIME rather than in frequency. Fire one infinitely short pulse into the room; the CIR is the train of echoes that returns — one spike per path, each at its own delay, each with its own attenuation and phase. The CIR and the CFR are **Fourier transforms of each other**. Same channel, two views: a list of echoes in time, or a rippled curve across frequency.",
+      "card_id": "abbr-0009",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0009:foundation",
+      "surprise": false,
+      "title": "CIR"
+    },
+    {
+      "body": "What our own bandwidth can and cannot separate, from one division. Two paths are resolvable only if their delays differ by more than roughly 1/B. At **20 MHz** that is 50 ns, which is **15 metres** of path-length difference — larger than most rooms, so within a room everything arrives as one blurred lump. At **160 MHz** it is 6.25 ns, about **1.9 metres**, and now the wall bounce is a separate arrival.",
+      "card_id": "abbr-0009",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0009:wild",
+      "surprise": true,
+      "title": "CIR"
+    },
+    {
+      "body": "No unbiased estimator can have a variance smaller than one over the Fisher information the measurement carries.",
+      "card_id": "abbr-0010",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0010:foundation",
+      "surprise": false,
+      "title": "CRB"
+    },
+    {
+      "body": "How to use it as a decision rule, which is what makes it practical rather than discouraging. Compute the bound for your measurement. If your estimator's variance is within about 10% of it, stop tuning the estimator: the information is not there, and you need a better MEASUREMENT — more bandwidth, more antennas, a longer window.",
+      "card_id": "abbr-0010",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0010:wild",
+      "surprise": false,
+      "title": "CRB"
+    },
+    {
+      "body": "The receiver knows what was sent and sees what arrived, so it divides one by the other to recover the channel on every subcarrier.",
+      "card_id": "abbr-0011",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0011:foundation",
+      "surprise": false,
+      "title": "CSI"
+    },
+    {
+      "body": "The data rate of one node, so the archive's size stops being a surprise. One 2 × 2 frame on a 20 MHz HE channel is 4 × 242 = **968 complex numbers**. At the measured **608 Hz** that is about **588 000 complex values per second, per node**. Nine receivers listening at once is roughly **5.3 million per second**. Two consequences follow.",
+      "card_id": "abbr-0011",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0011:wild",
+      "surprise": true,
+      "title": "CSI"
+    },
+    {
+      "body": "Keep a running total of how far readings exceed a tolerated slack; alarm when that total crosses a threshold, then reset it to zero.",
+      "card_id": "abbr-0012",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0012:foundation",
+      "surprise": false,
+      "title": "CUSUM"
+    },
+    {
+      "body": "Coefficient of Variation: standard deviation divided by mean. A spread expressed as a FRACTION of the level rather than in absolute units, which makes it dimensionless and comparable across things measured on different scales.",
+      "card_id": "abbr-0013",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0013:foundation",
+      "surprise": false,
+      "title": "CV"
+    },
+    {
+      "body": "The same measurement, before and after normalising, on one subcarrier over one second. Empty room: mean 0.500, standard deviation 0.010, so **CV = 0.02**. Occupied: mean 0.480, standard deviation 0.062, so **CV = 0.13**. The level moved 4%; the ratio moved sixfold. Then the failure it prevents.",
+      "card_id": "abbr-0013",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0013:wild",
+      "surprise": false,
+      "title": "CV"
+    },
+    {
+      "body": "Dynamic Frequency Selection. Parts of the 5 GHz band are **shared with radar** — weather radar, air-traffic control, military systems. Those users were there first, so unlicensed WiFi is admitted on one condition: listen for radar before transmitting, and leave promptly on hearing any. In 802.11 this is not an optional feature.",
+      "card_id": "abbr-0014",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0014:foundation",
+      "surprise": false,
+      "title": "DFS"
+    },
+    {
+      "body": "Why our captures sit on channel 48, in one sentence of consequence: a radar sweep can evict a device from a DFS channel within seconds, and the gap it leaves in the data looks exactly like a receiver fault. Consider the alternative. A night's unattended run on channel 100 is interrupted at 02:00 by a passing weather sweep. The nodes vacate, correctly and by design.",
+      "card_id": "abbr-0014",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0014:wild",
+      "surprise": true,
+      "title": "DFS"
+    },
+    {
+      "body": "Direct-Sequence Spread Spectrum: the original 802.11 physical layer, running at 1 and 2 Mbps by spreading each bit across a wider band with a fixed chip sequence. It predates OFDM and uses no subcarriers at all. It is also why 2.4 GHz has only three non-overlapping channels — spread that wide, only three fit side by side without interfering.",
+      "card_id": "abbr-0015",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0015:foundation",
+      "surprise": false,
+      "title": "DSSS"
+    },
+    {
+      "body": "Expected Calibration Error: whether a model's stated confidence is HONEST. Take everything it claimed to be 70% sure about; if it was right about 70% of those times, it is calibrated. ECE is the average size of that gap across all confidence levels.",
+      "card_id": "abbr-0016",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0016:foundation",
+      "surprise": false,
+      "title": "ECE"
+    },
+    {
+      "body": "A hundred windows in which the model said \"70% sure the room is occupied\". If the room was actually occupied in about **70** of them, the model is calibrated at that confidence level and its number can be used in a threshold. If it was occupied in **95**, the model is under-confident and an operator will over-ventilate.",
+      "card_id": "abbr-0016",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0016:wild",
+      "surprise": false,
+      "title": "ECE"
+    },
+    {
+      "body": "Fine Timing Measurement, standardised in IEEE 802.11. Two stations measure the distance between them from the **round-trip time of a timestamped exchange**. The exchange is the whole idea. The responder sends a frame and records exactly when it left (t1); the initiator records when it arrived (t2), replies, and records when that left (t3); the responder records its arrival (t4).",
+      "card_id": "abbr-0017",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0017:foundation",
+      "surprise": false,
+      "title": "FTM"
+    },
+    {
+      "body": "What the protocol achieves, and the sentence that rules it out here. With the fine-timing-measurement exchange behind it, Wi-Fi Certified Location claims **sub-metre** indoor accuracy on wide-bandwidth devices, and the exchange's own subtraction removes the responder's turnaround so a busy far-side radio does not bias the distance. Now the requirement: the measured party's radio must ANSWER.",
+      "card_id": "abbr-0017",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0017:wild",
+      "surprise": false,
+      "title": "FTM"
+    },
+    {
+      "body": "Graph Neural Network: a network that learns over nodes and edges rather than over a fixed grid, so its input has no required shape or ordering. The base operation is **message passing**, and it is one line. Each node updates itself from its neighbours: h(v) ← f( h(v), aggregate over neighbours u of g( h(u) ) ) where the aggregate is a permutation-invariant function — a sum, a mean, a max.",
+      "card_id": "abbr-0018",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0018:foundation",
+      "surprise": false,
+      "title": "GNN"
+    },
+    {
+      "body": "The invariance in a case where you can feel it. Give the network a room's four antenna-pair channels as a graph with four nodes. Relabel the antennas — swap pair 1 and pair 3 — and a grid-shaped model sees an entirely different input, while a message-passing model sees the same one, because a sum does not know the order it was given.",
+      "card_id": "abbr-0018",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0018:wild",
+      "surprise": false,
+      "title": "GNN"
+    },
+    {
+      "body": "High Efficiency: the 802.11ax physical layer. Denser subcarrier spacing and wider channels, designed for crowded environments with many clients rather than for peak single-link speed.",
+      "card_id": "abbr-0019",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0019:foundation",
+      "surprise": false,
+      "title": "HE"
+    },
+    {
+      "body": "What four times the tones actually costs, using the detection edge. On a 20 MHz HE channel a 2 × 2 node has p = 4 × 242 = **968** dimensions. At 608 Hz, a one-second window has n = 608, so γ = p/n ≈ **1.6** and the noise bulk reaches about 5.1 σ². The same node on 56 tones would have p = 224, γ ≈ 0.37, and an edge near 1.9 σ².",
+      "card_id": "abbr-0019",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0019:wild",
+      "surprise": false,
+      "title": "HE"
+    },
+    {
+      "body": "Internet of Things. The useful definition is structural rather than aspirational: a **network of things** is built from five primitives —",
+      "card_id": "abbr-0020",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0020:foundation",
+      "surprise": false,
+      "title": "IoT"
+    },
+    {
+      "body": "The decision trigger is the primitive worth pointing at, because it is the one people forget is part of the architecture. Ours is the recalibration rule, and it is literally a predicate: fire a calibration campaign when the CSI estimate and the device-count reference have disagreed enough, for long enough, by a margin large enough to matter.",
+      "card_id": "abbr-0020",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0020:wild",
+      "surprise": false,
+      "title": "IoT"
+    },
+    {
+      "body": "Integrated Sensing and Communication: designing one waveform, one radio and one slice of spectrum to carry data AND perform radar-like sensing, rather than building two systems. The clean way to state the cost is as a frontier. For a fixed waveform, bandwidth and power budget, the achievable pairs of (data rate, sensing accuracy) form a boundary. You can sit anywhere on it.",
+      "card_id": "abbr-0021",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0021:foundation",
+      "surprise": false,
+      "title": "ISAC"
+    },
+    {
+      "body": "Our own preamble is the worked case. CSI comes from the training symbols at the start of a frame, and those symbols exist to let the receiver equalise the channel — a communication job. Their number, spacing and duration were chosen for that job.",
+      "card_id": "abbr-0021",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0021:wild",
+      "surprise": false,
+      "title": "ISAC"
+    },
+    {
+      "body": "Leave-One-Environment-Out: hold out an ENTIRE environment, train on the rest, test on the one held out, and repeat for each. The score reported is the average over folds, and every fold's test set is a room the model has never seen.",
+      "card_id": "abbr-0022",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0022:foundation",
+      "surprise": false,
+      "title": "LOEO"
+    },
+    {
+      "body": "The two protocols on the same corpus, and why the gap between them is the finding rather than a nuisance. Under a random 80/20 split, windows from every room appear in both halves. A per-link amplitude map scores well, because at test time it is recognising rooms it memorised. Under LOEO, the same feature on the same corpus collapses — its R² can go negative, which means it does worse than guessing the average.",
+      "card_id": "abbr-0022",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0022:wild",
+      "surprise": false,
+      "title": "LOEO"
+    },
+    {
+      "body": "Line of Sight: an unobstructed straight path from transmitter to receiver. Where one exists it usually dominates the received energy, because every other path is longer and has bounced off something lossy.",
+      "card_id": "abbr-0023",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0023:foundation",
+      "surprise": false,
+      "title": "LOS"
+    },
+    {
+      "body": "Leave-One-Subject-Out: hold out an entire PERSON, so the model is tested on someone it never trained on. The same discipline as LOEO applied to identity rather than place.",
+      "card_id": "abbr-0024",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0024:foundation",
+      "surprise": false,
+      "title": "LOSO"
+    },
+    {
+      "body": "The protocol as the activity-recognition literature runs it: nineteen activities performed by eight subjects, with seven subjects' feature vectors used for training and the eighth held out, repeated eight times and averaged. The argument its authors give is exactly the LOEO argument moved one axis over — treating subjects as UNITS, so no trial from the same person appears on both sides.",
+      "card_id": "abbr-0024",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0024:wild",
+      "surprise": false,
+      "title": "LOSO"
+    },
+    {
+      "body": "Medium Access Control: the layer deciding WHO TRANSMITS WHEN on a shared medium. In 802.11 the fundamental method is CSMA/CA — a station wanting to transmit may do so only after listening and finding the channel idle. If it is busy, the station waits for it to clear and then waits an additional random **backoff interval**, so that two waiting stations do not collide the instant it frees up.",
+      "card_id": "abbr-0025",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0025:foundation",
+      "surprise": false,
+      "title": "MAC"
+    },
+    {
+      "body": "How the protocol becomes an occupancy signal, on our own instrument. Our illuminator emits frames at a commanded rate. Under CSMA/CA it must find the channel idle first, so as the room fills with active devices it defers more often and lands fewer frames.",
+      "card_id": "abbr-0025",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0025:wild",
+      "surprise": false,
+      "title": "MAC"
+    },
+    {
+      "body": "Add up the sizes of all the mistakes, ignoring their direction, and divide by how many there were.",
+      "card_id": "abbr-0026",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0026:foundation",
+      "surprise": false,
+      "title": "MAE"
+    },
+    {
+      "body": "Two models on the same five windows, chosen so that average error cannot tell them apart. Model A misses by 2, 2, 2, 2, 2 — MAE **2.0**. Model B misses by 0, 0, 0, 0, 10 — MAE also **2.0**. Identical on this metric. For a ventilation controller, A is a mild nuisance and B is four correct answers and one evacuation-scale error. Now the version that actually happened in this thesis.",
+      "card_id": "abbr-0026",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0026:wild",
+      "surprise": true,
+      "title": "MAE"
+    },
+    {
+      "body": "Multiple-Input Multiple-Output: several antennas at each end, so several spatially distinct copies of the channel exist at once. In communication it buys throughput and robustness; in sensing it buys VIEWPOINTS. Plain version. One antenna at each end gives you one path through the room — one opinion about what is in it.",
+      "card_id": "abbr-0027",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0027:foundation",
+      "surprise": false,
+      "title": "MIMO"
+    },
+    {
+      "body": "Two generations of hardware, same idea, different sizes — and the arithmetic is worth doing because it is where the corpus's numbers come from. The **Intel 5300**, which most of the published CSI literature runs on, reports 30 subcarriers per antenna pair on a 20 MHz channel. With 3 × 3 antennas that is 30 matrices of 3 × 3 per record, or 270 complex numbers.",
+      "card_id": "abbr-0027",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0027:wild",
+      "surprise": false,
+      "title": "MIMO"
+    },
+    {
+      "body": "Network Interface Card: the radio itself — chipset, firmware, antennas, and the driver exposing them. For sensing purposes a NIC is best classified not by brand but by **how you get CSI out of it**, because that is what decides what your data looks like and who else can reproduce it. Four families, and they are not interchangeable:",
+      "card_id": "abbr-0028",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0028:foundation",
+      "surprise": false,
+      "title": "NIC"
+    },
+    {
+      "body": "The field has measured this twice, in two different ways, and both are worth quoting because they are not our own data. A public CSI dataset recorded the same activities with **Netgear** and with **Asus** routers specifically so that transmission-hardware robustness could be studied; its authors report that the hardware domain change deserves attention in its own right.",
+      "card_id": "abbr-0028",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0028:wild",
+      "surprise": false,
+      "title": "NIC"
+    },
+    {
+      "body": "Non-Line of Sight: no unobstructed path, so everything arriving has bounced, diffracted, or passed through something. Every arriving copy has therefore travelled FURTHER than the straight line, and that single fact explains both verdicts below.",
+      "card_id": "abbr-0029",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0029:foundation",
+      "surprise": false,
+      "title": "NLOS"
+    },
+    {
+      "body": "Node–Relation Graph: IndoorGML's dual-space view of a building. Primal space is the rooms themselves; the dual is a graph with a node per room and an edge wherever two rooms connect. It is what routing runs on. The construction is a single rule, **Poincaré duality**: a k-dimensional object in an N-dimensional space maps to an (N − k)-dimensional object in the dual.",
+      "card_id": "abbr-0030",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0030:foundation",
+      "surprise": false,
+      "title": "NRG"
+    },
+    {
+      "body": "Take our own floor. Two reading rooms sharing a wall with no door between them are ADJACENT and not CONNECTED: one edge in the adjacency graph, none in the connectivity graph. A person walking from one to the other must go through the corridor, which is two edges. Now the finding.",
+      "card_id": "abbr-0030",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0030:wild",
+      "surprise": false,
+      "title": "NRG"
+    },
+    {
+      "body": "Each subcarrier's spectrum is a sinc centred on its own frequency, and its zeros land exactly on every other subcarrier's centre.",
+      "card_id": "abbr-0031",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0031:foundation",
+      "surprise": false,
+      "title": "OFDM"
+    },
+    {
+      "body": "Physical Layer: where bits become radio. Four jobs, and CSI is a by-product of the fourth.",
+      "card_id": "abbr-0032",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0032:foundation",
+      "surprise": false,
+      "title": "PHY"
+    },
+    {
+      "body": "The vendor boundary is visible in one number on a real node, and you can read it without any special tooling. A Linux network interface exposes its ARP hardware type as an integer. On node monad05 the management interface `wlan0` and the AX210's own `wlp1s0` both report **1** — the Ethernet type, meaning the kernel hands you frames the way the network stack wants them, with the PHY's own metadata already stripped.",
+      "card_id": "abbr-0032",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0032:wild",
+      "surprise": false,
+      "title": "PHY"
+    },
+    {
+      "body": "Physics-Informed Neural Network: train on data as usual, but add a second loss term penalising violation of a known physical law. The network is rewarded for predictions that fit the data AND obey the physics. The construction is two losses and one knob. The **data loss** is the usual error at the points you measured.",
+      "card_id": "abbr-0033",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0033:foundation",
+      "surprise": false,
+      "title": "PINN"
+    },
+    {
+      "body": "Why it works on a motorway and not in a reading room — one sentence, and it is about the data rather than about the method. On a motorway, traffic is DIRECTED. Density and speed are strongly coupled, the flow is essentially one-dimensional, and the conservation law therefore carries real information at every unobserved point: cars entering a stretch must leave it.",
+      "card_id": "abbr-0033",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0033:wild",
+      "surprise": false,
+      "title": "PINN"
+    },
+    {
+      "body": "Square every mistake, average the squares, then take the square root — and the result can never be smaller than the mean absolute error.",
+      "card_id": "abbr-0034",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0034:foundation",
+      "surprise": false,
+      "title": "RMSE"
+    },
+    {
+      "body": "Read the table above as the two deployments it describes. With window 5 included: MAE 2.00, RMSE 2.90, ratio 1.45 — the ratio is telling you that one case is carrying the error. Remove that window's outlier, so the errors are 0, 1, 1, 2, 2: MAE falls to **1.20** and RMSE to **1.41**, a ratio of 1.18. MAE improved by 40%; RMSE improved by 51%. A team reporting only MAE would describe the outlier as a modest problem.",
+      "card_id": "abbr-0034",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0034:wild",
+      "surprise": false,
+      "title": "RMSE"
+    },
+    {
+      "body": "Add up the squared gaps between the forecast's running total and the outcome's running total, band by band, and divide by one less than the number of bands.",
+      "card_id": "abbr-0035",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0035:foundation",
+      "surprise": false,
+      "title": "RPS"
+    },
+    {
+      "body": "Where it earns its place here, with the design that makes the result hard to attack. Under environment shift the point contract degrades markedly on band RPS while the distributional contract does not move at all — with feature, corpus and splits held fixed so that ONLY the contract varies.",
+      "card_id": "abbr-0035",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0035:wild",
+      "surprise": false,
+      "title": "RPS"
+    },
+    {
+      "body": "Received power falls with the logarithm of distance, at a rate set by the environment, plus a random term that is the whole problem indoors.",
+      "card_id": "abbr-0036",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0036:foundation",
+      "surprise": false,
+      "title": "RSSI"
+    },
+    {
+      "body": "Invert the model and watch it fail, with the numbers the positioning literature reports. Suppose the reference is −40 dBm at one metre and the environment has n = 3.5. A phone measured at **−70 dBm** solves to about 7.2 m.",
+      "card_id": "abbr-0036",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0036:wild",
+      "surprise": false,
+      "title": "RSSI"
+    },
+    {
+      "body": "Take the total elapsed time at the initiator, subtract the far side's own turnaround, halve it, and multiply by the speed of light.",
+      "card_id": "abbr-0037",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0037:foundation",
+      "surprise": false,
+      "title": "RTT"
+    },
+    {
+      "body": "What the primitive achieves, and why it is nevertheless the wrong tool here. With the fine-timing-measurement protocol behind it, Wi-Fi Certified Location claims **sub-metre** indoor accuracy on wide-bandwidth devices, and ultra-wideband two-way ranging reaches **well under a metre** in high multipath, because its short pulses resolve individual reflections.",
+      "card_id": "abbr-0037",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0037:wild",
+      "surprise": false,
+      "title": "RTT"
+    },
+    {
+      "body": "Receiver. In our deployment, nine of the ten nodes: monitor-mode listeners extracting CSI from frames they were never meant to receive. \"Monitor mode\" is the load-bearing detail. A station in normal mode discards every frame not addressed to it, in hardware, before the host sees it. A monitor interface keeps them all and prefixes each with a radiotap header, which is what makes passive observation possible at all.",
+      "card_id": "abbr-0038",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0038:foundation",
+      "surprise": false,
+      "title": "RX"
+    },
+    {
+      "body": "What a receiver's own kernel says about how much it is losing, read live off node monad05. The monitor interface has taken in **203.4 million packets** and DROPPED **34.1 million** of them — about **14%** — while its transmit columns are all zero, because a listener never speaks. Two things follow, and both are why RX count is a design decision rather than a budget line.",
+      "card_id": "abbr-0038",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0038:wild",
+      "surprise": true,
+      "title": "RX"
+    },
+    {
+      "body": "The measured phase is the true phase plus a term that grows in a straight line with subcarrier index, plus a constant offset.",
+      "card_id": "abbr-0039",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0039:foundation",
+      "surprise": false,
+      "title": "SFO"
+    },
+    {
+      "body": "Take a link with nothing moving and record four packets over a few seconds. Overlay their phase curves and the plot above is what you get: four visibly different lines, all with the same wiggle buried inside them. Fit and subtract a straight line from each. The four collapse onto one curve, and that curve is the channel.",
+      "card_id": "abbr-0039",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0039:wild",
+      "surprise": false,
+      "title": "SFO"
+    },
+    {
+      "body": "System on Chip: processor cores, memory controller, graphics and peripheral controllers on a single die, in one package. It is what a Raspberry Pi or a phone is built around, as against a desktop where those parts are separate chips on a board. What is on ours and what is not is the load-bearing part.",
+      "card_id": "abbr-0040",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0040:foundation",
+      "surprise": false,
+      "title": "SoC"
+    },
+    {
+      "body": "The two thermometers, and why confusing them would break the analysis. Inside one experiment, the AX210's own front end sits at **61–64 °C** on passively cooled nodes and **47 °C** on the fan-cooled ones — the fan removes a roughly 16 °C offset from the radio.",
+      "card_id": "abbr-0040",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0040:wild",
+      "surprise": true,
+      "title": "SoC"
+    },
+    {
+      "body": "The distance between two covariance matrices is the size of the logarithm of one whitened by the other — a distance along the curved set they live in, not a straight line through the middle.",
+      "card_id": "abbr-0041",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0041:foundation",
+      "surprise": false,
+      "title": "SPD"
+    },
+    {
+      "body": "The method's home ground is brain–computer interfaces, and the parallel is exact enough to be instructive. There, covariance matrices of EEG channels from one subject in one session sit in a small region of the set; matrices from a different subject or a different day sit somewhere else entirely, and a classifier trained on the first fails on the second.",
+      "card_id": "abbr-0041",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0041:wild",
+      "surprise": false,
+      "title": "SPD"
+    },
+    {
+      "body": "Symbol Timing Offset: the receiver opens its FFT window slightly early or late relative to the true symbol boundary. Because a time shift is a frequency-domain phase ramp, the effect is again a slope across subcarriers. Where it comes from: the receiver finds the symbol boundary by correlating against the preamble, and that estimate is never exact.",
+      "card_id": "abbr-0042",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0042:foundation",
+      "surprise": false,
+      "title": "STO"
+    },
+    {
+      "body": "The reason a decoder can be perfectly happy while a sensing pipeline is ruined, in one comparison. A decoder needs to tell one constellation point from another, so it tolerates a phase error of a good fraction of the spacing between points. A sensing pipeline is trying to detect a body that changes the channel phase by a few tenths of a radian.",
+      "card_id": "abbr-0042",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0042:wild",
+      "surprise": false,
+      "title": "STO"
+    },
+    {
+      "body": "Distance is the arrival time minus the departure time, multiplied by the speed of light — one way, one subtraction, two different clocks.",
+      "card_id": "abbr-0043",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0043:foundation",
+      "surprise": false,
+      "title": "ToA"
+    },
+    {
+      "body": "What a clock seam looks like in a result, which is the reason for the rule. Suppose a session starts, and eleven minutes in the time daemon steps the clock forward by two seconds. A reduction that assigns each record a timestamp of \"session start plus record index divided by rate\" now places every subsequent record two seconds early.",
+      "card_id": "abbr-0043",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0043:wild",
+      "surprise": false,
+      "title": "ToA"
+    },
+    {
+      "body": "Time of Flight: the propagation time itself. Time of Arrival is WHEN the signal landed; time of flight is HOW LONG it took. In practice the terms are used almost interchangeably, and both name the distance-from-delay primitive. The family has four members and they differ in what they REQUIRE, not in the physics. ToF/ToA needs two synchronised clocks. RTT needs one clock and a cooperating peer.",
+      "card_id": "abbr-0044",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0044:foundation",
+      "surprise": false,
+      "title": "ToF"
+    },
+    {
+      "body": "Reject both one-sided nulls — that the difference is at least the margin, and that it is at most minus the margin — and what remains is equivalence.",
+      "card_id": "abbr-0045",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0045:foundation",
+      "surprise": false,
+      "title": "TOST"
+    },
+    {
+      "body": "Where it bites, and it bites us. The drift-triggered recalibration rule was tested against a fixed schedule for accuracy EQUIVALENCE, with the margin declared in advance. It **failed**. So the thesis does not claim parity, and that is the whole point of having run the test: a plain comparison would have found \"no significant difference\" and the claim would have been parity.",
+      "card_id": "abbr-0045",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0045:wild",
+      "surprise": false,
+      "title": "TOST"
+    },
+    {
+      "body": "Transmitter. One node of the ten, running as a paced illuminator: it emits frames at a commanded rate that nobody associates to and nobody replies to. \"Commanded rate\" is the phrase that matters. Because we choose how many frames leave, we know the denominator of every delivery figure — and a denominator nobody knows is the reason the field reports received counts rather than delivered fractions.",
+      "card_id": "abbr-0046",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0046:foundation",
+      "surprise": false,
+      "title": "TX"
+    },
+    {
+      "body": "The census the owned transmitter makes possible, on four nodes on 2026-08-23: **98.4% of commanded frames delivered**, and **15–16% of the delivered records carrying an all-zero I/Q matrix** — a valid header, the right payload length, a plausible RSSI, and no measurement inside. Useful yield is therefore about **83%**. Nothing in that sentence is available without owning the transmitter.",
+      "card_id": "abbr-0046",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0046:wild",
+      "surprise": true,
+      "title": "TX"
+    },
+    {
+      "body": "The IEEE 802.11 family of wireless LAN standards. A certification brand rather than a technology name, but universally used as one. It operates on unlicensed spectrum around 2.4 GHz and between 5 and 5.8 GHz.",
+      "card_id": "abbr-0047",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0047:foundation",
+      "surprise": false,
+      "title": "WiFi"
+    },
+    {
+      "body": "The trap, and the sentence that walks out of it. A committee member says: \"millimetre-wave radar would count this room better.\" The wrong answer defends WiFi's accuracy. The right answer is one sentence and a concession: \"yes — and it costs a new device per room, an installation, and a maintenance path.",
+      "card_id": "abbr-0047",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0047:wild",
+      "surprise": false,
+      "title": "WiFi"
+    },
+    {
+      "body": "Wireless Local Area Network: the scope 802.11 standardises. The 802.11bf amendment adds a WLAN SENSING procedure so that a compliant device can be ASKED for channel measurements alongside normal traffic. The procedure names four ROLES, and they are the part worth learning, because they do not have to be the same device. A **sensing initiator** starts the measurement. A **sensing responder** takes part in it.",
+      "card_id": "abbr-0048",
+      "deck": "core-abbreviations",
+      "flavour": "foundation",
+      "id": "abbr-0048:foundation",
+      "surprise": false,
+      "title": "WLAN"
+    },
+    {
+      "body": "The same measurement, twice: how it is obtained today on our own node, and how the amendment would obtain it. Today it takes a purpose-built kernel driver, a monitor interface and a capture service, and the resulting file's meaning is tied to that exact chipset and driver version.",
+      "card_id": "abbr-0048",
+      "deck": "core-abbreviations",
+      "flavour": "wild",
+      "id": "abbr-0048:wild",
+      "surprise": false,
+      "title": "WLAN"
+    },
+    {
+      "body": "Crowd density: how many people stand on a square metre, written as a field ρ(x, t) — a number attached to every point of the floor and every instant, not one number for the room. Units are pedestrians per square metre, written ped/m². It is a FIELD, and that is not a technicality. One number for a room hides the doorway where everyone is standing, and the doorway is where the interesting physics happens.",
+      "card_id": "def-0001",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0001:foundation",
+      "surprise": false,
+      "title": "Density"
+    },
+    {
+      "body": "Our own measurement room, so the numbers are not abstract. The library ground-floor space is roughly 8 m × 6 m, so about 48 m² of floor. At 0.5 ped/m² that is **24 people** — a quiet reading room, and you would walk through without changing your path. At Weidmann's capacity density, about 1.75 ped/m², it is **84 people** and the room is moving as fast as it ever will in total.",
+      "card_id": "def-0001",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0001:wild",
+      "surprise": false,
+      "title": "Density"
+    },
+    {
+      "body": "The pedestrian velocity field: the mean velocity shared by everyone in an infinitesimal volume, under the homogeneous-velocity assumption. Same shape as the density field — a value at every point and instant — but a VECTOR at each point rather than a number, because a velocity has a direction.",
+      "card_id": "def-0002",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0002:foundation",
+      "surprise": false,
+      "title": "Velocity field"
+    },
+    {
+      "body": "Free walking speed is one of the best-measured quantities in the field, and it is not one number. Measured speeds are distributed roughly normally about **1.30 m/s with a standard deviation of 0.21 m/s** — and the mean depends on who you are walking with: an isolated individual averages **1.38 m/s**, a group of six averages **1.10 m/s**. Now the sensing consequence.",
+      "card_id": "def-0002",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0002:wild",
+      "surprise": false,
+      "title": "Velocity field"
+    },
+    {
+      "body": "Flow is density times speed, and speed is the fitted falling function of density, so flow rises, turns over, and falls back to zero.",
+      "card_id": "def-0003",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0003:foundation",
+      "surprise": false,
+      "title": "Flow"
+    },
+    {
+      "body": "A 2 m wide library doorway, using Weidmann's fit at three densities. At 0.5 ped/m²: speed 1.30 m/s, flow 0.65 per metre per second, so the doorway passes about **2.6 people a second**. At capacity, 1.75 ped/m²: speed 0.70, flow 1.23, so about **2.5 a second** — no better, at three times the density. At 4.0 ped/m²: speed 0.16, flow 0.63, about **1.3 a second**, half the rate at eight times the crowd.",
+      "card_id": "def-0003",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0003:wild",
+      "surprise": true,
+      "title": "Flow"
+    },
+    {
+      "body": "Speed is the free walking speed, reduced by a factor that vanishes as density approaches the jam density.",
+      "card_id": "def-0004",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0004:foundation",
+      "surprise": false,
+      "title": "The closure"
+    },
+    {
+      "body": "Two experiments in the vault's own crowd corpus fitted Weidmann's model to the same quantity and did not agree, which is the honest version of what \"site-calibratable\" means. In a corridor the least-squares fit gave a time gap of about **0.85 s** and a free speed of **1.50 m/s**. At a bottleneck, the same fit on the same apparatus gave **0.49 s** and **1.64 m/s**.",
+      "card_id": "def-0004",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0004:wild",
+      "surprise": false,
+      "title": "The closure"
+    },
+    {
+      "body": "The discomfort or cost function of density: how unpleasant a place is to be in, expressed as a number that rises as it gets more crowded. In Hughes' continuum model pedestrians are assumed to move so as to minimise the total cost of their route, so G is what makes a crowd flow AROUND a dense patch rather than straight through it. The behaviour it produces is the reason it exists.",
+      "card_id": "def-0005",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0005:foundation",
+      "surprise": false,
+      "title": "Discomfort"
+    },
+    {
+      "body": "A railway concourse with two staircases: yours is thirty metres away and packed, the other is fifty metres away and empty. Nobody computes a functional, and everybody takes the second one anyway — that decision is what a discomfort term encodes. Note what is NOT claimed here. This thesis fits no discomfort function and measures no route choice.",
+      "card_id": "def-0005",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0005:wild",
+      "surprise": true,
+      "title": "Discomfort"
+    },
+    {
+      "body": "The cost potential of the continuum crowd model — the eikonal field whose gradient sets preferred walking direction. Read it as a landscape. Every point of the floor is assigned a number saying how expensive it is to reach the exit from there, and everyone walks DOWNHILL on that landscape.",
+      "card_id": "def-0006",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0006:foundation",
+      "surprise": false,
+      "title": "Cost potential"
+    },
+    {
+      "body": "Water on a hillside. Nothing tells a raindrop where the valley is, and every drop reaches it, because the local slope is enough. An eikonal field is that hillside computed for a floor plan, with crowding raising the ground where people are already standing. The venue dependence is the load-bearing part.",
+      "card_id": "def-0006",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0006:wild",
+      "surprise": false,
+      "title": "Cost potential"
+    },
+    {
+      "body": "The channel frequency response, per subcarrier: the complex coefficient H(k) the receiver recovers to equalise an OFDM symbol. One complex number per subcarrier per antenna pair per frame. Under the narrowband model Y(k) = H(k)X(k) + N(k): the receiver knows the training symbol X(k), sees what arrived as Y(k), and divides. CSI is precisely the vector of recovered H(k) over the occupied subcarriers.",
+      "card_id": "def-0007",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0007:foundation",
+      "surprise": false,
+      "title": "Channel response"
+    },
+    {
+      "body": "The clearest way to feel what H is: send the same known symbol from the same transmitter twice, once into an empty room and once with a person standing between the antennas. X is identical both times. Y differs. The entire difference is H, and the entire content of H is the room.",
+      "card_id": "def-0007",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0007:wild",
+      "surprise": false,
+      "title": "Channel response"
+    },
+    {
+      "body": "Amplitude is the length of the complex channel coefficient; the comparable version divides it by the median across tones.",
+      "card_id": "def-0008",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0008:foundation",
+      "surprise": false,
+      "title": "Amplitude"
+    },
+    {
+      "body": "Two receivers, monad03 and monad05, hearing the SAME injected frame on the same channel at the same instant. Their raw amplitude vectors differ by a large constant factor, because their gain controls settled differently. Take the ratio of each to its own median across tones and the two curves land on top of each other, because the shape was always the same — the height never was.",
+      "card_id": "def-0008",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0008:wild",
+      "surprise": false,
+      "title": "Amplitude"
+    },
+    {
+      "body": "On one subcarrier, take the standard deviation of amplitude over a time window and divide it by the mean amplitude over the same window.",
+      "card_id": "def-0009",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0009:foundation",
+      "surprise": false,
+      "title": "Coefficient of variation"
+    },
+    {
+      "body": "Same subcarrier, same node, two one-second windows, in the receiver's own units. Certified-empty window: mean 0.500, standard deviation 0.010, so CV = **0.02**. Occupied window: mean 0.480, standard deviation 0.062, so CV = **0.13**. The mean barely moved — about 4% — and the CV went up more than sixfold.",
+      "card_id": "def-0009",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0009:wild",
+      "surprise": false,
+      "title": "Coefficient of variation"
+    },
+    {
+      "body": "Cell occupancy: the number of bodies inside one spatial cell — a room, a zone, a sensing region — at one moment. It is an integer, and it is the quantity the whole system is trying to estimate. Three things it is not, in increasing order of how easy they are to confuse with it. It is not a **building headcount**: occupancy is per cell, and a building total cannot be disaggregated back into cells.",
+      "card_id": "def-0010",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0010:foundation",
+      "surprise": false,
+      "title": "Occupancy"
+    },
+    {
+      "body": "One lecture room at one instant, counted four ways: **28** bodies in the room, **31** phones and laptops with a radio awake, **44** distinct MAC addresses observed in the last minute, and **1** number the building management system would report for the floor. Only the first is N.",
+      "card_id": "def-0010",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0010:wild",
+      "surprise": true,
+      "title": "Occupancy"
+    },
+    {
+      "body": "The occupancy at the variance–blockage crossover: below it, line-of-sight blockage (falling mean amplitude) dominates; above it, multipath variance (rising spread) dominates. Two mechanisms, competing rather than adding. With a strong direct path a body BLOCKS a large share of the arriving energy, so the mean drops.",
+      "card_id": "def-0011",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0011:foundation",
+      "surprise": false,
+      "title": "The crossover"
+    },
+    {
+      "body": "The practical form of this is which feature a pipeline should trust in which room, and it is answerable by geometry before any data arrives. A narrow corridor with the transmitter at one end and the receiver at the other has one dominant path, so the first person to walk into it drops the mean sharply — blockage, below the crossover.",
+      "card_id": "def-0011",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0011:wild",
+      "surprise": false,
+      "title": "The crossover"
+    },
+    {
+      "body": "The recalibration interval: how long CSI-only inference stays inside a tolerated error before the system must re-anchor. It is the RQ4 deliverable, and it is one half of an answer PAIR — the other half is the error you agreed to absorb while waiting.",
+      "card_id": "def-0012",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0012:foundation",
+      "surprise": false,
+      "title": "The recalibration interval"
+    },
+    {
+      "body": "The everyday shape of this question is a bathroom scale. It reads correctly today; in six months it is a kilogram out. The interval is not a property of the scale alone — it is a property of the scale, the tolerance you accept and how much the room's temperature moved. What this deployment can already state is the drift mechanism the interval will be built on.",
+      "card_id": "def-0012",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0012:wild",
+      "surprise": false,
+      "title": "The recalibration interval"
+    },
+    {
+      "body": "The tolerated accuracy degradation between calibrations — the other half of the RQ4 answer pair (T*, ε). It is a DECLARED quantity, chosen by whoever operates the building, not estimated from data.",
+      "card_id": "def-0013",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0013:foundation",
+      "surprise": false,
+      "title": "The tolerance"
+    },
+    {
+      "body": "Two buildings, same sensor, same drift, different ε — and therefore different intervals from the same physics. A lecture-hall scheduler that only needs to know whether a room is under half full can accept ε of several persons, and will re-anchor rarely. A ventilation controller sizing airflow per person accepts much less, and pays for it in calibration visits.",
+      "card_id": "def-0013",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0013:wild",
+      "surprise": false,
+      "title": "The tolerance"
+    },
+    {
+      "body": "The largest vertical gap, anywhere along the axis, between two samples' cumulative distribution functions.",
+      "card_id": "def-0014",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0014:foundation",
+      "surprise": false,
+      "title": "The KS statistic"
+    },
+    {
+      "body": "One minus the model's squared error divided by the squared error of always guessing the average.",
+      "card_id": "def-0015",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0015:foundation",
+      "surprise": false,
+      "title": "R-squared"
+    },
+    {
+      "body": "The count-locus argument runs on exactly this asymmetry, with feature type as the only thing that varies. Static per-link amplitude scores strongly WITHIN one furnished room and collapses across rooms, because what it learned was that room's multipath map. Temporal-variance and Doppler features score lower in-room and transfer, because what they learned was body dynamics.",
+      "card_id": "def-0015",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0015:wild",
+      "surprise": false,
+      "title": "R-squared"
+    },
+    {
+      "body": "An explicit, defeasible claim stated TOGETHER WITH the condition under which it would be considered refuted, and maintained as a version-controlled note revised as evidence accumulates. Three parts, all required. The **claim**. The **refutation condition**, written before the data arrive, in numbers.",
+      "card_id": "def-0016",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0016:foundation",
+      "surprise": false,
+      "title": "Living hypothesis"
+    },
+    {
+      "body": "The continuity prior is the worked example, and it is a real one. The claim was that a mass-conservation penalty would improve indoor density estimation. The refutation condition was declared first: if swapping the physics term for a constant, or for an ANTI-physical version, does not change the result, the term is not acting as physics. It was run and it fired.",
+      "card_id": "def-0016",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0016:wild",
+      "surprise": false,
+      "title": "Living hypothesis"
+    },
+    {
+      "body": "A labelled observation in a NEW environment — a device-derived count the operator is entitled to collect, paired with a CSI window. The headline cross-environment result uses two per held-out environment. Two properties make it an anchor rather than just a training sample. It comes from the TARGET environment, so it carries that room's scale.",
+      "card_id": "def-0018",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0018:foundation",
+      "surprise": false,
+      "title": "Anchor"
+    },
+    {
+      "body": "Concretely, in a building you have just walked into: stand in the room, count the people once, and record the CSI window alongside that count. Do it twice. That is the entire cost of the headline calibration result, and it is the reason the result is deployable rather than only true. Compare the alternatives that lost.",
+      "card_id": "def-0018",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0018:wild",
+      "surprise": false,
+      "title": "Anchor"
+    },
+    {
+      "body": "A certified-empty window is one where the space is verified unoccupied AND a live-receiver control proves the measurement was being taken. Both halves are needed, and the second is the one people forget. A zero from a working receiver in an empty room is a measurement. A zero from a dead receive path is a fault. They are the same number.",
+      "card_id": "def-0020",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0020:foundation",
+      "surprise": false,
+      "title": "Certified empty"
+    },
+    {
+      "body": "The control is the infrastructure traffic, and it is the part of the design worth stealing. Access points, printers and building equipment transmit whether or not anybody is present. So in every certified-empty hour the capture shows **infrastructure addresses present and client addresses at exactly zero**. The first proves the receiver was listening; the second is the measurement.",
+      "card_id": "def-0020",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0020:wild",
+      "surprise": false,
+      "title": "Certified empty"
+    },
+    {
+      "body": "That they are quantities OF THE SENSING INSTRUMENT, on the same footing as the count itself — not deployment plumbing to be reported once and set aside. A measurand is something the instrument is understood to measure, with a stated uncertainty, whose value is part of every result. Calling delivery a measurand commits the thesis to reporting it per analysis window, next to the occupancy estimate, for ever.",
+      "card_id": "def-0021",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0021:foundation",
+      "surprise": false,
+      "title": "Measurand"
+    },
+    {
+      "body": "Two receivers, one transmitter, one channel, one moment — and an **11.6-point difference in delivered fraction** between them. A study with one monitor would have recorded whichever of those two numbers its monitor happened to be, and called it the delivery rate.",
+      "card_id": "def-0021",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0021:wild",
+      "surprise": true,
+      "title": "Measurand"
+    },
+    {
+      "body": "Face recognition against gait recognition, which is the same distinction in a domain everyone can picture. A face template is a fingerprint: extremely accurate on the person it was built for, and worthless transferred to anybody else. A gait descriptor — cadence, stride length, sway — is kinematic: less sharp, and it means the same thing about a person it has never seen.",
+      "card_id": "def-0022",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0022:wild",
+      "surprise": false,
+      "title": "Fingerprint versus kinematic"
+    },
+    {
+      "body": "The output of a CSI occupancy estimator is a predictive DISTRIBUTION over counts, P(N = k), with operational bands obtained by marginalisation at query time. It replaces a point count with MAE as the figure of merit. Marginalisation at query time is the load-bearing clause.",
+      "card_id": "def-0024",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0024:foundation",
+      "surprise": false,
+      "title": "The output contract"
+    },
+    {
+      "body": "A ventilation controller and a fire marshal ask the same sensor two different questions on the same second. Ventilation wants the expected number, to size airflow. The marshal wants P(N > 50), because that is the threshold in the regulation. From one predictive distribution both are a summation.",
+      "card_id": "def-0024",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0024:wild",
+      "surprise": false,
+      "title": "The output contract"
+    },
+    {
+      "body": "Distribution-free prediction intervals with approximately nominal coverage — an interval you can promise contains the truth 90% of the time, without assuming anything about the shape of the error distribution. The machinery is one idea: score the model's errors on a held-out calibration set, take the quantile of those scores at the level you want, and use it as the interval width.",
+      "card_id": "def-0026",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0026:foundation",
+      "surprise": false,
+      "title": "Conformal prediction"
+    },
+    {
+      "body": "Exchangeability is the assumption, so it is worth seeing it break. Take a hundred labelled windows from THIS room, score the model's errors on them, and the 90th percentile of those errors is a width that will cover about 90% of future windows from this room. That is the guarantee, and it holds with no distributional assumption whatsoever. Now move to a different building.",
+      "card_id": "def-0026",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0026:wild",
+      "surprise": false,
+      "title": "Conformal prediction"
+    },
+    {
+      "body": "One model with a SHARED crowd-to-signal link and PER-ENVIRONMENT parameters, nested under a WiFi-card group. Neither pooling everything (which ignores real per-site scale differences) nor fitting each site alone (which throws away the shared mechanism). The mechanism has a name and a formula: shrinkage.",
+      "card_id": "def-0027",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0027:foundation",
+      "surprise": false,
+      "title": "Partial pooling"
+    },
+    {
+      "body": "A chain of twenty shops estimating tomorrow's takings, which is the standard example because the arithmetic is identical. Pool everything and every shop gets the chain average, which is wrong for the airport branch. Fit each shop alone and the one that opened last week gets an estimate built from four days of noise.",
+      "card_id": "def-0027",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0027:wild",
+      "surprise": false,
+      "title": "Partial pooling"
+    },
+    {
+      "body": "Adding a sensor to a smaller set helps at least as much as adding it to a bigger set — and greedy therefore reaches at least sixty-three per cent of the best possible.",
+      "card_id": "def-0028",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0028:foundation",
+      "surprise": false,
+      "title": "Submodular"
+    },
+    {
+      "body": "Fire extinguishers on an office floor, which is submodular for the same reason. The first one covers a large area of what was previously unprotected. The fourth, placed in a corner already within reach of two others, adds very little. Nobody solves an integer program for extinguisher placement — they place them greedily, and the theorem says that habit is within a third of optimal.",
+      "card_id": "def-0028",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0028:wild",
+      "surprise": true,
+      "title": "Submodular"
+    },
+    {
+      "body": "The aspect ratio is dimensions over snapshots, and the noise eigenvalues reach up to sigma squared times one plus the root of gamma, squared.",
+      "card_id": "def-0029",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0029:foundation",
+      "surprise": false,
+      "title": "The aspect ratio"
+    },
+    {
+      "body": "Our own numbers, one window at a time. A 2 × 2 frame on a 20 MHz HE channel gives p = 4 × 242 = **968** dimensions. At the measured 608 Hz, a **one-second** window gives n = 608, so γ ≈ 1.6 and the noise edge sits near 5.1 σ² — a high bar. A **ten-second** window gives n = 6080, γ ≈ 0.16, and the edge falls to about 1.9 σ². Same room, same people, and the detectable occupancy changed because the window changed.",
+      "card_id": "def-0029",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0029:wild",
+      "surprise": false,
+      "title": "The aspect ratio"
+    },
+    {
+      "body": "The device count is detection rate times carriage penetration times the number of people, so converting back divides by the product of the two.",
+      "card_id": "def-0030",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0030:foundation",
+      "surprise": false,
+      "title": "The device-to-person ratio"
+    },
+    {
+      "body": "A lecture room, and the same room an hour later, with the same sensor. During the lecture: 30 students, most with a phone awake and a laptop on the desk, r·p above one — the device count exceeds the headcount and a naive conversion overstates the crowd. During the exam: 30 students, phones in bags with the radios asleep, r·p well below one — the same conversion now understates it.",
+      "card_id": "def-0030",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0030:wild",
+      "surprise": false,
+      "title": "The device-to-person ratio"
+    },
+    {
+      "body": "A hypothesis that was specified, tested under pre-registered margins, and refuted — kept on the record with its reproducible evidence rather than deleted from the draft. Three conditions, all of them needed for the word to apply. The claim was stated in advance. The margin that would refute it was stated in advance. And the evidence is reproducible, so the retirement can be checked rather than believed.",
+      "card_id": "def-0031",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0031:foundation",
+      "surprise": false,
+      "title": "Documented negative"
+    },
+    {
+      "body": "Three of them are on the record, and they cost the thesis three different things. The **continuity prior** was refuted by an ablation in which anti-physical and constant closures performed identically to the correct one. That retired a tier of the architecture.",
+      "card_id": "def-0031",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0031:wild",
+      "surprise": false,
+      "title": "Documented negative"
+    },
+    {
+      "body": "The arithmetic of the gate grain, which is the actionable part. Take a thirty-minute session with a ninety-second dead hole in the middle. At session grain the delivery figure is about 95% — comfortably above any reasonable threshold, so the session passes and the hole travels downstream.",
+      "card_id": "def-0032",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0032:wild",
+      "surprise": false,
+      "title": "Silent deafness"
+    },
+    {
+      "body": "A **scalar** is one number. A **vector** is an ordered n-tuple of numbers — a list where the position carries meaning. A **matrix** is an n-by-m rectangular array, so each element needs TWO indices to name it. Formally: a vector lives in ℝⁿ, a matrix in ℝⁿˣᵐ, and an element of a matrix A is written a(i,j) with i counting rows and j counting columns.",
+      "card_id": "def-0033",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0033:foundation",
+      "surprise": false,
+      "title": "Scalar, vector, matrix"
+    },
+    {
+      "body": "One CSI record from our own hardware, unpacked into the three shapes. RSSI for that frame: **a scalar**, one number, about −45 dBm. Amplitude across the tone grid of a 20 MHz HE frame: **a vector** of 242 numbers. The same frame across the node's two receive and two transmit chains: **a 2 × 2 matrix per tone** — so 242 matrices, or equivalently a 242 × 2 × 2 block of complex numbers per frame.",
+      "card_id": "def-0033",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0033:wild",
+      "surprise": false,
+      "title": "Scalar, vector, matrix"
+    },
+    {
+      "body": "In this thesis a **tensor** means exactly one thing: an array with more than two indices. A vector has one, a matrix has two, a tensor has three or more, and the number of indices is called its ORDER. Nothing about curvature or physics is intended — the word is being used the way the machine-learning literature uses it, as a named box of numbers with named axes.",
+      "card_id": "def-0034",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0034:foundation",
+      "surprise": false,
+      "title": "Tensor"
+    },
+    {
+      "body": "One complex number, written two ways: as a real and an imaginary part, or as a magnitude and an angle. The two forms hold the same information.",
+      "card_id": "def-0035",
+      "deck": "core-definitions",
+      "flavour": "foundation",
+      "id": "def-0035:foundation",
+      "surprise": false,
+      "title": "Complex number and phasor"
+    },
+    {
+      "body": "Take a tone measured as a = 0.30, b = −0.40 in the receiver's units. Then |H| = √(0.09 + 0.16) = **0.50** and φ = arctan(−0.40 / 0.30) ≈ **−0.93 rad**, about −53°. Now the part that matters. Re-run the same capture a second later and the 0.50 is still about 0.50, while the −53° may be anywhere at all, because the two radios' crystals have drifted in the meantime. The magnitude survived the second; the angle did not.",
+      "card_id": "def-0035",
+      "deck": "core-definitions",
+      "flavour": "wild",
+      "id": "def-0035:wild",
+      "surprise": true,
+      "title": "Complex number and phasor"
+    },
+    {
+      "body": "The received symbol on subcarrier k is the transmitted symbol multiplied by the complex channel coefficient, plus noise.",
+      "card_id": "form-0001",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0001:foundation",
+      "surprise": false,
+      "title": "The narrowband channel model"
+    },
+    {
+      "body": "The division, done on one tone. The standard fixes the training symbol, so say X(k) = 1 + 0j. The receiver measures Y(k) = 0.30 − 0.40j. Then Ĥ(k) = Y/X = **0.30 − 0.40j**, an amplitude of 0.50 and a phase of about −53°. Now note what made that trivial: the receiver knew X.",
+      "card_id": "form-0001",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0001:wild",
+      "surprise": false,
+      "title": "The narrowband channel model"
+    },
+    {
+      "body": "The channel at one subcarrier is a fixed component plus a sum of K moving random phasors, one per person.",
+      "card_id": "form-0002",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0002:foundation",
+      "surprise": false,
+      "title": "The phasor decomposition"
+    },
+    {
+      "body": "Our own room, decomposed. The shelving, floor, walls and radiator never move, so their contributions add up to one fixed complex number H₀ — that is the certified-empty channel, and over a thousand minutes of verified-empty observation is what makes it measurable rather than assumed. Add one walker.",
+      "card_id": "form-0002",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0002:wild",
+      "surprise": false,
+      "title": "The phasor decomposition"
+    },
+    {
+      "body": "Amplitude variance rises with the number of movers and saturates towards a ceiling, at a rate set by the saturation scale.",
+      "card_id": "form-0003",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0003:foundation",
+      "surprise": false,
+      "title": "Pillar 2 — the scattering law"
+    },
+    {
+      "body": "Put K₀ = 4 in the law and read off what each new occupant buys, as a fraction of the saturated variance. One occupant: 1 − e^(−0.25) = **0.22**. Two: **0.39**. Four: **0.63**. Eight: **0.86**. Twelve: **0.95**. So the first occupant delivers 22% of the whole dynamic range and the step from eight to nine delivers **3%** — a factor of seven weaker.",
+      "card_id": "form-0003",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0003:wild",
+      "surprise": false,
+      "title": "Pillar 2 — the scattering law"
+    },
+    {
+      "body": "The marginal variance gained per additional occupant decays exponentially with the number already present.",
+      "card_id": "form-0004",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0004:foundation",
+      "surprise": false,
+      "title": "Why presence is easy and counting is hard"
+    },
+    {
+      "body": "The derivative is the operator's sensitivity curve, so evaluate it. With K₀ = 4 the marginal variance per extra occupant is (σ²/4)e^(−K/4): at K = 0 it is **0.25 σ²**, at K = 4 it is **0.092 σ²**, at K = 8 it is **0.034 σ²**, at K = 12 it is **0.012 σ²**. Read as an error budget: if the measurement noise on a window's variance is fixed, then the count resolution degrades in exactly this ratio.",
+      "card_id": "form-0004",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0004:wild",
+      "surprise": false,
+      "title": "Why presence is easy and counting is hard"
+    },
+    {
+      "body": "The noise bulk of a sample covariance ends at an upper edge fixed by the aspect ratio; an occupant is visible only once its eigenvalue detaches above that edge.",
+      "card_id": "form-0005",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0005:foundation",
+      "surprise": false,
+      "title": "Pillar 2a — the detection edge"
+    },
+    {
+      "body": "Our own window arithmetic, which turns the abstract edge into a design knob. A 2 × 2 node on a 20 MHz HE channel has p = 4 × 242 = **968** dimensions. At the measured 608 Hz, a **one-second** window gives n = 608, so γ ≈ 1.6 and the noise bulk reaches (1 + √1.6)² ≈ **5.1 σ²**. A **ten-second** window gives n = 6080, γ ≈ 0.16, and the edge falls to about **1.96 σ²**.",
+      "card_id": "form-0005",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0005:wild",
+      "surprise": false,
+      "title": "Pillar 2a — the detection edge"
+    },
+    {
+      "body": "The coefficient of variation of CSI amplitude: its standard deviation divided by its mean, over a window.",
+      "card_id": "form-0006",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0006:foundation",
+      "surprise": false,
+      "title": "The counting feature"
+    },
+    {
+      "body": "Two one-second windows on the same subcarrier of the same node, in the receiver's own units. Empty: mean 0.500, standard deviation 0.010, **CV 0.02**. Occupied: mean 0.480, standard deviation 0.062, **CV 0.13**. The level moved 4%; the ratio moved sixfold. Then the failure the normaliser prevents.",
+      "card_id": "form-0006",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0006:wild",
+      "surprise": false,
+      "title": "The counting feature"
+    },
+    {
+      "body": "Density at a point changes only through net flux divergence — no sources, no sinks.",
+      "card_id": "form-0007",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0007:foundation",
+      "surprise": false,
+      "title": "The conservation law"
+    },
+    {
+      "body": "Balance a real room's doorway and watch the equation do arithmetic. Our measurement space is about **48 m²**. Suppose people enter at 2.0 per second and leave at 1.5, so the net inflow is 0.5 per second.",
+      "card_id": "form-0007",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0007:wild",
+      "surprise": false,
+      "title": "The conservation law"
+    },
+    {
+      "body": "Walking speed falls from the free-flow value towards standstill as density rises to the jam density.",
+      "card_id": "form-0008",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0008:foundation",
+      "surprise": false,
+      "title": "The fundamental diagram"
+    },
+    {
+      "body": "Evaluate the closure at three densities and the fundamental diagram stops being abstract. At **0.5 ped/m²**: u = 1.30 m/s, so flow is 0.65 per metre per second — a 2 m doorway passes about 2.6 people a second. At **1.75**, the fit's capacity: u = 0.70, flow **1.23**, about 2.5 a second. At **4.0**: u = 0.16, flow 0.63, about 1.3 a second.",
+      "card_id": "form-0008",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0008:wild",
+      "surprise": false,
+      "title": "The fundamental diagram"
+    },
+    {
+      "body": "Received level falls logarithmically with distance, at a rate set by the path-loss exponent, plus a random shadowing term.",
+      "card_id": "form-0009",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0009:foundation",
+      "surprise": false,
+      "title": "The BLE range primitive"
+    },
+    {
+      "body": "Invert it once and the bracket becomes obvious. Reference −40 dBm at one metre, exponent n = 3.5, measurement **−70 dBm** → about **7.2 m**. Now admit the shadowing term. Indoor multipath and body absorption routinely move RSSI by more than **10 dB** over a small displacement, and at n = 3.5 ten decibels is a factor of **1.9 in distance**. The same measurement is consistent with anywhere from roughly 4 m to 14 m.",
+      "card_id": "form-0009",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0009:wild",
+      "surprise": false,
+      "title": "The BLE range primitive"
+    },
+    {
+      "body": "The weight given to the device-count anchor decays exponentially with the time since that anchor was taken.",
+      "card_id": "form-0010",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0010:foundation",
+      "surprise": false,
+      "title": "Pillar 3 — the staleness switch"
+    },
+    {
+      "body": "Take τ = 6 hours and read the weight as an operator would. One hour after an anchoring, w = e^(−1/6) = **0.85**: the estimate is still mostly anchored. At six hours w = **0.37**. At twelve hours w = **0.14**. At a full day w = **0.018** — the anchor is contributing essentially nothing and the system is running on the CSI model alone.",
+      "card_id": "form-0010",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0010:wild",
+      "surprise": false,
+      "title": "Pillar 3 — the staleness switch"
+    },
+    {
+      "body": "A new environment's parameter is a weighted blend of its own few labels and the population prior, with the weight rising as anchors accumulate.",
+      "card_id": "form-0011",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0011:foundation",
+      "surprise": false,
+      "title": "Pillar 1 — shrinkage"
+    },
+    {
+      "body": "Pin the formula on our own measured point and it starts predicting. The headline result is that **two anchors recover about 42%** of the transfer gap. Set w = k/(k + κ) with k = 2 and w = 0.42, and κ ≈ **2.8**. That single fitted number now says what more anchors would buy: **four** anchors give w ≈ 0.59, **eight** give w ≈ 0.74, and **twenty** give 0.88. Two things follow, and this is exactly what a pillar is for.",
+      "card_id": "form-0011",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0011:wild",
+      "surprise": false,
+      "title": "Pillar 1 — shrinkage"
+    },
+    {
+      "body": "The headcount estimate is the observed device count divided by the product of detection rate and device-carriage penetration.",
+      "card_id": "form-0012",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0012:foundation",
+      "surprise": false,
+      "title": "The device-to-person conversion"
+    },
+    {
+      "body": "Greedily adding the sensor with the largest marginal coverage gets you at least about 63 per cent of the best possible set.",
+      "card_id": "form-0013",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0013:foundation",
+      "surprise": false,
+      "title": "Pillar 4 — the greedy guarantee"
+    },
+    {
+      "body": "What the guarantee is worth in practice, and what it does not settle. Place ten receivers greedily on a floor — each time, add the one that covers most of what is still uncovered. The theorem says the result covers at least **63%** of what the best possible ten would have covered. Nobody computes the best possible ten: for a hundred candidate positions there are more than seventeen trillion sets of ten.",
+      "card_id": "form-0013",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0013:wild",
+      "surprise": true,
+      "title": "Pillar 4 — the greedy guarantee"
+    },
+    {
+      "body": "The mean of the unsigned differences between estimated and true counts.",
+      "card_id": "form-0014",
+      "deck": "core-formulas",
+      "flavour": "foundation",
+      "id": "form-0014:foundation",
+      "surprise": false,
+      "title": "Why the metric is absolute, not squared"
+    },
+    {
+      "body": "Why the thesis reports this metric AND refuses to report only it, on five windows. Model A misses by 2, 2, 2, 2, 2 — MAE **2.0**. Model B misses by 0, 0, 0, 0, 10 — MAE **2.0**. Identical here, and completely different to an operator: A is a steady bias you can correct, B is four right answers and one evacuation-scale error.",
+      "card_id": "form-0014",
+      "deck": "core-formulas",
+      "flavour": "wild",
+      "id": "form-0014:wild",
+      "surprise": false,
+      "title": "Why the metric is absolute, not squared"
+    },
+    {
+      "body": "Four research questions, serving three objectives: O1 — Calibration O2 — Structure-grounded sensing O3 — Generalisation and transfer",
+      "card_id": "spine-0001",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-0001:foundation",
+      "surprise": false,
+      "title": "How many, and what they serve"
+    },
+    {
+      "body": "Answered in \"BLE and Device-Activity Augmentation\". Serves O1 — Calibration.",
+      "card_id": "spine-rq-rq1-routing",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-rq-rq1-routing:foundation",
+      "surprise": false,
+      "title": "RQ1 — the routing"
+    },
+    {
+      "body": "Can device-count observations — BLE advertisements and ambient device activity — produce a calibration reference of sufficient quality to anchor a CSI-based crowd model in a real indoor environment, and can a reference that counts devices be made to speak honestly about people?",
+      "card_id": "spine-rq-rq1-statement",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-rq-rq1-statement:foundation",
+      "surprise": false,
+      "title": "RQ1 — the question"
+    },
+    {
+      "body": "Answered in \"CSI-Based Sensing\". Serves O2 — Structure-grounded sensing; O3 — Generalisation and transfer.",
+      "card_id": "spine-rq-rq2-routing",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-rq-rq2-routing:foundation",
+      "surprise": false,
+      "title": "RQ2 — the routing"
+    },
+    {
+      "body": "After calibration, how accurately can commodity WiFi CSI estimate crowd occupancy, which feature types, band, and receiver placement let that estimate survive an environment or hardware change, and how does its accuracy degrade over time?",
+      "card_id": "spine-rq-rq2-statement",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-rq-rq2-statement:foundation",
+      "surprise": false,
+      "title": "RQ2 — the question"
+    },
+    {
+      "body": "Answered in \"Indoor Crowd Modelling\". Serves O2 — Structure-grounded sensing; O3 — Generalisation and transfer.",
+      "card_id": "spine-rq-rq3-routing",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-rq-rq3-routing:foundation",
+      "surprise": false,
+      "title": "RQ3 — the routing"
+    },
+    {
+      "body": "Can a continuum crowd model constrain CSI-to-density inference — does mass conservation hold with quantifiable residual — and where does the recoverable count signal live?",
+      "card_id": "spine-rq-rq3-statement",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-rq-rq3-statement:foundation",
+      "surprise": false,
+      "title": "RQ3 — the question"
+    },
+    {
+      "body": "What recalibration policy keeps CSI-only inference within a bounded, honestly reported error envelope across realistic perturbations, and does the system generalise to a held-out environment?",
+      "card_id": "spine-rq-rq4-statement",
+      "deck": "core-research-questions",
+      "flavour": "foundation",
+      "id": "spine-rq-rq4-statement:foundation",
+      "surprise": false,
+      "title": "RQ4 — the question"
+    },
+    {
+      "body": "To detect and model human movement in indoor environments using only the signals that already-deployed infrastructure emits, without asking occupants to carry or do anything.",
+      "card_id": "top-0001",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0001:foundation",
+      "surprise": false,
+      "title": "The one goal"
+    },
+    {
+      "body": "The clause does real work, so watch it exclude things. A phone app that reports its own location: **excluded** — the occupant is carrying something and doing something. Turnstile counts: **excluded** at the room scale, since they measure a boundary and not a space.",
+      "card_id": "top-0001",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0001:wild",
+      "surprise": false,
+      "title": "The one goal"
+    },
+    {
+      "body": "O1 — Calibration: a trustworthy reference and when to refresh it. O2 — Structure-grounded sensing: how the environment shapes the signal (the forward physics). O3 — Generalisation and the simulation-to-real transfer: what decides whether a model trained here works there.",
+      "card_id": "top-0002",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0002:foundation",
+      "surprise": false,
+      "title": "The three objectives"
+    },
+    {
+      "body": "The division is not thematic — it is a division of EVIDENCE, and that is the answer to \"why three?\". O1 cannot be settled in simulation, because a simulator cannot tell you whether a real operator can obtain a trustworthy anchor. O2 and O3 cannot be settled on our hardware, because we have one building and one chipset family.",
+      "card_id": "top-0002",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0002:wild",
+      "surprise": false,
+      "title": "The three objectives"
+    },
+    {
+      "body": "Both serve O1, calibration. RQ1 asks whether a device-count reference can be good enough to anchor a CSI model; RQ4 asks what policy keeps that anchoring worth its cost over time.",
+      "card_id": "top-0004",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0004:foundation",
+      "surprise": false,
+      "title": "Which objective a question serves"
+    },
+    {
+      "body": "Buying a set of kitchen scales and then living with them. RQ1 is \"is this scale accurate enough to trust?\". RQ4 is \"how often must I re-check it against a known weight, and what error am I accepting between checks?\". The pairing is why a committee question about calibration frequency is not a question about hardware quality, and vice versa.",
+      "card_id": "top-0004",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0004:wild",
+      "surprise": false,
+      "title": "Which objective a question serves"
+    },
+    {
+      "body": "Tier one — re-analysis of public multi-environment CSI corpora, which delivers the cross-environment calibration results. Tier two — characterisation of the deployed instrument, which delivers the bounds every later occupancy claim must be read against. Tier three — the pre-registered in-vivo campaign, whose protocol is frozen and whose result slots are labelled and empty.",
+      "card_id": "top-0005",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0005:foundation",
+      "surprise": false,
+      "title": "The three evidence tiers"
+    },
+    {
+      "body": "The hostile version of the question is \"so you have no occupancy results\", and the tiers are what turn that into a two-sentence answer instead of a concession. \"Tier one is measured, on public corpora, and it is where the cross-environment calibration result comes from.",
+      "card_id": "top-0005",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0005:wild",
+      "surprise": false,
+      "title": "The three evidence tiers"
+    },
+    {
+      "body": "Pillar 1 — hierarchical calibration (partial pooling). Pillar 2 — the scattering link (a derived concave, saturating law), with Pillar 2a its spectral reading via random-matrix theory. Pillar 3 — state-space fusion (one filter, two readouts). Pillar 4 — spectral count plus submodular coverage.",
+      "card_id": "top-0007",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0007:foundation",
+      "surprise": false,
+      "title": "The four pillars"
+    },
+    {
+      "body": "Recite them as a pipeline for one measurement, not as a list, and the order stops being arbitrary. A room's signal variability arrives. **Pillar 2** says what that variability means in terms of a number of movers, and that the relation is concave and saturating rather than linear. **Pillar 1** says how to re-parameterise that relation for THIS room from two anchors.",
+      "card_id": "top-0007",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0007:wild",
+      "surprise": false,
+      "title": "The four pillars"
+    },
+    {
+      "body": "The hypotheses are the EMPIRICAL contract: each is a measurable claim paired with a refutation condition. Taken singly they are a set of measurements. The pillars are the THEORETICAL contribution those measurements instantiate — four formal models, each unifying several hypotheses and each predicting something testable.",
+      "card_id": "top-0008",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0008:foundation",
+      "surprise": false,
+      "title": "Empirical versus theoretical contract"
+    },
+    {
+      "body": "The 42% recovery figure is the whole argument in one number, so use it. As a **hypothesis result** it says: two anchors recovered 42% of the transfer gap in our corpus. True, checkable, and unable to tell you what happens with three anchors, or in a building unlike ours.",
+      "card_id": "top-0008",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0008:wild",
+      "surprise": false,
+      "title": "Empirical versus theoretical contract"
+    },
+    {
+      "body": "The refuted continuity prior is stated in the objectives chapter as a retired hypothesis, developed in the crowd-modelling chapter, and re-reported in the fusion chapter. The certified-empty false-trigger constraint sits in the fusion chapter and in the evaluation's tier two. The delay-spread band contrast that died under re-reduction is named in the conclusion's contribution list.",
+      "card_id": "top-0010",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0010:foundation",
+      "surprise": false,
+      "title": "Where the negatives live"
+    },
+    {
+      "body": "A negative appears in three places for three different reasons, and knowing which place a question is aimed at saves an answer from wandering. The **objectives chapter** records that the claim was made and retired — that is the honesty ledger. The **crowd-modelling chapter** develops why it failed: the velocity field indoors is nearly unobservable, so the divergence term is inert.",
+      "card_id": "top-0010",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0010:wild",
+      "surprise": false,
+      "title": "Where the negatives live"
+    },
+    {
+      "body": "It documents the substrate, the synthetic-data platform, the datasets and the testbed so a third party can reproduce the work. It PROVES NO HYPOTHESIS — it says so in its own first line.",
+      "card_id": "top-0011",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0011:foundation",
+      "surprise": false,
+      "title": "The supporting appendix"
+    },
+    {
+      "body": "The test of whether something belongs in the appendix is a question about its role, not about its length. \"The fleet runs Ubuntu 24.04 with a patched driver\" is appendix material: needed to reproduce, proves nothing.",
+      "card_id": "top-0011",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0011:wild",
+      "surprise": false,
+      "title": "The supporting appendix"
+    },
+    {
+      "body": "Introduction; State of the Art; Objectives, Hypotheses and the Output Contract; System Design; CSI-Based Sensing; BLE and Device-Activity Augmentation; Indoor Crowd Modelling; Calibration and Fusion; The Measurement Instrument; Evaluation; Conclusion. Then Supporting Material as an appendix.",
+      "card_id": "top-0013",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0013:foundation",
+      "surprise": false,
+      "title": "The chapter order"
+    },
+    {
+      "body": "A committee reads the table of contents before it reads anything else, and the third chapter is what it notices. In the ordinary shape, objectives are a section of the introduction and hypotheses appear wherever they are tested. That shape lets a claim be written after its evidence — which is not dishonest, and is unfalsifiable.",
+      "card_id": "top-0013",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0013:wild",
+      "surprise": false,
+      "title": "The chapter order"
+    },
+    {
+      "body": "It is the absence of a first-party capture WITH A KNOWN NUMBER OF PEOPLE IN THE ROOM. It is NOT the absence of first-party capture — the deployment has produced a twelve-hour drift baseline, a paired-band delivery contrast, a rate ladder, a nine-observer coordinated walk and a device census over the accumulated archive.",
+      "card_id": "top-0015",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0015:foundation",
+      "surprise": false,
+      "title": "The weakest link"
+    },
+    {
+      "body": "The difference between the two framings is the difference between a project that is behind and a project that has one experiment left. Wrong framing: \"we have no real data.\" The fleet has produced a twelve-hour drift baseline, a paired-band contrast, a rate ladder, a nine-observer coordinated walk and a device census — that is a great deal of real data.",
+      "card_id": "top-0015",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0015:wild",
+      "surprise": false,
+      "title": "The weakest link"
+    },
+    {
+      "body": "It is a living hypothesis in the O1 calibration spine — \"recalibration is a double-edged asset\" — and it recurs in future work.",
+      "card_id": "top-0016",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0016:foundation",
+      "surprise": false,
+      "title": "Ownership of the dual-use question"
+    },
+    {
+      "body": "The fork has a testable hinge, which is what stops it being an ethics paragraph. An unauthorised observer can obtain the ENVIRONMENT-level shift for free — they can stand outside the room and watch the furniture change. What they cannot obtain is an ENCODING-level anchor: a labelled count from inside the room, on the operator's hardware. And the encoding axis is precisely the one where transfer degrades most.",
+      "card_id": "top-0016",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0016:wild",
+      "surprise": false,
+      "title": "Ownership of the dual-use question"
+    },
+    {
+      "body": "The objectives chapter's hypothesis table, for what was claimed and where each claim now stands. Then the evaluation chapter's tier one, for what has actually been measured on real data. Then the conclusion's limitations, for what the author already knows is wrong with it.",
+      "card_id": "top-0018",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0018:foundation",
+      "surprise": false,
+      "title": "Reading order for a stranger"
+    },
+    {
+      "body": "Watch what each of the other orders does. Evidence first invites \"which claim was this supposed to support?\" — the reader has to reverse-engineer the contract, and will suspect it was written afterwards. Limitations first reads as pre-emptive apology. Claims first, evidence second, honesty third is the only order in which each section answers a question the previous one raised.",
+      "card_id": "top-0018",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0018:wild",
+      "surprise": false,
+      "title": "Reading order for a stranger"
+    },
+    {
+      "body": "The sensor is privacy-preserving in what it RELEASES — an aggregate count discloses far less than camera imagery — while the channel it reads can be observed passively, through walls, and without the awareness of the people being counted.",
+      "card_id": "top-0019",
+      "deck": "core-topics",
+      "flavour": "foundation",
+      "id": "top-0019:foundation",
+      "surprise": false,
+      "title": "The privacy caveat"
+    },
+    {
+      "body": "The two halves are easy to hold apart with one comparison. What is RELEASED: \"fourteen people in this room\". A camera frame in the same room releases faces, clothing, who is sitting with whom, and what is on the screens. The count is genuinely the smaller disclosure, and that is a real design achievement.",
+      "card_id": "top-0019",
+      "deck": "core-topics",
+      "flavour": "wild",
+      "id": "top-0019:wild",
+      "surprise": false,
+      "title": "The privacy caveat"
+    }
+  ],
+  "facts_version": "6ac2e3586837",
+  "generated_at": "2026-09-01T16:15:33+00:00",
+  "schema_version": 1
+}

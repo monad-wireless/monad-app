@@ -232,7 +232,7 @@ class ActiveQuestScreenModel(
 
     fun onEvent(event: ActiveQuestEvent) {
         when (event) {
-            is ActiveQuestEvent.CompleteTask -> completeTask(event.taskIndex)
+            is ActiveQuestEvent.CompleteTask -> completeTask(event.taskIndex, event.stepData)
             is ActiveQuestEvent.FailTask -> failTask(event.taskIndex, event.reason)
             is ActiveQuestEvent.SubmitQuest -> submitQuest(success = true)
             is ActiveQuestEvent.RetryUpload -> retryUpload()
@@ -303,13 +303,25 @@ class ActiveQuestScreenModel(
         )
     }
 
-    private fun completeTask(taskIndex: Int) {
+    private fun completeTask(taskIndex: Int, stepData: String? = null) {
         screenModelScope.launch {
             val enrollmentId = mutableState.value.enrollmentId
             val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
             val step = steps.getOrNull(taskIndex) ?: return@launch
 
             val currentTime = currentTimeMillis()
+
+            // What the step observed, persisted BEFORE the step is marked completed.
+            //
+            // The order is load-bearing. The submission reads `stepData` off the row, and the
+            // completed row is what a crash-recovery path submits — so writing the observation
+            // after the completion leaves a window in which a killed app ships a completed dwell
+            // with no point attached. The backend derives coverage from this field and from
+            // nothing else, and an unplaced dwell cannot be recovered later: the app is the only
+            // thing that ever knew which code was scanned.
+            if (stepData != null) {
+                questStepCompletionRepository.updateStepData(step.backendId, stepData)
+            }
 
             // Mark current step as completed
             questStepCompletionRepository.markStepCompleted(step.backendId, currentTime)

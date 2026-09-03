@@ -17,6 +17,7 @@ import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.device.data.api.DeviceService
 import sk.martinvanco.monad.device.presentation.DeviceScreenModel
 import sk.martinvanco.monad.marker.presentation.MarkerScreenModel
+import sk.martinvanco.monad.facts.domain.FactDeck
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.presentation.HomeScreenModel
 import sk.martinvanco.monad.lab.data.GroundTruthRepository
@@ -173,6 +174,11 @@ val appModule = module {
     single<QuestStepJournal> { QuestStepJournalAdapter(get()) }
     single { QuestSessionCoordinator(get(), get(), get(), get(), get(), get()) }
 
+    // IP-146 — the Foundation-track reading matter shown during a probe dwell. A singleton
+    // because the bundle is parsed once and held: a dwell is thirty seconds of somebody standing
+    // still, and it must not spend any of them decoding 110 KB of JSON.
+    single { FactDeck() }
+
     // Screen models
     factory { SplashScreenModel(get(), get(), get(), get()) }
     factory { OnboardingScreenModel(get(), get()) }
@@ -189,7 +195,7 @@ val appModule = module {
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }
     factory { MyAccountScreenModel(get(), get()) }
-    factory { ProfileScreenModel(get()) }
+    factory { ProfileScreenModel(get(), get()) }
     factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { GroundTruthScanScreenModel(get(), get(), get(), get()) }
     // "Am I recording?" — the participant surface for a backgrounded session.

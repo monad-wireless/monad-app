@@ -9,6 +9,8 @@ data class QuestCardDt(
     val numTasks: Int,
     val timeEstimateMin: Int?,
     val points: Float,
+    /** An operator take, not a student quest. Listed apart from them, never among them. */
+    val isOperatorOnly: Boolean = false,
 ) {
     companion object {
         fun fromDto(dto: QuestDto): QuestCardDt {
@@ -18,7 +20,8 @@ data class QuestCardDt(
                 description = dto.description,
                 numTasks = dto.numberOfSteps,
                 timeEstimateMin = dto.estimatedDuration,
-                points = dto.points
+                points = dto.points,
+                isOperatorOnly = dto.isOperatorOnly
             )
         }
     }

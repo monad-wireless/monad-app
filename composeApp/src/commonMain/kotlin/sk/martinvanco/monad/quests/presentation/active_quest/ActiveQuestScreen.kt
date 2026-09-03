@@ -362,9 +362,11 @@ data class ActiveQuestScreen(
                                 StepRouter(
                                     stepNumber = index + 1,
                                     task = task,
-                                    onComplete = {
+                                    onComplete = { stepData ->
                                         expandedOverride = null
-                                        screenModel.onEvent(ActiveQuestEvent.CompleteTask(index))
+                                        screenModel.onEvent(
+                                            ActiveQuestEvent.CompleteTask(index, stepData)
+                                        )
                                     },
                                     // Offered to every step and consumed by at most one: a probe
                                     // matches it against its own targets, and everything else

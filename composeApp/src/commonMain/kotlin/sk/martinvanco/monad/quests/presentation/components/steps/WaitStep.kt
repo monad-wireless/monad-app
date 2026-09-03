@@ -13,6 +13,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import org.koin.compose.koinInject
+import sk.martinvanco.monad.facts.data.FactDto
+import sk.martinvanco.monad.facts.domain.FactDeck
+import sk.martinvanco.monad.facts.presentation.DwellFactPanel
 import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
 import sk.martinvanco.monad.quests.data.dto.TaskConfigParser
 import sk.martinvanco.monad.quests.data.dto.WaitConfig
@@ -27,7 +31,8 @@ fun WaitStep(
     stepNumber: Int,
     task: ActiveTaskDto,
     onComplete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    factDeck: FactDeck = koinInject()
 ) {
     val config = remember(task) {
         TaskConfigParser.getWaitConfig(task)
@@ -37,6 +42,15 @@ fun WaitStep(
     var remainingSeconds by remember { mutableStateOf(totalSeconds) }
     var isRunning by remember { mutableStateOf(false) }
     var isPaused by remember { mutableStateOf(false) }
+    // Reading matter for the wait (IP-146), on the same grounds as the probe dwell: a timer this
+    // step cannot shorten is an interval, and an interval is either boring or it teaches something.
+    var factOrder by remember { mutableStateOf<List<FactDto>>(emptyList()) }
+
+    LaunchedEffect(totalSeconds) {
+        if (totalSeconds <= 0) return@LaunchedEffect
+        val panels = (totalSeconds / WAIT_PANEL_SECONDS) + 2
+        factOrder = factDeck.runningOrder(factDeck.all(), panels.coerceAtLeast(3))
+    }
 
     // Auto-complete when timer reaches 0
     LaunchedEffect(remainingSeconds) {
@@ -66,7 +80,8 @@ fun WaitStep(
             WaitContent(
                 remainingSeconds = remainingSeconds,
                 totalSeconds = totalSeconds,
-                isRunning = isRunning
+                isRunning = isRunning,
+                facts = factOrder
             )
         },
         actions = {
@@ -96,7 +111,8 @@ fun WaitStep(
 private fun WaitContent(
     remainingSeconds: Int,
     totalSeconds: Int,
-    isRunning: Boolean
+    isRunning: Boolean,
+    facts: List<FactDto>
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -162,8 +178,17 @@ private fun WaitContent(
                 color = timeColor
             )
         }
+
+        // Only while the clock is running. Before that the step is a briefing the participant has
+        // to read, and a second reading pane under it would compete with the instruction.
+        if (isRunning) {
+            DwellFactPanel(facts = facts, panelSeconds = WAIT_PANEL_SECONDS)
+        }
     }
 }
+
+/** How long one fact stays up. Same eleven seconds as the probe dwell, for the same reasons. */
+private const val WAIT_PANEL_SECONDS = 11
 
 /**
  * Actions section: Start/Pause/Resume buttons

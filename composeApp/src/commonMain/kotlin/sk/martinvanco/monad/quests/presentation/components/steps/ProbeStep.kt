@@ -22,10 +22,17 @@ import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.koin.compose.koinInject
 import qrscanner.CameraLens
 import qrscanner.QrScanner
 import sk.martinvanco.monad.core.presentation.components.PermissionRequiredCard
+import sk.martinvanco.monad.facts.data.FactDto
+import sk.martinvanco.monad.facts.domain.FactDeck
+import sk.martinvanco.monad.facts.presentation.DwellFactPanel
 import sk.martinvanco.monad.lab.domain.LabInstrument
 import sk.martinvanco.monad.lab.domain.SessionMarker
 import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
@@ -82,10 +89,11 @@ import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
 fun ProbeStep(
     stepNumber: Int,
     task: ActiveTaskDto,
-    onComplete: () -> Unit,
+    onComplete: (stepData: String?) -> Unit,
     modifier: Modifier = Modifier,
     preScannedValue: String? = null,
     instrument: LabInstrument = koinInject(),
+    factDeck: FactDeck = koinInject(),
 ) {
     val permFactory = rememberPermissionsControllerFactory()
     val permController = remember(permFactory) { permFactory.createPermissionsController() }
@@ -136,6 +144,10 @@ fun ProbeStep(
 
     var matched by remember { mutableStateOf<ProbeTarget?>(null) }
     var remainingSeconds by remember { mutableStateOf(config?.dwellSeconds ?: 0) }
+    // The dwell's reading matter (IP-146). Loaded on step entry rather than on the scan, so the
+    // panel is on screen the instant the countdown starts. Off the main thread, and a failure to
+    // load leaves the list empty and the panel absent — never an exception inside a recording step.
+    var factOrder by remember { mutableStateOf<List<FactDto>>(emptyList()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     // Latches for the step's lifetime. The scanner fires its callback repeatedly while a code is in
     // frame, so without these one physical scan opens several dwells.
@@ -148,6 +160,15 @@ fun ProbeStep(
         matched = target
         errorMessage = null
         remainingSeconds = config?.dwellSeconds ?: 0
+    }
+
+    LaunchedEffect(config) {
+        val dwell = config?.dwellSeconds ?: return@LaunchedEffect
+        // Two panels more than the countdown can reach. The extra pair is not padding: the panel
+        // advances on tap as well as on its timer, and a participant who taps through the lot then
+        // stares at a repeat has been told the deck is shorter than it is.
+        val panels = (dwell / DWELL_PANEL_SECONDS) + 2
+        factOrder = factDeck.runningOrder(factDeck.all(), panels.coerceAtLeast(3))
     }
 
     // A deep link already delivered the code. Satisfy the step from it rather than asking for a
@@ -211,7 +232,12 @@ fun ProbeStep(
                 payload = "{\"dwell_seconds\":$total}",
             )
             delay(300)
-            onComplete()
+            // The point this dwell happened at, reported as the participant's own observation —
+            // the string they scanned, not a key derived from it. The backend owns that
+            // extraction (it prints the codes), and duplicating the grammar here would give the
+            // lab two copies of it to keep in step. Without this call the dwell is a measurement
+            // nobody can place, and the profile's coverage plan stays empty forever.
+            onComplete(stepObservation(target, total))
         }
     }
 
@@ -232,6 +258,7 @@ fun ProbeStep(
                 matched = matched,
                 remainingSeconds = remainingSeconds,
                 errorMessage = errorMessage,
+                facts = factOrder,
                 trackerPreview = trackerPreview,
                 trackerOwnsCamera = trackerOwnsCamera,
                 seenCard = seenCard,
@@ -264,6 +291,7 @@ private fun ProbeContent(
     matched: ProbeTarget?,
     remainingSeconds: Int,
     errorMessage: String?,
+    facts: List<FactDto>,
     trackerPreview: Any?,
     trackerOwnsCamera: Boolean,
     seenCard: String?,
@@ -395,20 +423,79 @@ private fun ProbeContent(
                 trackColor = Color(0xFFE2E8F0),
             )
 
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
+            // The countdown, demoted (IP-146). It used to be 72 sp and alone on the screen, which
+            // made the number the whole experience of standing still — and a watched number runs
+            // slowly. It is now a row: seconds on the left, what they are buying on the right, and
+            // the reading matter below carries the interval.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
                     text = "$remainingSeconds",
-                    fontSize = 72.sp,
+                    fontSize = 44.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0F172A),
                 )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "seconds of you standing still",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF334155),
+                    )
+                    // No node count here. How many receivers are armed is a property of the
+                    // night, not of the app, and the app cannot see it — a printed "nine" would
+                    // be wrong on any night six were up.
+                    Text(
+                        text = "The receivers are recording this window. Read something while " +
+                            "they do.",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = Color(0xFF64748B),
+                    )
+                }
             }
+
+            DwellFactPanel(facts = facts, panelSeconds = DWELL_PANEL_SECONDS)
         }
     }
 }
+
+/**
+ * What a completed dwell reports about itself.
+ *
+ * `targets` is the list the backend reads to build a participant's coverage plan, and it is a list
+ * rather than a scalar because a probe step MAY carry several legs in a later quest shape — the
+ * field is the backend's and its plural is not this step's to narrow. The dwell length travels
+ * with it so a reduction can tell a thirty-second window from a sixty-second one without going
+ * back to the quest spec, which may have been re-generated since.
+ */
+private fun stepObservation(target: ProbeTarget, dwellSeconds: Int): String =
+    Json.encodeToString(
+        JsonObject(
+            mapOf(
+                "targets" to JsonArray(listOf(JsonPrimitive(target.value))),
+                "dwell_seconds" to JsonPrimitive(dwellSeconds),
+                "label" to JsonPrimitive(target.label),
+                "room" to JsonPrimitive(target.room),
+                "kind" to JsonPrimitive(target.kind),
+            )
+        )
+    )
+
+/**
+ * How long one fact stays up.
+ *
+ * Chosen against the export's own bound rather than by taste: `deck_facts.py` caps a body at 420
+ * characters, and adult silent reading runs at roughly 240 words a minute, so a full-length panel
+ * is about seventy words and takes about eighteen seconds to read carefully. Eleven seconds is
+ * deliberately shorter than that — the panel advances on tap, and somebody still reading taps
+ * nothing, whereas somebody who has finished should not have to wait. A thirty-second dwell
+ * therefore shows two facts on the timer and as many more as the participant asks for.
+ */
+private const val DWELL_PANEL_SECONDS = 11
 
 /**
  * What the tracking camera can read right now.
