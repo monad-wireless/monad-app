@@ -34,5 +34,8 @@
     <string name="logo">Logo</string>
     <string name="profile">Profil</string>
 
-
+    <!-- IP-151 — jediný panel o účastníkovi. Každé číslo je živý stav výpravy. -->
+    <string name="meta_held_still">Stojíte bez pohybu už %1$d z %2$d sekúnd. Prijímače počúvajú, ako sa nehýbete.</string>
+    <string name="meta_step">Krok %1$d vašej výpravy. Stáť na mieste je zručnosť a vy ju práve predvádzate.</string>
+    <string name="meta_panels">Panel %1$d. Čítanie sa počíta ako státie. Rolovanie nie.</string>
 </resources>

@@ -34,5 +34,8 @@
     <string name="logo">Logo</string>
     <string name="profile">Profile</string>
 
-
+    <!-- IP-151 — the one dwell panel about the participant. Every number is live quest state. -->
+    <string name="meta_held_still">You have held still for %1$d of %2$d seconds. The receivers are listening to you not move.</string>
+    <string name="meta_step">Step %1$d of your quest. Standing still is a skill, and you are demonstrating it.</string>
+    <string name="meta_panels">Panel %1$d. Reading counts as standing still. Scrolling does not.</string>
 </resources>

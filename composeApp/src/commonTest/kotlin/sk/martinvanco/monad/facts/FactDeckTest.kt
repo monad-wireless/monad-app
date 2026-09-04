@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import sk.martinvanco.monad.facts.data.FactDto
 import sk.martinvanco.monad.facts.domain.FactDeck
+import sk.martinvanco.monad.facts.domain.MetaFacts
 
 /**
  * The dwell running order (IP-146).
@@ -72,5 +73,39 @@ class FactDeckTest {
         // are the step's job, and the reading matter is not.
         assertTrue(deck.runningOrder(emptyList(), count = 5).isEmpty())
         assertTrue(deck.runningOrder(facts, count = 0).isEmpty())
+    }
+
+    // IP-151 — the meta slot
+
+    @Test
+    fun theMetaSlotIsSecondNeverFirstAndAtMostOnce() {
+        val order = deck.runningOrder(facts, count = 10, metaStep = 4)
+        assertEquals(10, order.size)
+        assertTrue(!MetaFacts.isMeta(order[0]))
+        assertTrue(MetaFacts.isMeta(order[MetaFacts.SLOT]))
+        assertEquals(1, order.count(MetaFacts::isMeta))
+        assertTrue(order.none { MetaFacts.isMeta(it) && it.surprise })
+    }
+
+    @Test
+    fun theMetaSlotDoesNotDisturbTheEggInterval() {
+        val order = deck.runningOrder(facts, count = 10, metaStep = 1)
+        val curated = order.filterNot(MetaFacts::isMeta)
+        assertEquals(
+            listOf(false, false, true, false, false, true, false, false, true),
+            curated.map { it.surprise },
+        )
+    }
+
+    @Test
+    fun noMetaSlotWhenNoneIsAskedFor() {
+        assertTrue(deck.runningOrder(facts, count = 9).none(MetaFacts::isMeta))
+    }
+
+    @Test
+    fun theTemplateRotatesWithTheStepNumber() {
+        val ids = (1..4).map { MetaFacts.slot(it).id }
+        assertEquals(ids[0], ids[3])
+        assertEquals(3, ids.toSet().size)
     }
 }

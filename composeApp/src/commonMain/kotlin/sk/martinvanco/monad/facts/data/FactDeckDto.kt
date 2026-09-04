@@ -25,10 +25,10 @@ data class FactDeckDto(
 /**
  * One panel of reading matter.
  *
- * Every field is either a verbatim paragraph of a curated deck note or that card's own heading.
- * The exporter selects and bounds; it never rewrites. So a fact shown here says exactly what the
- * card says, which is what makes it safe to put in front of a participant with no reviewer in the
- * loop.
+ * Since IP-151 every body is a curator-approved `dwell:` text of a deck card — written to the 11 s
+ * panel budget, swiped right in the Defense app before it ships — plus that card's own heading. The
+ * exporter selects; it never rewrites. So a fact shown here says exactly what the card says, which
+ * is what makes it safe to put in front of a participant with no reviewer in the loop.
  */
 @Serializable
 data class FactDto(
@@ -44,4 +44,6 @@ data class FactDto(
      * because the absurd ones are what make somebody take the quest again.
      */
     val surprise: Boolean = false,
+    /** One dry line after a `wild` fact (IP-151, schema 2). Human-approved like the body. */
+    val quip: String? = null,
 )

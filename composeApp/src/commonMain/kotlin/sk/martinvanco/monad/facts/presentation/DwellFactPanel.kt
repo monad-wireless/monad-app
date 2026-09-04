@@ -45,7 +45,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import monad.composeapp.generated.resources.Res
+import monad.composeapp.generated.resources.meta_held_still
+import monad.composeapp.generated.resources.meta_panels
+import monad.composeapp.generated.resources.meta_step
+import org.jetbrains.compose.resources.stringResource
 import sk.martinvanco.monad.facts.data.FactDto
+import sk.martinvanco.monad.facts.domain.DwellState
+import sk.martinvanco.monad.facts.domain.MetaFacts
 
 /**
  * What a participant reads while they hold still (IP-146).
@@ -63,14 +70,24 @@ import sk.martinvanco.monad.facts.data.FactDto
  *
  * @param facts the running order for this dwell, from `FactDeck.runningOrder`.
  * @param panelSeconds how long one fact stays up before the next slides in.
+ * @param dwellState what is true about this participant right now (IP-151). A meta slot in the
+ *   running order renders only when this is non-null; otherwise it is skipped, because a template
+ *   over a missing counter is a lie about the person reading it.
  */
 @Composable
 fun DwellFactPanel(
     facts: List<FactDto>,
     modifier: Modifier = Modifier,
     panelSeconds: Int = 11,
+    dwellState: DwellState? = null,
 ) {
-    if (facts.isEmpty()) return
+    // A meta slot without state is dropped here, not drawn empty.
+    val shown = remember(facts, dwellState == null) {
+        if (dwellState == null) facts.filterNot(MetaFacts::isMeta) else facts
+    }
+    if (shown.isEmpty()) return
+    @Suppress("NAME_SHADOWING")
+    val facts = shown
 
     var index by remember(facts) { mutableStateOf(0) }
 
@@ -119,26 +136,67 @@ fun DwellFactPanel(
             },
             label = "fact",
         ) { shown ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = shown.title,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp,
-                    color = if (shown.surprise) EggInk else Color.White,
-                )
-                Text(
-                    text = withEmphasis(shown.body),
-                    fontSize = 14.sp,
-                    lineHeight = 21.sp,
-                    color = Color(0xFFD8DEF6),
-                )
+            if (MetaFacts.isMeta(shown)) {
+                MetaPanel(shown, dwellState, panelsShown = index + 1)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = shown.title,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.5).sp,
+                        color = if (shown.surprise) EggInk else Color.White,
+                    )
+                    Text(
+                        text = withEmphasis(shown.body),
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp,
+                        color = Color(0xFFD8DEF6),
+                    )
+                    shown.quip?.let { quip ->
+                        Text(
+                            text = quip,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            color = Color(0xFF9AA6E0),
+                        )
+                    }
+                }
             }
         }
 
         if (facts.size > 1) {
             PanelDots(count = facts.size, current = index, egg = egg)
         }
+    }
+}
+
+/**
+ * The one panel about the participant (IP-151). Every number is read off [DwellState] at render.
+ *
+ * The body is a string resource with positional arguments, so it is translated with the rest of the
+ * app and the numbers it carries are the live ones — held seconds, dwell length, step, panel count.
+ * There is no title: the participant is the subject and the pane already knows their name is none
+ * of its business.
+ */
+@Composable
+private fun MetaPanel(fact: FactDto, state: DwellState?, panelsShown: Int) {
+    val s = state ?: return
+    val body = when (MetaFacts.Template.byId(fact.id)) {
+        MetaFacts.Template.HELD_STILL -> stringResource(Res.string.meta_held_still, s.heldSeconds, s.dwellSeconds)
+        MetaFacts.Template.STEP -> stringResource(Res.string.meta_step, s.stepNumber)
+        MetaFacts.Template.PANELS -> stringResource(Res.string.meta_panels, panelsShown)
+        null -> return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = body,
+            fontSize = 17.sp,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White,
+        )
     }
 }
 
@@ -154,6 +212,7 @@ fun DwellFactPanel(
 private fun FlavourChip(fact: FactDto) {
     val (label, ink, ground) = when {
         fact.surprise -> Triple("⚡ ODDITY", Color(0xFF3B1D00), Color(0xFFFFC24D))
+        MetaFacts.isMeta(fact) -> Triple("ABOUT YOU", Color(0xFF1F1233), Color(0xFFC4B5FD))
         fact.flavour == "wild" -> Triple("IN THE WILD", Color(0xFF04241A), Color(0xFF5EEAD4))
         else -> Triple("FOUNDATION", Color(0xFFE8ECFF), Color(0xFF3D4C9E))
     }

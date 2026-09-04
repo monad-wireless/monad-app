@@ -50,15 +50,27 @@ class FactDeck {
      * eggs that make them come back. So the order is built to a ratio instead: every
      * [EGG_INTERVAL]-th slot is an egg while eggs remain.
      *
+     * A meta slot (IP-151) — one panel about the participant, rendered from live state — goes in
+     * at [MetaFacts.SLOT], never first, at most once, and it does not count towards the egg
+     * interval, so the eggs still land on every third *curated* panel.
+     *
      * @param count how many panels the dwell has room for.
+     * @param metaStep the quest step number when the dwell wants a meta slot, or null for none.
      */
-    fun runningOrder(facts: List<FactDto>, count: Int): List<FactDto> {
+    fun runningOrder(facts: List<FactDto>, count: Int, metaStep: Int? = null): List<FactDto> {
         if (facts.isEmpty() || count <= 0) return emptyList()
         val eggs = facts.filter { it.surprise }.shuffled().toMutableList()
         val rest = facts.filterNot { it.surprise }.shuffled().toMutableList()
         val out = mutableListOf<FactDto>()
+        var metaPlaced = false
         while (out.size < count && (eggs.isNotEmpty() || rest.isNotEmpty())) {
-            val wantEgg = (out.size + 1) % EGG_INTERVAL == 0
+            if (metaStep != null && !metaPlaced && out.size == MetaFacts.SLOT) {
+                out += MetaFacts.slot(metaStep)
+                metaPlaced = true
+                continue
+            }
+            val curated = out.size - (if (metaPlaced) 1 else 0)
+            val wantEgg = (curated + 1) % EGG_INTERVAL == 0
             val pool = when {
                 wantEgg && eggs.isNotEmpty() -> eggs
                 rest.isNotEmpty() -> rest

@@ -31,6 +31,7 @@ import qrscanner.CameraLens
 import qrscanner.QrScanner
 import sk.martinvanco.monad.core.presentation.components.PermissionRequiredCard
 import sk.martinvanco.monad.facts.data.FactDto
+import sk.martinvanco.monad.facts.domain.DwellState
 import sk.martinvanco.monad.facts.domain.FactDeck
 import sk.martinvanco.monad.facts.presentation.DwellFactPanel
 import sk.martinvanco.monad.lab.domain.LabInstrument
@@ -168,7 +169,8 @@ fun ProbeStep(
         // advances on tap as well as on its timer, and a participant who taps through the lot then
         // stares at a repeat has been told the deck is shorter than it is.
         val panels = (dwell / DWELL_PANEL_SECONDS) + 2
-        factOrder = factDeck.runningOrder(factDeck.all(), panels.coerceAtLeast(3))
+        // IP-151: one panel about the participant, second in the order, rendered from live state.
+        factOrder = factDeck.runningOrder(factDeck.all(), panels.coerceAtLeast(3), metaStep = stepNumber)
     }
 
     // A deep link already delivered the code. Satisfy the step from it rather than asking for a
@@ -252,6 +254,7 @@ fun ProbeStep(
         imageUrl = TaskConfigParser.stepImageUrl(task),
         content = {
             ProbeContent(
+                stepNumber = stepNumber,
                 config = config,
                 sessionRunning = instrumentState.isRunning,
                 broadcasting = broadcasting,
@@ -285,6 +288,7 @@ private fun wrongCodeMessage(config: ProbeConfig): String = when (config.targets
 
 @Composable
 private fun ProbeContent(
+    stepNumber: Int,
     config: ProbeConfig?,
     sessionRunning: Boolean,
     broadcasting: Boolean,
@@ -458,7 +462,16 @@ private fun ProbeContent(
                 }
             }
 
-            DwellFactPanel(facts = facts, panelSeconds = DWELL_PANEL_SECONDS)
+            DwellFactPanel(
+                facts = facts,
+                panelSeconds = DWELL_PANEL_SECONDS,
+                dwellState = DwellState(
+                    stepNumber = stepNumber,
+                    dwellSeconds = total,
+                    heldSeconds = (total - remainingSeconds).coerceAtLeast(0),
+                    panelsShown = 0,
+                ),
+            )
         }
     }
 }
