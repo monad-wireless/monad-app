@@ -1,5 +1,6 @@
 package sk.martinvanco.monad.marker.presentation
 
+import sk.martinvanco.monad.lab.domain.HandsetIdentity
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.launch
@@ -55,6 +56,7 @@ class MarkerScreenModel(
     private val questsService: QuestsService,
     private val userRepository: UserRepository,
     private val questStepCompletionRepository: QuestStepCompletionRepository,
+    private val handsets: HandsetIdentity,
     private val code: String,
     private val scannedValue: String,
 ) : StateScreenModel<MarkerState>(MarkerState(code = code)) {
@@ -137,7 +139,8 @@ class MarkerScreenModel(
                 val user = userRepository.getCurrentUser() ?: throw IllegalStateException("not signed in")
                 val token = user.token ?: throw IllegalStateException("no auth token")
 
-                val response = questsService.startQuest(questId, token)
+                // IP-149 — which phone is walking this run; frozen on the enrollment server-side.
+                val response = questsService.startQuest(questId, token, handsets.describe())
                 val now = currentTimeMillis()
                 val minOrder = response.quest.steps.minOfOrNull { it.order } ?: 0
                 response.quest.steps.forEach { step ->

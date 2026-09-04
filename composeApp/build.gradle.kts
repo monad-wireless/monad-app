@@ -1,6 +1,11 @@
 // `java.security.…` cannot be written inline: in a Gradle Kotlin DSL script `java` resolves to the
 // java plugin extension accessor, not to the package root.
+import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.variant.BuiltArtifactsLoader
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.security.MessageDigest
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -424,6 +429,167 @@ sqldelight {
             // 13 — InstrumentLogRecord: the instrument's own log persisted per session, so the
             //      sentence that explains a failure survives the process that said it
             version = 14
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// pushDebugApk — get a debug build onto a handset that refuses an adb install.
+//
+// HyperOS/MIUI gates Developer options > "Install via USB" behind a Mi-account check that wants an
+// inserted SIM, and with that toggle off every adb-initiated install is rejected — both of these,
+// on the lab's Redmi Note 13 Pro (`duchamp`, EEA):
+//
+//     adb install <apk>                 -> Failure [INSTALL_FAILED_USER_RESTRICTED]
+//     adb shell pm install <pushed apk> -> Failure [INSTALL_FAILED_USER_RESTRICTED]
+//
+// The restriction is on the installing uid, not on the transport, so `pm install` from the shell is
+// blocked for the same reason `adb install` is. What is *not* restricted is a user-initiated
+// install: the file is pushed to shared storage and installed by tapping it. On a lab handset with
+// no SIM in it that is the only path that works, so it is a task rather than a note in a README.
+//
+// Deliberately push-only, with no install attempt first. A task that tries to install and falls
+// back would behave differently on two handsets according to a device setting nothing in this
+// repository can observe, and its failing half prints an adb error that reads like a build failure.
+// One assemble, one push, one instruction.
+//
+//   ./gradlew :composeApp:pushDebugApk
+//   ./gradlew :composeApp:pushDebugApk -Pmonad.deviceSerial=45DALB4X9PSKLNRG   # >1 device attached
+//   ./gradlew :composeApp:pushDebugApk -Pmonad.pushPath=/sdcard/Download/x.apk
+//
+// In the IDE it is the shared `pushDebugApk` run configuration. That configuration is a *Gradle*
+// one on purpose: an Android App configuration needs a module carrying an Android facet, and it is
+// exactly that facet that a KMP project is missing whenever the IDE's Gradle import has dropped the
+// AGP half of the model (the "Module not specified" state). A Gradle configuration runs either way.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Absolute path to `adb`, or the bare name so `PATH` can answer.
+ *
+ * `local.properties` first because it is what AGP itself reads and therefore the one location
+ * guaranteed to agree with the SDK this build compiles against; the environment variables are for
+ * a machine that never wrote one. Assembled from providers rather than by reading the file at
+ * configuration time so the task stays configuration-cache-clean.
+ */
+val adbExecutable: Provider<String> = providers
+    .fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText
+    // Empty-then-filter rather than a null-returning map: `Provider.map` is a SAM whose Kotlin
+    // signature demands a non-null return, so "no value here" has to be expressed by the filter.
+    .map { text ->
+        Regex("""^\s*sdk\.dir\s*=\s*(.+)$""", RegexOption.MULTILINE)
+            .find(text)
+            ?.groupValues
+            ?.get(1)
+            ?.trim()
+            // java.util.Properties escapes ':' and '\' in a written value; a hand-edited file
+            // usually carries neither, but a file written by the IDE can carry both.
+            ?.replace("\\:", ":")
+            ?.replace("\\\\", "\\")
+            .orEmpty()
+    }
+    .filter(String::isNotEmpty)
+    .orElse(providers.environmentVariable("ANDROID_HOME"))
+    .orElse(providers.environmentVariable("ANDROID_SDK_ROOT"))
+    .map { sdkDir -> File(sdkDir, "platform-tools/adb").let { if (it.canExecute()) it.absolutePath else "" } }
+    .filter(String::isNotEmpty)
+    .orElse("adb")
+
+/**
+ * Pushes the assembled debug APK to the device and prints how to install it.
+ *
+ * The APK is located through AGP's artifacts API rather than by composing
+ * `build/outputs/apk/debug/composeApp-debug.apk` by hand: that filename is AGP's to change, and a
+ * path built from a guess fails as "file not found" long after the guess stopped being true.
+ */
+abstract class PushApkTask @Inject constructor(private val execOps: ExecOperations) : DefaultTask() {
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val apkDirectory: DirectoryProperty
+
+    @get:Internal
+    abstract val builtArtifactsLoader: Property<BuiltArtifactsLoader>
+
+    @get:Input
+    abstract val adb: Property<String>
+
+    @get:Input
+    abstract val remotePath: Property<String>
+
+    @get:Input
+    @get:Optional
+    abstract val deviceSerial: Property<String>
+
+    @get:Input
+    abstract val applicationId: Property<String>
+
+    @TaskAction
+    fun push() {
+        val artifacts = builtArtifactsLoader.get().load(apkDirectory.get())
+            ?: throw GradleException("No APK metadata under ${apkDirectory.get().asFile} — assembleDebug produced nothing.")
+        val apk = File(artifacts.elements.single().outputFile)
+        val remote = remotePath.get()
+
+        val command = buildList {
+            add(adb.get())
+            deviceSerial.orNull?.let { add("-s"); add(it) }
+            add("push")
+            add(apk.absolutePath)
+            add(remote)
+        }
+
+        // adb writes its progress to stdout and its errors to stderr; both are merged so a failure
+        // message survives into the exception rather than being scrolled past in the build log.
+        val output = ByteArrayOutputStream()
+        val result = execOps.exec {
+            commandLine(command)
+            standardOutput = output
+            errorOutput = output
+            isIgnoreExitValue = true
+        }
+        if (result.exitValue != 0) {
+            throw GradleException(
+                "adb push failed (exit ${result.exitValue}):\n" +
+                    output.toString().trim().prependIndent("  ") +
+                    "\n\nCheck the handset is attached and authorised: `${adb.get()} devices -l`. " +
+                    "With more than one device attached, name it: -Pmonad.deviceSerial=<serial>."
+            )
+        }
+
+        val megabytes = apk.length() / (1024 * 1024)
+        logger.lifecycle(
+            """
+
+            Pushed ${apk.name} ($megabytes MB) to $remote
+
+            On the handset: Files > Downloads > ${remote.substringAfterLast('/')} > Install.
+            An adb install cannot do this step — MIUI's "Install via USB" is off and needs a SIM.
+
+            Then, to launch it from here:
+              ${adb.get()} shell am start -n ${applicationId.get()}/sk.martinvanco.monad.MainActivity
+            """.trimIndent()
+        )
+    }
+}
+
+androidComponents {
+    onVariants(selector().withName("debug")) { variant ->
+        tasks.register<PushApkTask>("pushDebugApk") {
+            group = "install"
+            description = "Assembles the debug APK and pushes it to the device for a tap-install."
+            // Wiring the artifact provider is what makes this depend on assembleDebug; an explicit
+            // dependsOn would be a second declaration of the same fact.
+            apkDirectory.set(variant.artifacts.get(SingleArtifact.APK))
+            builtArtifactsLoader.set(variant.artifacts.getBuiltArtifactsLoader())
+            adb.set(adbExecutable)
+            remotePath.set(
+                providers.gradleProperty("monad.pushPath").orElse("/sdcard/Download/monad-debug.apk")
+            )
+            deviceSerial.set(providers.gradleProperty("monad.deviceSerial"))
+            applicationId.set(variant.applicationId)
+            // Pushing is the point of running it; there is no output on this machine to be
+            // up-to-date against, and skipping it would silently leave an old APK on the handset.
+            outputs.upToDateWhen { false }
         }
     }
 }

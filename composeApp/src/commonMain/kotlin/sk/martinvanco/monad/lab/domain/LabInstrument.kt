@@ -1324,6 +1324,12 @@ class LabInstrument(
                 residencyChecks = residency.diagnostics().map {
                     "${it.name}=${if (it.satisfied) "ok" else "MISSING"} (${it.detail})"
                 },
+                // IP-149 — the same descriptor the start request carried, verbatim, so the dataset
+                // and the backend hold identical bytes. The two flat fields are copies for readers
+                // that filter without opening the block.
+                machine = request?.handset?.machine ?: "",
+                osBuild = request?.handset?.osBuild ?: "",
+                handset = request?.handset,
             ),
             lifecycle = SessionLifecycle(
                 startedWallMillis = _state.value.startedWallMillis,

@@ -223,6 +223,36 @@ example  := 1.2.0+5.g0940fc0b.dirty586d603e
 from a dirty tree — so two bench builds of the same version from different patches are still
 distinguishable, and a build that is not reproducible says so.
 
+### Which handset produced this recording (IP-149)
+
+`HandsetDescriptor` is the phone describing itself, once, at the moment a quest starts. It is
+sent as the body of `POST /api/quest/{id}/start` (the backend freezes it on the enrollment as
+measurement provenance, beside the fleet node in `?device=`) and written into the sidecar as
+`environment.handset`, so the dataset on S3 says what recorded it without asking the backend. The
+same bytes both places, from the same call.
+
+| Field | iOS | Android |
+|---|---|---|
+| `handset_id` | a UUID minted once into the settings store (`HandsetIdentity`) — never `identifierForVendor` / `ANDROID_ID`; a reinstall is a new handset | same |
+| `machine` | `utsname.machine` (`iPhone15,2`) | `Build.DEVICE` |
+| `os_build` | `kern.osversion` (`22G86`) | `Build.ID` + security patch |
+| `capabilities` | the same token set `GET /api/quests` receives | same |
+| `sensors` | availability flags: CoreMotion, `CMAltimeter`, heading, `NISession`, ARKit scene reconstruction | `SensorManager.getSensorList`: name, vendor, range, resolution, min delay, power |
+| `radio` | `{}` — iOS publishes no BLE PHY or Wi-Fi standard API | BLE 2M/coded PHY, extended advertising, max advertising length; Wi-Fi 5/6 GHz, 802.11ax |
+| `state` | thermal state, low-power mode, battery | thermal status (mapped onto the iOS names), power-save, battery |
+
+Three rules. **Unknown is absent**: every field the platform may not answer is nullable and carries
+`@EncodeDefault(NEVER)`, so no `Json` instance — the sidecar's `encodeDefaults = true` included —
+ever writes a `null` placeholder. **The token set stays the contract**: the descriptor adds evidence
+around `capabilities`; it does not change what a quest requires. **The keys are closed on the
+backend**: adding a field here without adding it there turns every start into a 400, which is the
+loud failure we want. A probe that throws yields an absent field, never a failed start — evidence
+about a run must not be able to stop the run.
+
+The iOS `LabEnvironment.deviceModel` changed from the family (`iPhone`) to the machine identifier
+with this: two iPhones of different generations carry different IMUs, barometers, UWB chips and
+LiDAR, and a walk's odometry quality is a function of which one recorded it.
+
 All of it derives from `monad.version` / `monad.versionCode` in `gradle.properties`, the only place
 a version is written by hand. Android's `versionName`/`versionCode` are assigned from those
 properties; `BuildIdentity.kt` is generated from them into `commonMain`, so both platforms compile

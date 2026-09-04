@@ -1,5 +1,6 @@
 package sk.martinvanco.monad.quests.presentation.quest_detail
 
+import sk.martinvanco.monad.lab.domain.HandsetIdentity
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.ktor.client.plugins.ClientRequestException
@@ -15,6 +16,7 @@ class QuestDetailScreenModel(
     private val questsService: QuestsService,
     private val userRepository: UserRepository,
     private val questStepCompletionRepository: QuestStepCompletionRepository,
+    private val handsets: HandsetIdentity,
     private val questId: String
 ) : StateScreenModel<QuestDetailState>(QuestDetailState(questId = questId)) {
 
@@ -90,7 +92,8 @@ class QuestDetailScreenModel(
                     ?: throw Exception("No auth token")
 
                 // Call API to start quest
-                val response = questsService.startQuest(questId, token)
+                // IP-149 — which phone is walking this run; frozen on the enrollment server-side.
+                val response = questsService.startQuest(questId, token, handsets.describe())
 
                 // Store step completions locally
                 val currentTime = currentTimeMillis()

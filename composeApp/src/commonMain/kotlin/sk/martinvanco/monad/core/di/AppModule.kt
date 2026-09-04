@@ -38,6 +38,7 @@ import sk.martinvanco.monad.lab.domain.GroundTruthRecorder
 import sk.martinvanco.monad.lab.domain.GroundTruthStore
 import sk.martinvanco.monad.lab.domain.IdentityBroadcaster
 import sk.martinvanco.monad.lab.domain.LabDatagramSocket
+import sk.martinvanco.monad.lab.domain.HandsetIdentity
 import sk.martinvanco.monad.lab.domain.LabEnvironment
 import sk.martinvanco.monad.lab.domain.ForegroundWake
 import sk.martinvanco.monad.lab.domain.LabInstrument
@@ -89,6 +90,9 @@ val appModule = module {
     single { UserRepository(get()) }
     single { QuestStepCompletionRepository(get()) }
     single { SettingsRepository(get()) }
+    // IP-149 — the installation's identity and its descriptor. Over the settings store, because
+    // that is the one thing that lives exactly as long as the installation does.
+    single { HandsetIdentity(get()) }
 
     // Domain
     single { AuthManager(get(), get()) }
@@ -172,7 +176,7 @@ val appModule = module {
     single<ParticipantDirectory> { ParticipantDirectoryAdapter(get()) }
     single<QuestCompletionGateway> { QuestCompletionGatewayAdapter(get()) }
     single<QuestStepJournal> { QuestStepJournalAdapter(get()) }
-    single { QuestSessionCoordinator(get(), get(), get(), get(), get(), get()) }
+    single { QuestSessionCoordinator(get(), get(), get(), get(), get(), get(), get()) }
 
     // IP-146 — the Foundation-track reading matter shown during a probe dwell. A singleton
     // because the bundle is parsed once and held: a dwell is thirty seconds of somebody standing
@@ -186,11 +190,11 @@ val appModule = module {
     factory { RegisterScreenModel(get(), get(), get()) }
     factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { QuestsScreenModel() }
-    factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), questId) }
+    factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), get(), questId) }
     // IP-128 — device landing. questId is the optional `?q=` from the deep link.
     factory { (slug: String, questId: String?) -> DeviceScreenModel(get(), get(), slug, questId) }
     // IP-140 — resolves a scanned marker card to a runnable quest and starts it.
-    factory { (code: String, scanned: String) -> MarkerScreenModel(get(), get(), get(), code, scanned) }
+    factory { (code: String, scanned: String) -> MarkerScreenModel(get(), get(), get(), get(), code, scanned) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), questId) }
     factory { NewsScreenModel() }
     factory { NotificationsScreenModel() }

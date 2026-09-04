@@ -1,5 +1,9 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package sk.martinvanco.monad.lab.domain
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -167,6 +171,22 @@ data class SessionEnvironment(
     /** Residency checks as they stood at session start — so a suspicious session can be explained
      *  rather than argued about. */
     @SerialName("residency_checks") val residencyChecks: List<String> = emptyList(),
+    /**
+     * The hardware identifier (`iPhone15,2`, `a54x`) and the OS build (`22G86`) — IP-149. Flat
+     * copies of two descriptor fields, because these are the two a reader filters on and a reader
+     * should not have to open the block below to do it. Empty on a session recorded by a build that
+     * predates them.
+     */
+    val machine: String = "",
+    @SerialName("os_build") val osBuild: String = "",
+    /**
+     * The whole handset descriptor as sent at quest start — IP-149, owner decision Q2: the dataset
+     * on S3 is self-describing, so an analysis conditioning on the IMU vendor or the BLE PHY set
+     * reads the sidecar and never needs the backend. The same bytes the backend froze on the
+     * enrollment, so the two can be compared. Null on a session no quest started (the lab console)
+     * or a build that predates the descriptor.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val handset: HandsetDescriptor? = null,
 )
 
 @Serializable

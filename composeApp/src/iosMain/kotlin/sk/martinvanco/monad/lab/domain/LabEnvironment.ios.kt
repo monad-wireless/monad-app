@@ -9,11 +9,15 @@ actual class LabEnvironment actual constructor() {
         "${UIDevice.currentDevice.systemName} ${UIDevice.currentDevice.systemVersion}"
 
     /**
-     * `UIDevice.model` is the coarse family ("iPhone"), not the specific hardware. The precise
-     * identifier needs a `uname` machine lookup; the family is enough for the sidecar's purpose,
-     * which is to explain a session, not to fingerprint the handset.
+     * The hardware identifier (`iPhone15,2`), from `utsname.machine` — IP-149.
+     *
+     * This used to be `UIDevice.model`, the family ("iPhone"), on the argument that the sidecar
+     * explains a session rather than fingerprinting the handset. The argument did not survive the
+     * sensor reference: two iPhones of different generations carry different IMUs, barometers, UWB
+     * chips and LiDAR, and a walk's odometry quality is a function of which one recorded it. The
+     * family is kept as the fallback for the one case the lookup fails.
      */
-    actual val deviceModel: String = UIDevice.currentDevice.model
+    actual val deviceModel: String = machineIdentifier() ?: UIDevice.currentDevice.model
     actual val timezone: String = TimeZone.currentSystemDefault().id
 
     /** Wi-Fi on every iPhone; the socket pins to it with `IP_BOUND_IF`. */

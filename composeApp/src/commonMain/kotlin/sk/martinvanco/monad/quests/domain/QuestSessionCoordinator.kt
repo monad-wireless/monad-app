@@ -3,6 +3,7 @@ package sk.martinvanco.monad.quests.domain
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Instant
 import sk.martinvanco.monad.core.util.currentTimeMillis
+import sk.martinvanco.monad.lab.domain.HandsetIdentity
 import sk.martinvanco.monad.lab.domain.LabConfig
 import sk.martinvanco.monad.lab.domain.LabInstrument
 import sk.martinvanco.monad.lab.domain.QuestFeatures
@@ -41,6 +42,7 @@ class QuestSessionCoordinator(
     private val participants: ParticipantDirectory,
     private val stepJournal: QuestStepJournal,
     private val completions: QuestCompletionGateway,
+    private val handsets: HandsetIdentity,
 ) {
 
     /**
@@ -114,6 +116,9 @@ class QuestSessionCoordinator(
                 configVersion = config.version,
                 enrollmentId = enrollmentId,
                 questId = questId,
+                // IP-149 — into the sidecar. Null when the probe failed; a run is never refused
+                // over its own description.
+                handset = handsets.describe(),
                 emit = emit,
                 witness = features.witness && config.beacons.isConfigured,
                 // Session-scoped broadcasting: on for the whole run when the quest asks for it, so

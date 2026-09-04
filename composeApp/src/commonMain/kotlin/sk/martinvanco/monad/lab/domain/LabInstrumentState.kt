@@ -20,6 +20,12 @@ data class SessionRequest(
     val configVersion: Int = 0,
     val enrollmentId: String? = null,
     val questId: String? = null,
+    /**
+     * The phone's description of itself, as sent to `POST /api/quest/{id}/start` — IP-149. The
+     * sidecar's `environment.handset` carries the same bytes so the dataset needs no backend to say
+     * what recorded it. Null for a session no quest started.
+     */
+    val handset: HandsetDescriptor? = null,
     /** Play the illuminator role: associate, pin, sync, emit. */
     val emit: Boolean = true,
     /** Play the witness role: monitor and range the anchors. */

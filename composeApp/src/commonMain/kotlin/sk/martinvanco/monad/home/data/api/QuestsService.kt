@@ -7,7 +7,11 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
+import sk.martinvanco.monad.lab.domain.HandsetDescriptor
+import sk.martinvanco.monad.quests.data.dto.QuestStartRequestDto
 import sk.martinvanco.monad.core.data.remote.KtorClient
 import sk.martinvanco.monad.home.data.dto.QuestDetailResponseDto
 import sk.martinvanco.monad.home.data.dto.QuestListResponseDto
@@ -63,10 +67,22 @@ class QuestsService(private val ktorClient: KtorClient) {
         return response.body<QuestDetailResponseDto>()
     }
 
-    suspend fun startQuest(questId: String, token: String): QuestStartResponseDto {
+    /**
+     * Start a quest, telling the backend which phone is walking it (IP-149).
+     *
+     * The descriptor rides as `{"handset": {...}}` and the backend freezes it on the enrollment as
+     * measurement provenance — the transmitter beside the receiver (`?device=`). Null sends no
+     * body, which the backend treats as a build that predates the descriptor; it never refuses a
+     * start over a missing description.
+     */
+    suspend fun startQuest(questId: String, token: String, handset: HandsetDescriptor? = null): QuestStartResponseDto {
         val response = ktorClient.client.post("/api/quest/$questId/start") {
             headers {
                 append(HttpHeaders.Authorization, "Bearer $token")
+            }
+            if (handset != null) {
+                contentType(ContentType.Application.Json)
+                setBody(QuestStartRequestDto(handset = handset))
             }
         }
         return response.body<QuestStartResponseDto>()
