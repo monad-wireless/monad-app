@@ -14,6 +14,7 @@ import sk.martinvanco.monad.lab.domain.LabSensorModule
 import sk.martinvanco.monad.lab.domain.PoseTracker
 import sk.martinvanco.monad.lab.domain.ReferenceClock
 import sk.martinvanco.monad.lab.domain.availableStorageBytes
+import sk.martinvanco.monad.lab.domain.detectBuildDiagnostics
 import sk.martinvanco.monad.lab.domain.monotonicNanos
 import sk.martinvanco.monad.lab.domain.preflight.BroadcastProbe
 import sk.martinvanco.monad.lab.domain.preflight.ClockProbe
@@ -113,6 +114,10 @@ class PreflightService(
             backlogSessions = runCatching { sessions.unsyncedCount() }.getOrDefault(0L),
             backlogScans = runCatching { groundTruth.pendingCount() }.getOrDefault(0L),
             commandedRateHz = commandedRateHz,
+            // Read here rather than cached at startup: it costs one environment lookup and a
+            // cached answer would survive nothing that matters, since the process cannot gain or
+            // lose a shim while it runs.
+            buildDiagnostics = detectBuildDiagnostics(),
             atWallMillis = currentTimeMillis(),
         )
         return Preflight.evaluate(inputs)

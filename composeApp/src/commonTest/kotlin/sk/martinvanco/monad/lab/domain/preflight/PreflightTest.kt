@@ -6,6 +6,7 @@ import sk.martinvanco.monad.lab.domain.AdvertisePlan
 import sk.martinvanco.monad.lab.domain.ApProfile
 import sk.martinvanco.monad.lab.domain.BeaconPlan
 import sk.martinvanco.monad.lab.domain.BeaconZone
+import sk.martinvanco.monad.lab.domain.BuildDiagnostics
 import sk.martinvanco.monad.lab.domain.ClockEstimate
 import sk.martinvanco.monad.lab.domain.CollectorEndpoint
 import sk.martinvanco.monad.lab.domain.LabConfig
@@ -492,5 +493,52 @@ class PreflightTest {
         assertTrue(report.headline.startsWith("NOT READY"))
         assertTrue(report.headline.contains("Background residency"))
         assertTrue(report.headline.contains("Storage headroom"))
+    }
+}
+
+/**
+ * The build-diagnostics check (2026-09-04).
+ *
+ * Separate class so it can be read as the one criterion that is about the binary rather than the
+ * room. It is a FAIL because the measured consequence is a `0x8BADF00D` kill and a session that
+ * never reaches an upload path — see `BuildDiagnostics`.
+ */
+class PreflightBuildDiagnosticsTest {
+
+    private fun report(diagnostics: BuildDiagnostics) = Preflight.evaluate(
+        PreflightInputs(intent = SessionIntent.WALK, buildDiagnostics = diagnostics)
+    )
+
+    private fun diagnosticsCheck(report: PreflightReport) =
+        report.checks.first { it.id == PreflightCheckId.BUILD_DIAGNOSTICS }
+
+    @Test
+    fun `a clean build passes and does not block`() {
+        val check = diagnosticsCheck(report(BuildDiagnostics.NONE))
+        assertEquals(PreflightSeverity.PASS, check.severity)
+        assertEquals(null, check.remedy)
+    }
+
+    @Test
+    fun `an instrumented build is a blocker and names every shim`() {
+        val check = diagnosticsCheck(
+            report(BuildDiagnostics(listOf("Main Thread Checker", "Metal API Validation")))
+        )
+        assertEquals(PreflightSeverity.FAIL, check.severity)
+        assertTrue(check.detail.contains("Main Thread Checker"))
+        assertTrue(check.detail.contains("Metal API Validation"))
+        assertTrue(check.remedy!!.contains("0x8BADF00D"))
+    }
+
+    /** Asked for an illuminator run too: the shims do not care which mode the session is in. */
+    @Test
+    fun `the check is asked for both intents`() {
+        listOf(SessionIntent.WALK, SessionIntent.ILLUMINATE).forEach { intent ->
+            val evaluated = Preflight.evaluate(
+                PreflightInputs(intent = intent, buildDiagnostics = BuildDiagnostics(listOf("GPU Frame Capture")))
+            )
+            assertEquals(PreflightSeverity.FAIL, diagnosticsCheck(evaluated).severity)
+            assertTrue(evaluated.blockers.any { it.id == PreflightCheckId.BUILD_DIAGNOSTICS })
+        }
     }
 }

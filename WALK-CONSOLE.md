@@ -63,6 +63,52 @@ silently, and the artefacts only carried the hole.
    walk on the site loads it and relocalises, so all walks on a site share one frame. First walk
    on a site creates the map; later walks extend it.
 
+## The build a field walk runs on (2026-09-04)
+
+**A field walk runs a Release build, or a Debug build with Xcode's diagnostics switched off.**
+This is not hygiene. It is the difference between a walk and a lost walk.
+
+On 2026-09-04 a 14 m 42 s survey walk was destroyed. FrontBoard killed the app with `0x8BADF00D`
+— "Failed to terminate gracefully after 5.0s" — as it went to the background. It was not memory
+(thermal level 0, no jetsam), and it was not CPU (the main thread was blocked, not spinning).
+The faulting stack was one Compose frame going through three interception layers:
+
+```
+__ulock_wait2                                               <- blocked on an ObjC side-table lock
+objc_object::sidetable_retain(bool)
+_replacement_NSObject_conformsToProtocol_Instance_Version   <- libMainThreadChecker.dylib
+-[MTLDebugCommandBuffer addPurgeableObject:]                <- Metal API Validation
+-[CaptureMTLRenderCommandEncoder drawIndexedPrimitives:...] <- GPU frame capture
+GrOpFlushState::drawMesh                                    <- Skia
+androidx.compose.ui.window.MetalRedrawer.draw
+```
+
+Each layer retains ObjC objects on the main thread. Kotlin/Native's ObjC interop already puts heavy
+weak-reference traffic on the same side tables, so the lock is contended by construction. Add the
+shims and one draw call can outlast the five seconds iOS gives an app to quiesce.
+
+The cost is the whole session, not one frame. A `SIGKILL` runs no `stop()`, so no sidecar is
+written and the row stays `open` — the one status `selectPendingUpload` does not select. The data
+survives on the phone and the next launch recovers it, but it is not uploaded until somebody
+notices.
+
+Three things now stand between that and a repeat:
+
+| Guard | Where | What it does |
+|---|---|---|
+| Scheme defaults | `iosApp/iosApp.xcodeproj/.../iosApp.xcscheme` | Main Thread Checker, Thread Performance Checker, Metal API Validation and GPU Frame Capture are switched off for the Debug launch action |
+| Preflight blocker | `PreflightCheckId.BUILD_DIAGNOSTICS` | Reads this process's own environment and FAILs the readiness check, naming every shim that is on |
+| Crash report to LGTM | `LabSessionRecovery` → `TelemetryEncoder.sessionInterrupted` | The next launch ships one `ERROR` log record per recovered session, so a kill is visible in Loki instead of appearing as a gauge that stopped |
+
+The preflight check reads the **environment**, not the build config, and that is deliberate: the
+scheme can be edited, an old build can be left on a device, and `isDebug()` is true for plenty of
+runs that carry no shims at all. Only the running process can answer for the running process.
+
+After changing the scheme, confirm it in Xcode under **Product > Scheme > Edit Scheme > Run**:
+Diagnostics should show Main Thread Checker and Thread Performance Checker unchecked, and Options
+should show GPU Frame Capture "Disabled" and Metal API Validation "Disabled". The scheme keys are
+not documented by Apple, so read the UI rather than trusting the file.
+
 ## Protocol A — a fingerprinting walk
 
 1. Run **Check** (pre-flight, judged as a walk). Grant anything red.

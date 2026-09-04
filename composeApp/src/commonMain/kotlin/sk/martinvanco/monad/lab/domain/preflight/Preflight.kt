@@ -1,6 +1,7 @@
 package sk.martinvanco.monad.lab.domain.preflight
 
 import sk.martinvanco.monad.core.domain.permissions.PermissionStatus
+import sk.martinvanco.monad.lab.domain.BuildDiagnostics
 import sk.martinvanco.monad.lab.domain.ClockEstimate
 import sk.martinvanco.monad.lab.domain.ClockGate
 import sk.martinvanco.monad.lab.domain.ClockGateStatus
@@ -35,6 +36,7 @@ import sk.martinvanco.monad.lab.domain.roundTo
  * | Room scan | — | this phone has LiDAR and the mesh is not being exported |
  * | Telemetry | — | no collector endpoint, so the walk is invisible while it runs |
  * | Backlog | — | anything still unsent from a previous session |
+ * | Build diagnostics | any Xcode interception shim is switched on | — |
  *
  * A FAIL is a blocker; a WARN is something to know. Nothing here refuses to let the operator start
  * a session — the instrument is theirs, and a deliberate degraded run is sometimes the right call.
@@ -117,6 +119,9 @@ object Preflight {
             // failures are all discovered afterwards, and that is true of an illuminator run too.
             add(telemetry(inputs))
             add(backlog(inputs))
+            // Last, and asked for every intent. A shimmed build is not a walk problem or an
+            // illuminator problem, it is a "this binary should not be in a building" problem.
+            add(buildDiagnostics(inputs))
         }
         return PreflightReport(
             checks = checks,
@@ -555,6 +560,37 @@ object Preflight {
             "upload before the day starts; the phone will be on an experiment AP with no route out",
         )
     }
+
+    /**
+     * A FAIL, not a WARN, and the severity is the measured consequence rather than a preference.
+     *
+     * With the shims on, one Compose frame can hold the main thread past the five seconds iOS gives
+     * an app to quiesce on a background transition. The kill is `SIGKILL` from FrontBoard, so no
+     * `stop()` runs, no sidecar is written, and the session stays `open` — which is the one state no
+     * upload path selects. The 2026-09-04 walk lost 882 s of pose, mesh and marker data that way.
+     *
+     * It stays a check rather than a hard refusal, in keeping with every other criterion here: a
+     * deliberate instrumented run at a bench is legitimate. What is not legitimate is not knowing.
+     */
+    private fun buildDiagnostics(inputs: PreflightInputs): PreflightCheck {
+        val active = inputs.buildDiagnostics.active
+        if (active.isEmpty()) {
+            return PreflightCheck(
+                PreflightCheckId.BUILD_DIAGNOSTICS,
+                PreflightSeverity.PASS,
+                "no debug instrumentation in this process",
+            )
+        }
+        return PreflightCheck(
+            PreflightCheckId.BUILD_DIAGNOSTICS,
+            PreflightSeverity.FAIL,
+            active.joinToString(", ") + " active",
+            "these intercept every Metal draw call and contend the ObjC side-table lock on the main "
+                + "thread; iOS kills the app with 0x8BADF00D on the next background transition and an "
+                + "open session is never uploaded. Run a Release build, or turn them off in the Xcode "
+                + "scheme under Run > Diagnostics and Run > Options > GPU Frame Capture",
+        )
+    }
 }
 
 /** Everything the evaluation reads. Gathered by `PreflightService`, never by [Preflight] itself. */
@@ -584,6 +620,14 @@ data class PreflightInputs(
     val storage: StorageProbe = StorageProbe.UNKNOWN,
     val backlogSessions: Long = 0,
     val backlogScans: Long = 0,
+    /**
+     * Xcode's interception shims, read from this process rather than from the build config.
+     *
+     * The build config is not the authority: the scheme can be edited, an old build can be left
+     * on a device, and `isDebug()` is true for plenty of runs that carry none of these. The
+     * process's own environment is the only thing that answers for the binary actually running.
+     */
+    val buildDiagnostics: BuildDiagnostics = BuildDiagnostics.NONE,
     val commandedRateHz: Double = 0.0,
     val plannedSessionSeconds: Int = Preflight.PLANNED_SESSION_SECONDS,
     val atWallMillis: Long = 0,
@@ -706,6 +750,15 @@ enum class PreflightCheckId(val wire: String, val title: String) {
     TELEMETRY("telemetry", "Live telemetry"),
     STORAGE("storage", "Storage headroom"),
     BACKLOG("backlog", "Upload backlog"),
+
+    /**
+     * Is this the build that should be carrying a field session at all?
+     *
+     * Asked last because it is the only check that is about the binary rather than about the
+     * room, and asked at all because on 2026-09-04 it was the difference between a walk and a
+     * watchdog kill — see [sk.martinvanco.monad.lab.domain.BuildDiagnostics].
+     */
+    BUILD_DIAGNOSTICS("build_diagnostics", "Build diagnostics"),
 }
 
 data class PreflightCheck(

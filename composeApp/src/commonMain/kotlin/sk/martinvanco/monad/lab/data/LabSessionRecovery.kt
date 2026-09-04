@@ -44,6 +44,18 @@ import sk.martinvanco.monad.lab.domain.health.StreamState
  */
 class LabSessionRecovery(
     private val repository: LabSessionRepository,
+    /**
+     * Ships one ERROR log record per recovered session, so a crash is visible to whoever is watching
+     * the dashboard rather than only to whoever opens this phone.
+     *
+     * A crash cannot report itself. The 2026-09-04 walk was killed by FrontBoard with `0x8BADF00D`
+     * and its only server-side trace was a gauge that stopped — which is what a phone out of range
+     * and a walk that simply ended also look like. This is the launch afterwards saying which of the
+     * three it was.
+     *
+     * `null` in tests, where there is nothing to ship to.
+     */
+    private val telemetry: LabTelemetryShipper? = null,
 ) {
     private val json = Json { prettyPrint = true; encodeDefaults = true }
 
@@ -231,6 +243,20 @@ class LabSessionRecovery(
                     }
                     ?.worst,
             )
+            // After the row is durable, never before: a report that raced the write could name a
+            // session the database has not yet marked, and the local record is the one that has to
+            // survive. Failure here is swallowed inside the shipper.
+            runCatching {
+                telemetry?.reportInterruptedSession(
+                    sessionId = record.sessionId,
+                    participant = record.participantId,
+                    site = record.site.orEmpty(),
+                    buildId = record.buildId.orEmpty(),
+                    reason = reason,
+                    lastAliveWallMs = endedWall,
+                    rows = recovered.last().rows,
+                )
+            }
         }
         return recovered.sortedByDescending { it.startedWallMillis }
     }

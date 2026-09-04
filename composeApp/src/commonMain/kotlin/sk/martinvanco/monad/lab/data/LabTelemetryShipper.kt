@@ -240,6 +240,45 @@ class LabTelemetryShipper(
             .onFailure { Napier.w("[lab-telemetry] could not report upload failure for $artefact: ${it.message}") }
     }
 
+    /**
+     * Report a session the process did not survive, at the first launch that finds it.
+     *
+     * Called by [LabSessionRecovery] rather than by whatever crashed, for the obvious reason. Like
+     * every other call in this class it is best-effort: a report that cannot be shipped must not
+     * turn one lost session into a second failure, and the local `interrupted_reason` on the row is
+     * the durable record either way.
+     *
+     * No `isConfigured` guard beyond the standard one: a handset whose bundle carries no telemetry
+     * endpoint has nowhere to send this, and retrying a host that was never meant to exist is the
+     * noise the posture flag exists to prevent.
+     */
+    suspend fun reportInterruptedSession(
+        sessionId: String,
+        participant: String,
+        site: String,
+        buildId: String,
+        reason: String,
+        lastAliveWallMs: Long,
+        rows: Long,
+    ) {
+        val sink = configService.config.value.telemetry
+        if (!sink.isConfigured) return
+        val request = TelemetryEncoder.sessionInterrupted(
+            wallMs = currentTimeMillis(),
+            sessionId = sessionId,
+            participant = participant,
+            site = site,
+            // The build that OPENED the session. Empty rather than wrong when the row predates
+            // build ids — the same rule LabSessionRecovery applies to the sidecar.
+            appVersion = buildId,
+            reason = reason,
+            lastAliveWallMs = lastAliveWallMs,
+            rows = rows,
+        )
+        runCatching { send(sink, LOGS_PATH, request) }
+            .onFailure { Napier.w("[lab-telemetry] could not report interrupted session: ${it.message}") }
+    }
+
     /** Stop observing and drop what is buffered. For tests and for a deliberate opt-out. */
     suspend fun stop() {
         collectJob?.cancel()

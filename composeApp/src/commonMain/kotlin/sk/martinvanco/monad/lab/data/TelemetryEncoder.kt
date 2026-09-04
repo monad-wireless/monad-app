@@ -301,6 +301,64 @@ internal object TelemetryEncoder {
         )
     }
 
+    /**
+     * One log record for a session the process did not survive.
+     *
+     * THE GAP THIS CLOSES. On 2026-09-04 a walk ended when FrontBoard killed the app with
+     * `0x8BADF00D`. Server-side, the only trace was a gauge that stopped being written — which is
+     * exactly what a phone that walked out of Wi-Fi range looks like, and what a walk that simply
+     * ended looks like once the five-minute staleness window passes. Three different facts, one
+     * appearance.
+     *
+     * A crash cannot report itself, so this is reported by the launch that finds the wreckage:
+     * `LabSessionRecovery` already computes the reason and the last moment the session was
+     * observably alive, and both travel here. `last_alive_wall_ms` is the checkpoint's own time
+     * rather than the recovery's, so the record dates the death and not the discovery.
+     *
+     * `severityNumber` is ERROR rather than WARN: a degraded stream is a walk worth less, a killed
+     * process is a walk that has to be repeated.
+     */
+    fun sessionInterrupted(
+        wallMs: Long,
+        sessionId: String,
+        participant: String,
+        site: String,
+        appVersion: String,
+        reason: String,
+        lastAliveWallMs: Long,
+        rows: Long,
+    ): OtlpLogsRequest {
+        val record = OtlpLogRecord(
+            timeUnixNano = Otlp.nanosOf(wallMs),
+            severityNumber = Otlp.SEVERITY_ERROR,
+            severityText = "ERROR",
+            body = OtlpAnyValue(
+                "session interrupted: $rows row(s) recovered on a later launch, last alive at " +
+                    "$lastAliveWallMs — $reason"
+            ),
+            attributes = listOf(
+                Otlp.attribute("site", site),
+                Otlp.attribute("participant", participant),
+                Otlp.attribute("session_id", sessionId),
+                // The build that OPENED the session, not the one recovering it. A crashed session is
+                // not a random sample of sessions, so its provenance is the one worth keeping.
+                Otlp.attribute("build_id", appVersion),
+                Otlp.attribute("reason", reason),
+                Otlp.attribute("last_alive_wall_ms", lastAliveWallMs.toString()),
+                Otlp.attribute("rows", rows.toString()),
+            ),
+        )
+
+        return OtlpLogsRequest(
+            resourceLogs = listOf(
+                OtlpResourceLogs(
+                    resource = resource(appVersion),
+                    scopeLogs = listOf(OtlpScopeLogs(OtlpScope(Otlp.SCOPE), listOf(record))),
+                )
+            )
+        )
+    }
+
     private fun gauge(name: String, unit: String, points: List<OtlpNumberDataPoint>): OtlpMetric? =
         if (points.isEmpty()) null else OtlpMetric(name, unit, OtlpGauge(points))
 

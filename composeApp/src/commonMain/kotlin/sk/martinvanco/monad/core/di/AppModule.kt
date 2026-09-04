@@ -145,7 +145,7 @@ val appModule = module {
     single { PreflightService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // Crash / kill / reboot recovery. A session left `open` is invisible to every upload path, so
     // this runs before anything else can read the backlog.
-    single { LabSessionRecovery(get()) }
+    single { LabSessionRecovery(get(), telemetry = get()) }
     single {
         LabInstrument(
             socket = get(),
