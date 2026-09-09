@@ -32,6 +32,13 @@ object KtorClient {
 
             install(HttpTimeout) {
                 requestTimeoutMillis = AppConfig.REQUEST_TIMEOUT
+                // Both stated, because an unset socket timeout is an engine default rather than no
+                // limit — OkHttp reads for ten seconds and then gives up. Leaving it unset made
+                // every per-call `timeout { requestTimeoutMillis = … }` in StorageService a
+                // half-measure: the generous clock governed the call and a hidden 10 s clock
+                // governed the silence inside it. See AppConfig.UPLOAD_SOCKET_TIMEOUT.
+                socketTimeoutMillis = AppConfig.SOCKET_TIMEOUT
+                connectTimeoutMillis = AppConfig.SOCKET_TIMEOUT
             }
 
             install(ContentNegotiation) {

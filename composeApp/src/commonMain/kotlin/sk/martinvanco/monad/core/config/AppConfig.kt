@@ -71,6 +71,34 @@ object AppConfig {
     const val UPLOAD_PART_TIMEOUT = 300_000L
 
     /**
+     * Socket (inter-byte) timeout for ordinary API calls.
+     *
+     * SET EXPLICITLY, because not setting it is not the same as not having one. Ktor's `HttpTimeout`
+     * plugin leaves an unconfigured `socketTimeoutMillis` to the engine, and OkHttp's default read
+     * timeout is TEN SECONDS — so every call in this app has always carried a 10 s inter-byte clock
+     * that no constant in this file mentioned, whatever [REQUEST_TIMEOUT] said.
+     */
+    const val SOCKET_TIMEOUT = 15_000L
+
+    /**
+     * Socket (inter-byte) timeout for artefact uploads.
+     *
+     * MEASURED, 2026-09-07. A Samsung SM-S928B lost two `clock.tsv` uploads — a 158-byte file — to
+     * `Socket timeout has expired` at 9.995 s and 10.012 s, and nginx logged both as 499 with
+     * `upstream_status "-"`. The server had not failed: Tempo trace `51c05182a35a5a03b4f6892abf187306`
+     * shows `POST api_storage_session_upload` completing in 9372 ms with a 200, of which 9347 ms was
+     * one synchronous `PUT` to `fsn1.your-objectstorage.com`. The handset stopped listening 600 ms
+     * before its own upload succeeded, then re-sent it.
+     *
+     * A socket timeout measures SILENCE, not transfer, and the backend is silent for exactly as long
+     * as Hetzner takes to accept the object. So this is sized against that hop rather than against
+     * the body: [UPLOAD_REQUEST_TIMEOUT] already bounds the whole call, and [UPLOAD_PART_TIMEOUT]
+     * bounds one part. Two minutes still fails a phone with no route out inside one dwell, and it no
+     * longer fails a phone whose upload is merely waiting on object storage.
+     */
+    const val UPLOAD_SOCKET_TIMEOUT = 120_000L
+
+    /**
      * Marketing version of this build, e.g. `1.2.0`.
      *
      * Not a constant of this file any more, and deliberately so. It used to say `0.3.0-lab` while

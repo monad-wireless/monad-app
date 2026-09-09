@@ -37,7 +37,13 @@ class StorageService(private val ktorClient: KtorClient) {
             contentType(ContentType.Application.OctetStream)
             // The default client timeout is sized to fail fast on a phone with no route out at all;
             // a real binary artefact needs the opposite (see AppConfig.UPLOAD_REQUEST_TIMEOUT).
-            timeout { requestTimeoutMillis = AppConfig.UPLOAD_REQUEST_TIMEOUT }
+            timeout {
+                requestTimeoutMillis = AppConfig.UPLOAD_REQUEST_TIMEOUT
+                // The socket clock has to be raised with it. The request clock bounds the
+                // whole call; this one bounds SILENCE, and the backend is silent for as long
+                // as its synchronous PUT to object storage takes.
+                socketTimeoutMillis = AppConfig.UPLOAD_SOCKET_TIMEOUT
+            }
             setBody(fileContent)
         }
         return response.body<UploadResponseDto>()
@@ -70,7 +76,13 @@ class StorageService(private val ktorClient: KtorClient) {
             // carry a transfer (see AppConfig.UPLOAD_REQUEST_TIMEOUT). Artefacts that run into the
             // hundreds of megabytes do NOT come through this method — see the multipart family
             // below, and `LabSessionUploader.PART_THRESHOLD_BYTES` for where the split is decided.
-            timeout { requestTimeoutMillis = AppConfig.UPLOAD_REQUEST_TIMEOUT }
+            timeout {
+                requestTimeoutMillis = AppConfig.UPLOAD_REQUEST_TIMEOUT
+                // The socket clock has to be raised with it. The request clock bounds the
+                // whole call; this one bounds SILENCE, and the backend is silent for as long
+                // as its synchronous PUT to object storage takes.
+                socketTimeoutMillis = AppConfig.UPLOAD_SOCKET_TIMEOUT
+            }
             setBody(content)
         }
         return response.body<UploadResponseDto>()
@@ -141,7 +153,10 @@ class StorageService(private val ktorClient: KtorClient) {
         // Per PART, not per artefact. One part is bounded work, so a stalled connection is detected
         // in part time rather than after the whole transfer's budget has elapsed — which is what
         // turns "the upload hung" into "part 7 hung, resend part 7".
-        timeout { requestTimeoutMillis = AppConfig.UPLOAD_PART_TIMEOUT }
+        timeout {
+            requestTimeoutMillis = AppConfig.UPLOAD_PART_TIMEOUT
+            socketTimeoutMillis = AppConfig.UPLOAD_SOCKET_TIMEOUT
+        }
         setBody(content)
     }.body()
 
