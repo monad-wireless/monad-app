@@ -12,6 +12,12 @@ class SettingsRepository(
 
     companion object {
         const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+
+        /** IP-157: the OS notification prompt has been shown once. Android cannot tell otherwise. */
+        const val KEY_NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"
+
+        /** IP-157: `QuestCompletedScreen` has been shown once; the pre-prompt card shows only then. */
+        const val KEY_QUEST_COMPLETED_SEEN = "quest_completed_seen"
     }
 
     suspend fun getSetting(key: String): String? = withContext(Dispatchers.IO) {

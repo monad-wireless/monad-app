@@ -428,7 +428,9 @@ sqldelight {
             //      and the first place this app has ever had to put a binary artefact
             // 13 — InstrumentLogRecord: the instrument's own log persisted per session, so the
             //      sentence that explains a failure survives the process that said it
-            version = 14
+            // 14 — NotificationRecord: the inbox cache (IP-157), so the unread badge and the
+            //      list are answerable on a phone with no route out
+            version = 15
         }
     }
 }

@@ -36,13 +36,6 @@ class QuestsService(private val ktorClient: KtorClient) {
         return response.body<QuestListResponseDto>()
     }
 
-    suspend fun getExpiredQuests(): QuestListResponseDto {
-        val response = ktorClient.client.get("/api/quests") {
-            parameter("status", "expired")
-        }
-        return response.body<QuestListResponseDto>()
-    }
-
     suspend fun getQuestDetail(questId: String): QuestDetailResponseDto {
         val response = ktorClient.client.get("/api/quest/$questId")
         return response.body<QuestDetailResponseDto>()

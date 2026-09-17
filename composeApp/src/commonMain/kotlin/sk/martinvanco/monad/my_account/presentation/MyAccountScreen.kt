@@ -43,7 +43,11 @@ import sk.martinvanco.monad.profile.presentation.ContributionSection
 import sk.martinvanco.monad.profile.presentation.ProfileScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.ui.draw.clip
 import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
+import sk.martinvanco.monad.notifications.presentation.NotificationSettingsScreen
 
 class MyAccountScreen : Screen {
     @Composable
@@ -133,6 +137,39 @@ class MyAccountScreen : Screen {
                         siteUrl = AppConfig.SITE_URL,
                         onRetry = profileModel::load,
                     )
+
+                    // IP-157. The two consent toggles and the OS permission. A row, not a button:
+                    // it is a place to go, and the destructive actions below are the buttons.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White)
+                            .clickable { navigator.push(NotificationSettingsScreen()) }
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notifications,
+                            contentDescription = null,
+                            tint = Color(0xFF5B6ECC)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Notifications",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF0F142F)
+                            )
+                            Text(
+                                text = "Project messages, quest callouts, phone permission",
+                                fontSize = 12.sp,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                        Text("›", fontSize = 22.sp, color = Color(0xFF94A3B8))
+                    }
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),

@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import cafe.adriel.voyager.navigator.Navigator
 import coil3.compose.setSingletonImageLoaderFactory
 import sk.martinvanco.monad.core.image.createImageLoader
 import org.koin.core.context.startKoin
@@ -26,8 +25,13 @@ import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.navigation.NavigationManagerImpl
 import sk.martinvanco.monad.core.util.Logger
 import sk.martinvanco.monad.lab.data.LabTelemetryShipper
+import sk.martinvanco.monad.notifications.data.NotificationInbox
+import sk.martinvanco.monad.notifications.domain.PendingPushRoute
+import sk.martinvanco.monad.notifications.domain.PushRoute
+import sk.martinvanco.monad.notifications.domain.PushTokenRegistrar
+import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 import sk.martinvanco.monad.ui.theme.AppTheme
-import com.mmk.kmpnotifier.notification.NotifierManager
+import cafe.adriel.voyager.navigator.Navigator as VoyagerNavigator
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.crashlytics.crashlytics
 
@@ -54,17 +58,16 @@ fun App() {
         } catch (e: Exception) {
             Logger.e("Firebase Crashlytics error: ${e.message}", throwable = e)
         }
-        Logger.i("Initializing push notification listener...")
-        NotifierManager.addListener(object : NotifierManager.Listener {
-            override fun onNewToken(token: String) {
-                Logger.i("Push notifications ready - FCM Token: $token")
-            }
-
-            override fun onPushNotification(title: String?, body: String?) {
-                Logger.i("Push notification received - Title: $title, Body: $body")
-            }
-        })
-        Logger.i("Push notification listener registered successfully")
+        // IP-157 — the push token's lifecycle and the tap-to-route path live in the registrar; a
+        // push received while the app is open refreshes the inbox so the badge moves. Installed
+        // here because kmpNotifier's listener list is process-wide and this block runs once.
+        try {
+            val inbox = getKoin().get<NotificationInbox>()
+            getKoin().get<PushTokenRegistrar>().install(onPushReceived = inbox::requestRefresh)
+            Logger.i("Push listener installed")
+        } catch (e: Exception) {
+            Logger.e("Push listener failed to install: ${e.message}", throwable = e)
+        }
 
         // Live instrument telemetry. Started here, not in the lab console's screen model, because a
         // session outlives the screen: the participant pockets the phone and the console is gone
@@ -79,16 +82,6 @@ fun App() {
         }
     }
 
-    // Fetch FCM token on startup
-    LaunchedEffect(Unit) {
-        try {
-            val token = NotifierManager.getPushNotifier().getToken()
-            Logger.i("FCM Token fetched: $token")
-        } catch (e: Exception) {
-            Logger.e("Failed to fetch FCM token: ${e.message}", throwable = e)
-        }
-    }
-
     // Setup Coil ImageLoader with platform-specific networking
     setSingletonImageLoaderFactory { context ->
         createImageLoader(context)
@@ -99,7 +92,7 @@ fun App() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            Navigator(SplashScreen()) { navigator ->
+            VoyagerNavigator(SplashScreen()) { navigator ->
                 // Get NavigationManager from Koin and observe navigation commands
                 val navigationManager = remember {
                     getKoin().get<NavigationManager>() as NavigationManagerImpl
@@ -130,18 +123,23 @@ fun App() {
                 // recomposition or on return from background, which would yank a
                 // participant out of a running quest.
                 LaunchedEffect(Unit) {
-                    PendingDeepLink.consume()?.let { link ->
-                        when (link) {
-                            is DeepLink.Device -> navigator.push(
-                                DeviceScreen(slug = link.slug, questId = link.questId),
-                            )
+                    PendingDeepLink.consume()?.let { link -> navigator.open(link) }
+                }
 
-                            // IP-140 — a marker card resolves to a run rather than to a page. The
-                            // participant is standing at the card; the fastest correct thing to
-                            // show them is the countdown.
-                            is DeepLink.Marker -> navigator.push(
-                                MarkerScreen(code = link.code, scannedValue = link.scannedValue),
-                            )
+                // IP-157 — a tapped push. A StateFlow rather than a take-once slot, because a tap
+                // can arrive while the app is already composed (see PendingPushRoute). Cleared after
+                // navigating so a recomposition cannot replay it; the row is marked read when the
+                // payload names it.
+                LaunchedEffect(Unit) {
+                    PendingPushRoute.route.collect { route ->
+                        if (route == null) return@collect
+                        PendingPushRoute.clear()
+                        route.notificationId?.let { id ->
+                            runCatching { getKoin().get<NotificationInbox>().markRead(id) }
+                        }
+                        when (route) {
+                            is PushRoute.Quest -> navigator.push(QuestDetailScreen(route.questId))
+                            is PushRoute.Link -> navigator.open(route.link)
                         }
                     }
                 }
@@ -149,5 +147,20 @@ fun App() {
                 CustomScreenTransition(navigator)
             }
         }
+    }
+}
+
+/**
+ * Where a printed link goes (IP-128, IP-140). One function, because the same two grammars arrive
+ * from a scanned sticker (`PendingDeepLink`) and from a push payload's `deep_link` (IP-157), and
+ * two `when` blocks over the same sealed type would drift.
+ *
+ * A marker card resolves to a run rather than to a page: the participant is standing at the card,
+ * and the fastest correct thing to show them is the countdown.
+ */
+private fun VoyagerNavigator.open(link: DeepLink) {
+    when (link) {
+        is DeepLink.Device -> push(DeviceScreen(slug = link.slug, questId = link.questId))
+        is DeepLink.Marker -> push(MarkerScreen(code = link.code, scannedValue = link.scannedValue))
     }
 }

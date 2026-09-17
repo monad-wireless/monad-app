@@ -435,10 +435,56 @@ that have no runtime of their own:
 `FirebaseMessaging`, resolved by Xcode/SPM); the same sources compile for Kotlin/Native via
 `:composeApp:compileTestKotlinIosSimulatorArm64` and run on the JVM via `:composeApp:testDebugUnitTest`.
 
-`src/commonMain/sqldelight/databases/10.db` is the committed schema snapshot. Without it
+`src/commonMain/sqldelight/databases/*.db` are the committed schema snapshots (the newest is the
+one `generateCommonMainDatabaseSchema` writes for the current `version`). Without it
 `verifySqlDelightMigration` had nothing to compare against and passed unconditionally — which is
 how `sqldelight { version }` was able to drift twice. With it, a `.sq` change that no migration
 performs fails the build by name.
+
+## Notifications (IP-157)
+
+The lab reaches a student two ways, and the second depends on the first.
+
+**Inbox.** `GET /api/me/notifications` is the record; `notifications/data/NotificationRepository`
+mirrors it into `NotificationRecord` (migration 14) so the list opens and the badge counts on a
+phone joined to an experiment AP with no route out. `NotificationInbox` is one object for the
+process because two surfaces read it — `NotificationsScreen` and the bell on `CustomTopBar` — and
+they must agree. Grouping by day (`InboxGrouping`) is pure and takes `today` and the zone as
+parameters, because "which day is this" is a question about a moment and a time zone. A tapped
+`quest_callout` with a `quest_id` opens `QuestDetailScreen`; a `deep_link` in the `/d/` or `/m/`
+grammar goes where the printed sticker would, through the same `DeepLinkParser`.
+
+**Preferences.** Two toggles, owned by the server (`GET`/`PUT /api/me/notification-preferences`)
+because the server is what gates a push; a copy is kept in `SettingsRepository` for display
+offline and written only after the server accepted. `notify_general` is on by default;
+`notify_callouts` is **off** until the participant opts in, with the consent sentence beside the
+switch. Store policy is the reason: App Store Review Guideline 4.5.4 and Google Play's notification
+policy treat a callout as promotional, so it needs an explicit opt-in, an in-app way off, and — on
+Android — its own channel (`quest_callouts` beside `messages`) so it can be silenced in system
+settings too.
+
+**Token lifecycle.** `PushTokenRegistrar` PUTs the FCM token to `/api/me/push-token` with the
+platform and the `HandsetIdentity` UUID after login and register and on every `onNewToken`, and
+DELETEs it on logout and account deletion. `AuthManager` names a `SessionObserver` port for this
+rather than the notifications package; `NotificationsSessionObserver` runs the DELETE *before* the
+user row is cleared, because it needs the bearer token that is about to go, under a 3 s cap so a
+dead network never holds a logout. Nothing in the registrar throws. A build without Firebase has
+no token and the registrar has nothing to send; the inbox works regardless.
+
+**Permission moment.** Never on launch (`askNotificationPermissionOnStart: false` in
+`iOSApp.swift`). The OS prompt comes from `NotificationSettingsScreen` — the "Allow" button or a
+toggle switched on while the OS has not been asked — or from the card after the first
+`QuestCompletedScreen`, which is shown once (`quest_completed_seen`) and only if the OS has not
+been asked. `NotificationPermissionGate` is the one place the question is put: it records that it
+was asked (Android 13+ cannot tell "not asked" from "refused"), shows the dialog, and registers the
+token on a grant. On Android the launcher must be registered before the Activity starts, so
+`MainActivity` builds kmpNotifier's `AndroidPermissionUtil` and hands it to
+`NotificationPermissionBridge`; kmpNotifier's own `getPermissionUtil()` is check-only there.
+
+**Known limitation.** kmpNotifier 1.6.1 posts every push it handles in the foreground on its one
+configured channel (`messages`). A callout received while the app is open therefore lands on
+Messages; in the background the FCM SDK posts the tray entry itself and honours the message's
+`android.notification.channel_id`, which the backend sets to `quest_callouts`.
 
 ## Configuration
 

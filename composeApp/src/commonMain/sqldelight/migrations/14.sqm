@@ -1,0 +1,21 @@
+-- Migration 14: the notification inbox cache (IP-157).
+--
+-- The app had a push token it logged and never sent, and a placeholder screen that said
+-- "Notifications Screen". The inbox is now a real list served by GET /api/me/notifications and
+-- mirrored here, so it opens with rows on a phone joined to an experiment AP with no route out, and
+-- the unread badge on the top bar costs a COUNT rather than a request.
+--
+-- Purely additive. A device upgrading from schema 14 gains one empty table; the first refresh after
+-- login fills it from the server with `after` unset.
+CREATE TABLE IF NOT EXISTS NotificationRecord (
+    id TEXT PRIMARY KEY NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    questId TEXT,
+    deepLink TEXT,
+    sentAtMs INTEGER NOT NULL,
+    readAtMs INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_sent ON NotificationRecord(sentAtMs);

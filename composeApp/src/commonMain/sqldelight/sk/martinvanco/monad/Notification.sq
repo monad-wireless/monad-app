@@ -1,0 +1,37 @@
+-- The inbox cache (IP-157). A mirror of GET /api/me/notifications, so the inbox opens with rows
+-- on a phone that has no route out, and the unread badge is answerable without a request.
+CREATE TABLE IF NOT EXISTS NotificationRecord (
+    id TEXT PRIMARY KEY NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    questId TEXT,
+    deepLink TEXT,
+    sentAtMs INTEGER NOT NULL,
+    readAtMs INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_sent ON NotificationRecord(sentAtMs);
+
+-- Queries
+upsert:
+INSERT OR REPLACE INTO NotificationRecord(id, type, title, body, questId, deepLink, sentAtMs, readAtMs)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAll:
+SELECT * FROM NotificationRecord ORDER BY sentAtMs DESC;
+
+selectById:
+SELECT * FROM NotificationRecord WHERE id = ?;
+
+markRead:
+UPDATE NotificationRecord SET readAtMs = ? WHERE id = ? AND readAtMs IS NULL;
+
+countUnread:
+SELECT COUNT(*) FROM NotificationRecord WHERE readAtMs IS NULL;
+
+newestSentAtMs:
+SELECT MAX(sentAtMs) FROM NotificationRecord;
+
+deleteAll:
+DELETE FROM NotificationRecord;

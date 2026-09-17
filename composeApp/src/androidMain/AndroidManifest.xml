@@ -119,6 +119,14 @@
             </intent-filter>
         </activity>
 
+        <!--
+            IP-157 — the channel the FCM SDK posts a background push on when the message names
+            none. Matches MonadApplication.CHANNEL_MESSAGES; callouts name their own channel.
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="messages" />
+
         <!-- Keeps a lab session alive with the screen off. Holds no measurement logic. -->
         <service
             android:name=".lab.service.LabSessionService"

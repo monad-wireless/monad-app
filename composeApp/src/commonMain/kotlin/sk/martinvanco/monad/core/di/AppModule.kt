@@ -50,11 +50,23 @@ import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
 import sk.martinvanco.monad.lab.presentation.GroundTruthScanScreenModel
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreenModel
 import sk.martinvanco.monad.lab.presentation.SessionStatusScreenModel
+import sk.martinvanco.monad.auth.domain.SessionObserver
 import sk.martinvanco.monad.my_account.presentation.MyAccountScreenModel
+import sk.martinvanco.monad.notifications.data.NotificationInbox
+import sk.martinvanco.monad.notifications.data.NotificationPermissionGate
+import sk.martinvanco.monad.notifications.data.NotificationPreferencesRepository
+import sk.martinvanco.monad.notifications.data.NotificationRepository
+import sk.martinvanco.monad.notifications.data.NotificationsSessionObserver
+import sk.martinvanco.monad.notifications.data.PushCredentialsAdapter
+import sk.martinvanco.monad.notifications.data.api.NotificationsService
+import sk.martinvanco.monad.notifications.domain.NotificationPermission
+import sk.martinvanco.monad.notifications.domain.PushCredentials
+import sk.martinvanco.monad.notifications.domain.PushTokenGateway
+import sk.martinvanco.monad.notifications.domain.PushTokenRegistrar
+import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
+import sk.martinvanco.monad.notifications.presentation.settings.NotificationSettingsScreenModel
 import sk.martinvanco.monad.profile.data.api.ProfileService
 import sk.martinvanco.monad.profile.presentation.ProfileScreenModel
-import sk.martinvanco.monad.news.presentation.NewsScreenModel
-import sk.martinvanco.monad.notifications.presentation.NotificationsScreenModel
 import sk.martinvanco.monad.onboarding.presentation.OnboardingScreenModel
 import sk.martinvanco.monad.quests.data.adapter.LabBundleSourceAdapter
 import sk.martinvanco.monad.quests.data.adapter.LabSessionArchiveAdapter
@@ -68,8 +80,8 @@ import sk.martinvanco.monad.quests.domain.port.LabSessionArchive
 import sk.martinvanco.monad.quests.domain.port.ParticipantDirectory
 import sk.martinvanco.monad.quests.domain.port.QuestCompletionGateway
 import sk.martinvanco.monad.quests.domain.port.QuestStepJournal
-import sk.martinvanco.monad.quests.presentation.QuestsScreenModel
 import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreenModel
+import sk.martinvanco.monad.quests.presentation.quest_completed.QuestCompletedScreenModel
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreenModel
 import sk.martinvanco.monad.storage.data.api.StorageService
 
@@ -85,6 +97,7 @@ val appModule = module {
     single { ProfileService(get()) }
     single { DeviceService(get()) }  // IP-128 — public device read behind a scanned label
     single { StorageService(get()) }
+    single { NotificationsService(get()) }  // IP-157 — inbox, push token, preferences
 
     // Repositories
     single { UserRepository(get()) }
@@ -94,8 +107,21 @@ val appModule = module {
     // that is the one thing that lives exactly as long as the installation does.
     single { HandsetIdentity(get()) }
 
+    // IP-157 — notifications. One inbox for the process, because two surfaces read it (the list
+    // and the badge on the top bar) and they must agree. The push token's lifecycle is tied to the
+    // account through `SessionObserver`, so `AuthManager` names a port and not this package.
+    single { NotificationRepository(get()) }
+    single { NotificationInbox(get(), get(), get()) }
+    single { NotificationPreferencesRepository(get(), get(), get()) }
+    single { NotificationPermission() }
+    single<PushTokenGateway> { get<NotificationsService>() }
+    single<PushCredentials> { PushCredentialsAdapter(get(), get()) }
+    single { PushTokenRegistrar(get(), get()) }
+    single { NotificationPermissionGate(get(), get(), get()) }
+    single<SessionObserver> { NotificationsSessionObserver(get(), get(), get()) }
+
     // Domain
-    single { AuthManager(get(), get()) }
+    single { AuthManager(get(), get(), get()) }
 
     // BLE transport. One scanner for the whole app: two concurrent Android scans contend for the
     // same radio and halve each other's duty cycle.
@@ -189,15 +215,16 @@ val appModule = module {
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
     factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-    factory { QuestsScreenModel() }
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), get(), questId) }
     // IP-128 — device landing. questId is the optional `?q=` from the deep link.
     factory { (slug: String, questId: String?) -> DeviceScreenModel(get(), get(), slug, questId) }
     // IP-140 — resolves a scanned marker card to a runnable quest and starts it.
     factory { (code: String, scanned: String) -> MarkerScreenModel(get(), get(), get(), get(), code, scanned) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), questId) }
-    factory { NewsScreenModel() }
-    factory { NotificationsScreenModel() }
+    // IP-157 — the permission moment: the pre-prompt card after the first completed quest.
+    factory { QuestCompletedScreenModel(get(), get()) }
+    factory { NotificationsScreenModel(get()) }
+    factory { NotificationSettingsScreenModel(get(), get()) }
     factory { MyAccountScreenModel(get(), get()) }
     factory { ProfileScreenModel(get(), get()) }
     factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get(), get()) }

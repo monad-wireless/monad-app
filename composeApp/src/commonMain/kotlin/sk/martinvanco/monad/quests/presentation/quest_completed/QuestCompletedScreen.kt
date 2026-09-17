@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
@@ -35,6 +36,9 @@ data class QuestCompletedScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val uriHandler = LocalUriHandler.current
+        // IP-157 — the permission moment. Owns only the pre-prompt card's visibility.
+        val promptModel = koinScreenModel<QuestCompletedScreenModel>()
+        val promptState by promptModel.state.collectAsState()
 
         // Upload and submission are owned by QuestSessionCoordinator, invoked from
         // ActiveQuestScreenModel.submitQuest(). This screen is presentational: duplicating the
@@ -156,6 +160,12 @@ data class QuestCompletedScreen(
                             color = Color(0xFF6B7280),
                             textAlign = TextAlign.Center
                         )
+                        if (promptState.showNotificationPrompt) {
+                            NotificationPrePrompt(
+                                onAllow = { promptModel.onEvent(QuestCompletedEvent.AllowNotifications) },
+                                onNotNow = { promptModel.onEvent(QuestCompletedEvent.NotNow) },
+                            )
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {
@@ -181,6 +191,47 @@ data class QuestCompletedScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * One sentence before the OS dialog (IP-157). Shown once, here, after the first completed
+     * quest, never on launch: the participant has just done the thing a callout would ask for again,
+     * so the question is one they can answer. "Not now" leaves the ask to the settings screen.
+     */
+    @Composable
+    private fun NotificationPrePrompt(onAllow: () -> Unit, onNotNow: () -> Unit) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFFEEF1FB))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Want to know when the lab needs a measurement?",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF0F142F)
+            )
+            Text(
+                text = "A short notification when a quest is worth walking. Off any time in My account.",
+                fontSize = 13.sp,
+                color = Color(0xFF475569)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onAllow,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Allow", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                TextButton(onClick = onNotNow) {
+                    Text("Not now", color = Color(0xFF475569))
                 }
             }
         }

@@ -17,37 +17,14 @@ import sk.martinvanco.monad.storage.data.dto.MultipartCompleteRequestDto
 import sk.martinvanco.monad.storage.data.dto.MultipartPartDto
 import sk.martinvanco.monad.storage.data.dto.UploadResponseDto
 
+/**
+ * The backend's S3 proxy for lab-session artefacts.
+ *
+ * The general `uploadFile` (`POST /api/storage/upload`) was removed by IP-157: nothing in the app
+ * called it, and every artefact goes through the session-keyed paths below so it lands beside the
+ * `csid` captures it has to be joined to.
+ */
 class StorageService(private val ktorClient: KtorClient) {
-
-    /**
-     * Upload file to S3 via backend (general upload)
-     *
-     * @param token The auth token
-     * @param filename The filename
-     * @param fileContent The file content as ByteArray
-     */
-    suspend fun uploadFile(
-        token: String,
-        filename: String,
-        fileContent: ByteArray
-    ): UploadResponseDto {
-        val response = ktorClient.client.post("/api/storage/upload") {
-            header(HttpHeaders.Authorization, "Bearer $token")
-            header("X-Filename", filename)
-            contentType(ContentType.Application.OctetStream)
-            // The default client timeout is sized to fail fast on a phone with no route out at all;
-            // a real binary artefact needs the opposite (see AppConfig.UPLOAD_REQUEST_TIMEOUT).
-            timeout {
-                requestTimeoutMillis = AppConfig.UPLOAD_REQUEST_TIMEOUT
-                // The socket clock has to be raised with it. The request clock bounds the
-                // whole call; this one bounds SILENCE, and the backend is silent for as long
-                // as its synchronous PUT to object storage takes.
-                socketTimeoutMillis = AppConfig.UPLOAD_SOCKET_TIMEOUT
-            }
-            setBody(fileContent)
-        }
-        return response.body<UploadResponseDto>()
-    }
 
     /**
      * Upload one artefact of a lab session (EXP-P3).

@@ -34,10 +34,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             FirebaseApp.configure()
         }
 
+        // IP-157: never ask for notification permission on launch. App Store Review Guideline
+        // 4.5.4 reads a prompt at start as the wrong moment; the shared code asks from
+        // NotificationSettingsScreen or after the first completed quest, with a sentence first.
         NotifierManager.shared.initialize(
             configuration: NotificationPlatformConfigurationIos(
                 showPushNotification: firebaseAvailable,
-                askNotificationPermissionOnStart: firebaseAvailable,
+                askNotificationPermissionOnStart: false,
                 notificationSoundName: nil
             )
         )

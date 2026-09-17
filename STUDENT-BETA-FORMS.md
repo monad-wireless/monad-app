@@ -1,7 +1,13 @@
 # MonadCount student beta: Google Forms copy
 
+Update, 2026-09-16 (IP-157): the Google Form is retired. Signup is
+https://monad.dubec.dev/join, a page the API renders and receives, stored in
+`beta_signups` and worked from the admin's onboarding desk (`monad.dubec.dev/join`
+is what `web.beta_signup_url` now points at). The copy below is the reference
+text that page was written from, kept for the wording; nothing here is live.
+
 Update, 2026-09-14: Jakub created the beta form and supplied
-https://forms.gle/BUvgNWEurbyhi5WWA. It is configured as `web.beta_signup_url`.
+https://forms.gle/BUvgNWEurbyhi5WWA. It was configured as `web.beta_signup_url`.
 The feedback form is deferred. The proposed questions below remain reference
 copy; the live form's fields could not be checked because the fetch returned 401.
 
