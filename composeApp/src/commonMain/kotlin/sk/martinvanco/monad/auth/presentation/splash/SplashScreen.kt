@@ -35,9 +35,10 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
+import sk.martinvanco.monad.core.deeplink.PreSessionScreen
 import sk.martinvanco.monad.home.presentation.HomeScreen
 
-class SplashScreen : Screen {
+class SplashScreen : Screen, PreSessionScreen {
     @Composable
     override fun Content() {
         val screenModel = koinScreenModel<SplashScreenModel>()

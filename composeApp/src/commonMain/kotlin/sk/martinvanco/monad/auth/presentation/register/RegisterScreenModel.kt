@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.data.api.AuthService
 import sk.martinvanco.monad.auth.domain.AuthManager
+import sk.martinvanco.monad.core.autofill.CredentialSave
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.util.EmailValidator
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
@@ -93,6 +94,8 @@ class RegisterScreenModel(
                     token = response.token
                 )
                 mutableState.value = state.value.copy(isLoading = false)
+                // The account now exists on the server, so the manager may save the new pair.
+                CredentialSave.request()
                 navigationManager.replaceAll(MainContainerScreen())
             } catch (e: Exception) {
                 val errorMessage = parseErrorMessage(e)

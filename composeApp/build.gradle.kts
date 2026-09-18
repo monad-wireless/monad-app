@@ -335,9 +335,14 @@ android {
         // The store identity, and deliberately not `namespace` above. `namespace` names the
         // generated R and BuildConfig classes and tracks the Kotlin source package, which no
         // store ever sees. `applicationId` is what Google Play registers and what a logcat
-        // package filter matches. It moved because `sk.martinvanco.monad` is Martin's
-        // namespace and its Apple App ID is registered to team 3D6D8LQ6F2, and an App ID
-        // cannot be claimed by two teams. Changing this orphans every existing install.
+        // package filter matches. It moved off `sk.martinvanco.monad`, which is Martin's
+        // namespace. Changing it again orphans every existing install.
+        //
+        // NOT the same string as the iOS bundle id, which is `dev.dubec.monadlocal`
+        // (iosApp/Configuration/Config.xcconfig). The two stores are separate registries and
+        // neither constrains the other; they differ because the iOS side had to take a name the
+        // personal signing team could hold. Firebase therefore needs one app per platform, which
+        // it would anyway.
         applicationId = "dev.dubec.monad"
         // 29: WifiNetworkSpecifier + Network.bindSocket are the app-scoped association and
         // socket-pinning primitives the lab instrument is built on, and WifiConnectionServiceV2 is

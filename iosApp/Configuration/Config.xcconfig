@@ -1,27 +1,49 @@
-// Identity.
+// Build settings that are not Xcode's to own.
 //
-// BUNDLE_ID is the simulator build's identifier (the pbxproj appends TEAM_ID to it, which is
-// empty here). DEVICE_BUNDLE_ID below is the device build's, and it is the one that becomes an
-// App ID in the developer portal. Both read dev.dubec.monad because the two previous names are
-// closed: sk.martinvanco.monad is Martin's namespace, and sk.jakubdubec.monad is registered to
-// team 3D6D8LQ6F2. An App ID cannot be claimed by two teams, so a new membership needs a name
-// no other team holds.
-TEAM_ID=
-BUNDLE_ID=dev.dubec.monad
-APP_NAME=Monad Scan
+// The bundle id and the signing team are NOT here, deliberately. They live as literals in the
+// pbxproj because Xcode rewrites them whenever Signing & Capabilities is touched in the UI, so a
+// `$(VARIABLE)` in this file is overwritten within one session and the two then disagree silently.
+// There is one app, one id and one team, so the shortest honest form wins:
+//
+//   dev.dubec.monad                  the app, simulator and device alike
+//   dev.dubec.monad.CheckInWidget    the Live Activity extension, derived by hand
+//   3D6D8LQ6F2                       DEVELOPMENT_TEAM — "Jakub Dubec (Personal Team)"
+//
+// An extension's id must be its host's plus one dot-separated suffix. Change the app's id and the
+// widget's must change with it, or the device build fails to sign while the simulator keeps working.
+//
+// THE TEAM ID IS NOT THE STRING IN THE CERTIFICATE'S NAME. This repo carried that mistake for
+// months, in a comment that told the next reader to copy the wrong value:
+//
+//   subject= CN=Apple Development: Jakub Dubec (GS862349S6), OU=3D6D8LQ6F2, O=Jakub Dubec
+//                                                ^ cert id        ^ TEAM ID
+//
+// The parenthesised GS862349S6 is the certificate's own identifier. The Team ID is the OU. Read it
+// with `security find-certificate -c "Apple Development: Jakub Dubec" -p | openssl x509 -noout
+// -subject`, or from Xcode -> Settings -> Accounts beside the "(Personal Team)" row.
+//
+// `O=Jakub Dubec` also settles a second error this repo repeated: 3D6D8LQ6F2 was described as a
+// PAID lab team distinct from a personal one. It is the personal team. There is only one, and
+// there never was another.
+//
+// WHAT THIS BUILD CANNOT DO, because a free personal team can sign none of it
+// ---------------------------------------------------------------------------
+// An entitlement a team cannot grant is a SIGNING failure, not a runtime one, so the entitlements
+// file is an empty dict and these four are absent rather than requested:
+//
+//   aps-environment       No push, at all. The in-app inbox still works — it polls
+//                         GET /api/me/notifications over HTTP and needs no entitlement. Live
+//                         Activities are unaffected: this app starts and updates its own, which
+//                         needs neither push nor an entitlement.
+//   associated-domains    No Universal Links. Scanning a printed card with the CAMERA app opens
+//                         Safari, which is why monad.dubec.dev/m/<code> must be a real page. The
+//                         in-app scanner is unaffected.
+//   HotspotConfiguration  Cannot join a Wi-Fi network itself. Irrelevant here: the AX210 fleet
+//                         cannot be an access point, so there is none to join.
+//   wifi-info             Cannot read back the SSID, so a session sidecar records an empty one.
+//
+// A free personal team's provisioning profile expires after SEVEN DAYS. The app stops launching on
+// the eighth and needs a rebuild from Xcode.
+APP_NAME = Monad Scan
 OTHER_LDFLAGS = $(inherited) -lsqlite3
-
-// Signing profile — the lab build is the default.
-//
-// The lab build signs with the paid team, because the entitlements the experiment needs
-// (HotspotConfiguration to join the experiment AP, wifi-info to read back which AP it
-// joined) exist only under a paid membership. A free personal team cannot sign either, and
-// signing fails outright rather than degrading, so the choice has to be made at build time.
-//
-// A personal-account build overrides these three in Local.xcconfig, which is gitignored:
-// nobody else's phone, and nobody's CI, inherits a developer's private signing identity.
-SIGNING_TEAM = 3D6D8LQ6F2
-DEVICE_BUNDLE_ID = dev.dubec.monad
 ENTITLEMENTS_FILE = iosApp/iosApp.entitlements
-
-#include? "Local.xcconfig"

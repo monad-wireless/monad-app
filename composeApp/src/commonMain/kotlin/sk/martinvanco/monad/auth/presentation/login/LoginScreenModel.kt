@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.data.api.AuthService
 import sk.martinvanco.monad.auth.domain.AuthManager
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreen
+import sk.martinvanco.monad.core.autofill.CredentialSave
 import sk.martinvanco.monad.core.navigation.NavigationManager
 import sk.martinvanco.monad.core.util.EmailValidator
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
@@ -64,6 +65,10 @@ class LoginScreenModel(
                 val response = authService.login(email, password)
                 authManager.saveUserFromLogin(response.email, response.name, response.token)
                 mutableState.value = state.value.copy(isLoading = false)
+                // Here and not on the button press: the server has now accepted this pair, so a
+                // password manager may offer to save it. Asking earlier would offer to save a
+                // password that was about to be refused.
+                CredentialSave.request()
                 navigationManager.replaceAll(MainContainerScreen())
             } catch (e: Exception) {
                 val errorMessage = parseErrorMessage(e)

@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,12 +45,20 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import sk.martinvanco.monad.core.deeplink.PreSessionScreen
 import sk.martinvanco.monad.core.presentation.components.button_primary.ButtonPrimary
 import sk.martinvanco.monad.core.presentation.components.filled_input.FilledInput
 import sk.martinvanco.monad.core.util.dismissKeyboardOnTap
 import sk.martinvanco.monad.ui.theme.h1
 
-class LoginScreen : Screen {
+/**
+ * Sign in with an email address and a password.
+ *
+ * [PreSessionScreen] because a sticker scanned by somebody who is not signed in must wait here
+ * rather than be routed onto this form and lost. The link is routed by `App()` once this screen
+ * is gone (IP-128, fixed 2026-09-18).
+ */
+class LoginScreen : Screen, PreSessionScreen {
     @Composable
     override fun Content() {
         val screenModel = koinScreenModel<LoginScreenModel>()
@@ -96,7 +105,14 @@ class LoginScreen : Screen {
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next
-                    )
+                    ),
+                    // Username, not EmailAddress, although the value IS an email address. This is
+                    // the login identifier, and a password manager stores a credential as a
+                    // username/password PAIR: hinted as EmailAddress the field attracts a
+                    // standalone address fill and the pair never forms. Compose Multiplatform
+                    // 1.8.2 carries no `ContentType.plus` in common code, so one hint per field is
+                    // all there is — and this is the one that has to be right.
+                    contentType = ContentType.Username
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -116,7 +132,8 @@ class LoginScreen : Screen {
                             keyboardController?.hide()
                             screenModel.onEvent(LoginEvent.LoginButtonClick)
                         }
-                    )
+                    ),
+                    contentType = ContentType.Password
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))

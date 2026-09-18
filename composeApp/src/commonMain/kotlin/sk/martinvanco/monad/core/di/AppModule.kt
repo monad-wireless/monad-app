@@ -125,7 +125,7 @@ val appModule = module {
     single { NotificationPreferencesRepository(get(), get(), get()) }
     single { NotificationPermission() }
     single<PushTokenGateway> { get<NotificationsService>() }
-    single<PushCredentials> { PushCredentialsAdapter(get(), get()) }
+    single<PushCredentials> { PushCredentialsAdapter(get(), get(), get()) }
     single { PushTokenRegistrar(get(), get()) }
     single { NotificationPermissionGate(get(), get(), get()) }
     single<SessionObserver> { NotificationsSessionObserver(get(), get(), get()) }

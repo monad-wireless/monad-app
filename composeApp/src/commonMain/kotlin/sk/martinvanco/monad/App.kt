@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalAutofillManager
 import coil3.compose.setSingletonImageLoaderFactory
 import sk.martinvanco.monad.core.image.createImageLoader
 import org.koin.core.context.startKoin
@@ -15,9 +16,11 @@ import org.koin.mp.KoinPlatform.getKoin
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreen
 import sk.martinvanco.monad.core.di.appModule
 import sk.martinvanco.monad.core.di.platformModule
+import sk.martinvanco.monad.core.autofill.CredentialSave
 import sk.martinvanco.monad.core.navigation.CustomScreenTransition
 import sk.martinvanco.monad.core.deeplink.DeepLink
 import sk.martinvanco.monad.core.deeplink.PendingDeepLink
+import sk.martinvanco.monad.core.deeplink.PreSessionScreen
 import sk.martinvanco.monad.core.navigation.NavigationCommand
 import sk.martinvanco.monad.device.presentation.DeviceScreen
 import sk.martinvanco.monad.marker.presentation.MarkerScreen
@@ -119,11 +122,44 @@ fun App() {
                 // replay = 0 and its only collector is the effect above, so the
                 // command would be dropped silently on a cold start.
                 //
-                // Keyed on Unit and take-once: a link must not re-fire on
-                // recomposition or on return from background, which would yank a
-                // participant out of a running quest.
-                LaunchedEffect(Unit) {
-                    PendingDeepLink.consume()?.let { link -> navigator.open(link) }
+                // GATED ON THE TOP SCREEN (2026-09-18), not on first composition.
+                // It used to be `LaunchedEffect(Unit) { consume()?.let(::open) }`,
+                // which routed the link immediately — and that lost every sticker
+                // scanned by anybody not already signed in. The splash decides the
+                // start screen asynchronously and then calls
+                // `navigationManager.replace(LoginScreen())`; `replace` swaps the
+                // TOP of the stack, which by then was the device screen this
+                // effect had just pushed. The link was destroyed by a navigation
+                // already in flight, and the participant reached the login form
+                // with nothing to say a link had ever arrived.
+                //
+                // So the link now waits for a screen that can keep it (see
+                // PreSessionScreen) and is routed when one arrives — after a
+                // sign-in, after onboarding, after registration. Keyed on the
+                // gate rather than on the screen instance, so an ordinary push
+                // does not restart the collector; PendingDeepLink is a StateFlow,
+                // so a link parked while the app is warm reaches it too.
+                // consume() stays take-once, so a recomposition cannot re-fire a
+                // link and yank a participant out of a running quest.
+                val routableSurface = navigator.lastItem !is PreSessionScreen
+                LaunchedEffect(routableSurface) {
+                    if (!routableSurface) return@LaunchedEffect
+                    PendingDeepLink.parked.collect { pending ->
+                        if (pending == null) return@collect
+                        PendingDeepLink.consume()?.let { link -> navigator.open(link) }
+                    }
+                }
+
+                // The autofill session, closed so a password manager may offer to save what was
+                // just accepted. Here rather than on the login screen because that screen is
+                // destroyed by `replaceAll` in the same breath as the success it would react to —
+                // see CredentialSave. Null on iOS, where the system needs no commit.
+                val autofillManager = LocalAutofillManager.current
+                LaunchedEffect(autofillManager) {
+                    CredentialSave.requested.collect { requested ->
+                        if (!requested) return@collect
+                        if (CredentialSave.consume()) autofillManager?.commit()
+                    }
                 }
 
                 // IP-157 — a tapped push. A StateFlow rather than a take-once slot, because a tap

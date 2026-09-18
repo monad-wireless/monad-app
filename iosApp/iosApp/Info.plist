@@ -57,9 +57,6 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
-		<!-- Keeps CBPeripheralManager alive across a brief app switch. It does NOT make the
-		     broadcast readable from the background: iOS moves the service UUID into its overflow
-		     area there, which the fleet's raw scanner cannot see — see IdentityBroadcaster.ios.kt. -->
 		<string>bluetooth-peripheral</string>
 		<string>remote-notification</string>
 	</array>

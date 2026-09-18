@@ -28,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.SpanStyle
@@ -52,12 +53,23 @@ import monad.composeapp.generated.resources.monad_logo_dark
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sk.martinvanco.monad.core.config.AppConfig
+import sk.martinvanco.monad.core.deeplink.PreSessionScreen
 import sk.martinvanco.monad.core.presentation.components.button_primary.ButtonPrimary
 import sk.martinvanco.monad.core.presentation.components.filled_input.FilledInput
 import sk.martinvanco.monad.core.util.dismissKeyboardOnTap
 import sk.martinvanco.monad.ui.theme.h1
 
-class RegisterScreen : Screen {
+/**
+ * Create an account.
+ *
+ * The autofill hints are the `New*` family throughout, which is what lets a password manager
+ * offer to GENERATE a password here instead of suggesting the one already saved. It also tells
+ * the manager to save a new entry rather than update an existing one.
+ *
+ * [PreSessionScreen] for the same reason as the login form: a sticker scanned by somebody part
+ * way through signing up waits until they are through.
+ */
+class RegisterScreen : Screen, PreSessionScreen {
     @Composable
     override fun Content() {
         val screenModel = koinScreenModel<RegisterScreenModel>()
@@ -104,7 +116,8 @@ class RegisterScreen : Screen {
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next
-                    )
+                    ),
+                    contentType = ContentType.PersonFullName
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -117,7 +130,11 @@ class RegisterScreen : Screen {
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next
-                    )
+                    ),
+                    // NewUsername, matching ContentType.Username on the login form: the two forms
+                    // must agree on which field IS the credential, or the manager saves a pair
+                    // here that it will not offer there.
+                    contentType = ContentType.NewUsername
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -131,7 +148,8 @@ class RegisterScreen : Screen {
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Next
-                    )
+                    ),
+                    contentType = ContentType.NewPassword
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -151,7 +169,10 @@ class RegisterScreen : Screen {
                             keyboardController?.hide()
                             screenModel.onEvent(RegisterEvent.CreateAccountButtonClick)
                         }
-                    )
+                    ),
+                    // Also NewPassword. A generated password must land in BOTH boxes, and a
+                    // confirmation field left unhinted is the usual reason it lands in one.
+                    contentType = ContentType.NewPassword
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

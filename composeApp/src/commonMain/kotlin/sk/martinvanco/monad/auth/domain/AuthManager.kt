@@ -1,5 +1,9 @@
 package sk.martinvanco.monad.auth.domain
 
+import io.github.aakira.napier.Napier
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import sk.martinvanco.monad.User
 import sk.martinvanco.monad.auth.data.api.AuthService
 import sk.martinvanco.monad.auth.data.repository.UserRepository
@@ -68,8 +72,37 @@ class AuthManager(
         sessionObserver.onSignedIn()
     }
 
+    /**
+     * Drop the account on this handset.
+     *
+     * The observer runs first and the row goes second, and that order is deliberate: the push
+     * token can only be deleted on the server while the bearer token still exists. What is NEW is
+     * that the observer is **bounded**, and the local deletion happens whether or not it finished.
+     *
+     * The observer reaches the network and a push SDK. On 2026-09-18 that path stopped returning
+     * at all — a Firebase token read suspended in a non-cancellable `suspendCoroutine` on a build
+     * with no `GoogleService-Info.plist` — and because the deletion waited behind it, `clearUser`
+     * never returned, the splash coroutine that calls it never returned, and the app sat on its
+     * launch spinner for ever. [PushCredentialsAdapter] fixes that particular read; this bound is
+     * the structural half, so the next slow step in sign-out costs a few seconds rather than the
+     * app.
+     *
+     * `async` plus `await` rather than a timeout wrapped straight around the call, because
+     * `await()` is cancellable whatever the work behind it is doing. The deletion is NOT bounded
+     * and must not be: a local row that survives a sign-out would be handed to the next account.
+     */
     suspend fun clearUser() {
-        sessionObserver.onSigningOut()
+        coroutineScope {
+            val cleanup = async { runCatching { sessionObserver.onSigningOut() } }
+            if (withTimeoutOrNull(SIGN_OUT_CLEANUP_CAP_MS) { cleanup.await() } == null) {
+                Napier.w("[auth] sign-out cleanup unfinished after $SIGN_OUT_CLEANUP_CAP_MS ms; dropping the account anyway")
+                // Cancel, or the cap buys nothing: `coroutineScope` does not return until every
+                // child has finished, so an abandoned-but-running cleanup would hold this function
+                // open for exactly as long as the timeout was supposed to prevent. Measured: the
+                // timeout fired at 3.0 s and `clearUser` still returned at 5.0 s.
+                cleanup.cancel()
+            }
+        }
         userRepository.deleteAllUsers()
         operatorAccess.clear()
     }
@@ -88,5 +121,14 @@ class AuthManager(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private companion object {
+        /**
+         * Three seconds for the sign-out observer. It matches the cap the observer already applies
+         * to its own push-token unregister, so this is the outer bound that still works when an
+         * inner one cannot cancel what it is waiting on.
+         */
+        const val SIGN_OUT_CLEANUP_CAP_MS = 3_000L
     }
 }

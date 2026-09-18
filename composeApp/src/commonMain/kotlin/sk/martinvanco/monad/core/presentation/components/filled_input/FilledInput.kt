@@ -12,8 +12,11 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -32,6 +35,7 @@ fun FilledInput(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     showKeyboardDismissAction: Boolean = false,
+    contentType: ContentType? = null,
 ) {
     val isError = errorText.isNotEmpty()
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -58,6 +62,26 @@ fun FilledInput(
     // Use label as placeholder if no placeholder is provided
     val finalPlaceholder = placeholder.ifEmpty { label }
 
+    // What a password manager is allowed to put here.
+    //
+    // A field with no `contentType` is not invisible to autofill — the provider falls back to
+    // guessing from whatever it can see. That guess is unreliable in Compose: `label = null`
+    // above removes the animated label, so the only text near the field is a placeholder that
+    // disappears the moment somebody types. Declaring the type is what turns a guess into a
+    // contract, and it is the one thing that makes the save prompt offer the right pair.
+    //
+    // Android reads this as an autofill hint (`AUTOFILL_HINT_USERNAME` and friends). iOS ignores
+    // it in Compose Multiplatform 1.8.2 — `ContentType.skiko.kt` is a stub carrying JetBrains'
+    // own `TODO CMP-7154 Adopt Autofill semantic properties` — and derives `UITextContentType`
+    // from `keyboardType` instead, which is why the login fields also keep KeyboardType.Email
+    // and KeyboardType.Password. Setting both is not belt and braces: it is one declaration per
+    // platform, and dropping either loses autofill on that platform alone.
+    val autofillModifier = if (contentType == null) {
+        Modifier
+    } else {
+        Modifier.semantics { this.contentType = contentType }
+    }
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -65,7 +89,7 @@ fun FilledInput(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().then(autofillModifier),
             enabled = enabled,
             label = null, // Remove animated label
             placeholder = if (finalPlaceholder.isNotEmpty()) {

@@ -72,8 +72,9 @@ import dev.icerock.moko.permissions.compose.BindEffect
 import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
 import kotlinx.coroutines.withTimeoutOrNull
 import sk.martinvanco.monad.core.config.AppConfig
+import sk.martinvanco.monad.core.deeplink.PreSessionScreen
 
-class OnboardingScreen : Screen {
+class OnboardingScreen : Screen, PreSessionScreen {
 
     @Composable
     override fun Content() {

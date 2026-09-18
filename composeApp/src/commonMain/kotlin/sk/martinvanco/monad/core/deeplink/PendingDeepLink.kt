@@ -1,6 +1,9 @@
 package sk.martinvanco.monad.core.deeplink
 
-import kotlin.concurrent.Volatile
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 
 /**
  * Parks a deep link between the platform delivering it and the UI being ready
@@ -24,17 +27,34 @@ import kotlin.concurrent.Volatile
  * that is ready to route. [consume] is deliberately take-once: a link that
  * navigated must not fire again on the next recomposition, config change, or
  * return from background, which would yank a participant out of a running quest.
+ *
+ * WHY THE HOLDER IS OBSERVABLE (2026-09-18). It used to be a `@Volatile` slot
+ * that `App()` read exactly once, on first composition. That lost a sticker
+ * scanned by anybody who was not already signed in, and it lost it silently:
+ * the drain pushed the device screen at once, then the splash's *asynchronous*
+ * `navigationManager.replace(LoginScreen())` landed a moment later and replaced
+ * the top of the stack — which by then was the device screen, not the splash.
+ * The participant reached the login form with no sign that a link had ever
+ * arrived, and signing in took them to the home screen.
+ *
+ * A [StateFlow] fixes the shape rather than the symptom, and is the mechanism
+ * [sk.martinvanco.monad.notifications.domain.PendingPushRoute] already uses for
+ * the same reason. The link now waits until a screen that is allowed to receive
+ * it is on top (see [PreSessionScreen]), so it survives a sign-in, an
+ * onboarding run, and a registration, and a link parked while the app is warm
+ * still reaches a live collector.
  */
 object PendingDeepLink {
 
+    private val _parked = MutableStateFlow<DeepLink?>(null)
+
     /**
-     * `@Volatile` rather than an atomic reference because the project has no
-     * atomicfu dependency and this does not warrant adding one: both the writer
-     * (platform entry point) and the reader (composition) run on the main thread,
-     * so all this needs to guarantee is visibility, not a compare-and-set.
+     * The link waiting to be routed, or null.
+     *
+     * Read this to *decide when* to route. Take it with [consume], never by
+     * reading `parked.value` and navigating: only [consume] is take-once.
      */
-    @Volatile
-    private var parked: DeepLink? = null
+    val parked: StateFlow<DeepLink?> = _parked.asStateFlow()
 
     /**
      * Park a link. Called from the platform entry point, possibly before Koin
@@ -42,24 +62,24 @@ object PendingDeepLink {
      * two stickers before the UI catches up, the second is the one they meant.
      */
     fun park(link: DeepLink?) {
-        if (link != null) parked = link
+        if (link != null) _parked.value = link
     }
 
     /** Convenience: parse then park. Non-matching URLs are ignored. */
     fun parkUrl(url: String?) = park(DeepLinkParser.parse(url))
 
-    /** Take the parked link, if any, clearing it. Safe to call on every frame. */
-    fun consume(): DeepLink? {
-        val link = parked
-        parked = null
-        return link
-    }
+    /**
+     * Take the parked link, if any, clearing it. Safe to call on every frame.
+     *
+     * Atomic, so two collectors cannot both route the same sticker.
+     */
+    fun consume(): DeepLink? = _parked.getAndUpdate { null }
 
     /** Whether something is waiting. Read-only; does not clear. */
-    fun isPending(): Boolean = parked != null
+    fun isPending(): Boolean = _parked.value != null
 
     /** Test seam — no production caller should need this. */
     fun clear() {
-        parked = null
+        _parked.value = null
     }
 }
