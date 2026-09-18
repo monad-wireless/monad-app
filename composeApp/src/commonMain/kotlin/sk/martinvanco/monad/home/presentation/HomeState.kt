@@ -2,7 +2,7 @@ package sk.martinvanco.monad.home.presentation
 
 import sk.martinvanco.monad.ble.domain.BleAdvertisement
 import sk.martinvanco.monad.home.presentation.model.QuestCardDt
-import sk.martinvanco.monad.lab.domain.ZoneState
+import sk.martinvanco.monad.lab.domain.CheckInState
 import sk.martinvanco.monad.lab.domain.health.InstrumentHealth
 import sk.martinvanco.monad.lab.domain.health.StreamState
 
@@ -23,13 +23,24 @@ data class HomeState(
     val userName: String? = null,
     /** Live per-stream liveness, so the first screen can say more than "running". */
     val health: InstrumentHealth = InstrumentHealth.IDLE,
-    /** Which zone this participant scanned into, by their own scans. */
-    val zone: ZoneState = ZoneState(),
     /** Sessions rescued from a crash or reboot on this launch. */
     val recoveredSessions: Int = 0,
+    /**
+     * Whether this account may see the operator half of the app.
+     *
+     * The home screen used to show every student a console badge, an instrument card and a beacon
+     * counter — three surfaces about an instrument a participant is not holding and cannot act on.
+     * They are now behind this flag. It is a cache of a server fact and never the authorization;
+     * see `OperatorAccess`.
+     */
+    val isOperator: Boolean = false,
+    /** The running check-in, if any. Drives the card a participant actually uses. */
+    val checkIn: CheckInState = CheckInState.Idle,
+    /** Ticks once a second so the check-in card's elapsed time moves. Display only. */
+    val nowMillis: Long = 0,
 ) {
     /**
-     * The one sentence the home screen owes a participant who just unlocked their phone.
+     * The one sentence the home screen owes an OPERATOR who just unlocked their phone.
      *
      * "Recording" on its own would be a lie the moment a stream quietly stops, which is the failure
      * this whole surface exists to catch — so a dead stream changes the headline, not a footnote.
@@ -49,6 +60,9 @@ data class HomeState(
     /** Age of the freshest event across every stream, in milliseconds, or null if nothing yet. */
     val lastEventAgeMillis: Long?
         get() = health.streams.filter { it.everProduced }.minOfOrNull { it.silenceMillis }
+
+    /** The running check-in, or null. */
+    val activeCheckIn: CheckInState.Active? get() = checkIn as? CheckInState.Active
 
     /**
      * The quests a student is meant to walk.

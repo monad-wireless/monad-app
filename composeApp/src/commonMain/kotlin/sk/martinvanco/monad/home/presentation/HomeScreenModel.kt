@@ -13,13 +13,13 @@ import sk.martinvanco.monad.ble.domain.BleScanner
 import sk.martinvanco.monad.core.domain.bluetooth.BluetoothStateChecker
 import sk.martinvanco.monad.core.domain.toast.ToastManager
 import sk.martinvanco.monad.auth.data.repository.UserRepository
+import sk.martinvanco.monad.auth.domain.OperatorAccess
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.home.presentation.model.QuestCardDt
 import io.github.aakira.napier.Napier
-import sk.martinvanco.monad.lab.data.GroundTruthRepository
 import sk.martinvanco.monad.lab.data.LabSessionRecovery
 import sk.martinvanco.monad.lab.domain.LabInstrument
-import sk.martinvanco.monad.lab.domain.ZoneMembership
+import sk.martinvanco.monad.lab.domain.CheckInService
 import sk.martinvanco.monad.quests.domain.QuestSessionCoordinator
 
 class HomeScreenModel(
@@ -31,7 +31,8 @@ class HomeScreenModel(
     private val sessionCoordinator: QuestSessionCoordinator,
     private val userRepository: UserRepository,
     private val recovery: LabSessionRecovery,
-    private val groundTruth: GroundTruthRepository,
+    private val operatorAccess: OperatorAccess,
+    private val checkIn: CheckInService,
 ) : StateScreenModel<HomeState>(HomeState()) {
 
     private var scanJob: Job? = null
@@ -42,8 +43,22 @@ class HomeScreenModel(
         recoverInterruptedSessions()
         loadQuests()
         observeInstrument()
-        observeZone()
+        observeCheckIn()
         loadUserName()
+        observeOperatorAccess()
+    }
+
+    /**
+     * Which half of the app this account may see.
+     *
+     * Observed rather than read once, because `AuthManager.validateToken` refreshes it from
+     * `/api/auth/me` on the same launch this screen is being built on, and a board that decided at
+     * construction time would keep an operator's console hidden until the next cold start.
+     */
+    private fun observeOperatorAccess() {
+        operatorAccess.isOperator
+            .onEach { mutableState.value = mutableState.value.copy(isOperator = it) }
+            .launchIn(screenModelScope)
     }
 
     private fun loadUserName() {
@@ -106,16 +121,22 @@ class HomeScreenModel(
         }
     }
 
-    /** Where this participant is, by their own check-in scans. */
-    private fun observeZone() {
-        screenModelScope.launch {
-            val user = userRepository.getCurrentUser()
-            val token = user?.backendId ?: user?.id?.toString().orEmpty()
-            val session = groundTruth.lastScannedSession(token) ?: return@launch
-            mutableState.value = mutableState.value.copy(
-                zone = ZoneMembership.resolve(groundTruth.eventsForParticipant(session, token))
-            )
-        }
+    /**
+     * The running check-in, and the clock that redraws it.
+     *
+     * Read from [CheckInService] rather than recomputed from the scan history. The service is the
+     * one thing that knows a check-in is OPEN — the history says where somebody scanned, not
+     * whether the visit is still being counted — and it is the same object the OS indicator and
+     * the ceiling are driven from, so the card, the lock screen and the auto-close cannot disagree.
+     */
+    private fun observeCheckIn() {
+        checkIn.state
+            .onEach { mutableState.value = mutableState.value.copy(checkIn = it) }
+            .launchIn(screenModelScope)
+
+        checkIn.now
+            .onEach { mutableState.value = mutableState.value.copy(nowMillis = it) }
+            .launchIn(screenModelScope)
     }
 
     fun onEvent(event: HomeEvent) {
@@ -138,7 +159,11 @@ class HomeScreenModel(
                 questsError = null
             )
             try {
-                val response = questsService.getActiveQuests()
+                // With the bearer token, so an operator's own takes are in the listing at all.
+                // See QuestsService.getActiveQuests: the route is public and the audience filter
+                // reads the authenticated user, so an anonymous call silently loses them.
+                val token = runCatching { userRepository.getCurrentUser()?.token }.getOrNull()
+                val response = questsService.getActiveQuests(token)
                 val quests = response.quests.map { QuestCardDt.fromDto(it) }
                 mutableState.value = mutableState.value.copy(
                     quests = quests,

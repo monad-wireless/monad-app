@@ -5,8 +5,8 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,9 +62,10 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import sk.martinvanco.monad.home.presentation.model.QuestCardDt
 import sk.martinvanco.monad.lab.domain.SessionReport
-import sk.martinvanco.monad.lab.presentation.GroundTruthScanScreen
+import sk.martinvanco.monad.lab.presentation.CheckInScreen
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreen
 import sk.martinvanco.monad.lab.presentation.SessionStatusScreen
+import sk.martinvanco.monad.lab.presentation.formatElapsed
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 import sk.martinvanco.monad.scan.presentation.ScanShortcutScreen
 import sk.martinvanco.monad.ui.theme.h2
@@ -72,16 +73,28 @@ import sk.martinvanco.monad.ui.theme.h2
 /**
  * The board a student opens the app on.
  *
- * Two things about it are deliberate and were not before.
+ * ## What it used to be, and why that was confusing
  *
- * **A quest's figures sit under its name, not in a column at the foot of the card.** Steps,
- * minutes and points are how somebody decides whether to walk it, and they were separated from the
- * thing being decided about by a card's worth of empty space. Together they read as one offer.
+ * Five blocks competed above the quest list, three of them about an instrument a participant is not
+ * holding. The greeting carried a "console" badge, a check-in QR icon and three figures; below it a
+ * "Scan a code" card offered the camera; below that a status card said "Not recording · You are not
+ * checked in" — two unrelated facts in one sentence — with its own Check in button, which was the
+ * third route to a camera on one screen. Two of the three figures ("quests open", "points on offer")
+ * were then repeated verbatim in the Quests header eighty pixels lower.
  *
- * **Operator takes are listed apart from student quests** (IP-145). The backend withholds them
- * from everybody but a superadmin, so this split shows up only on the operator's own phone — which
- * is where the mixing happened. They are a different kind of thing, not a harder version of the
- * same thing, and a list that interleaves them invites the operator to walk the wrong one.
+ * ## What it is now: one card per question
+ *
+ * | Question | Block |
+ * |---|---|
+ * | Am I being counted, and for how long? | the check-in card |
+ * | I am standing next to a code | the scan card |
+ * | What can I do here? | the quest board |
+ * | Is the instrument healthy? | the instrument card — **operator only** |
+ *
+ * The three operator surfaces — the console badge, the instrument card and the operator takes — are
+ * behind [HomeState.isOperator]. A student's home screen now contains nothing they cannot act on.
+ * The duplicate figures were removed from the Quests header rather than from the greeting, because
+ * the greeting is where somebody looks first.
  */
 class HomeScreen : Screen {
 
@@ -98,33 +111,109 @@ class HomeScreen : Screen {
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            GreetingsMessage(
+            Greeting(
                 state = state,
                 onOpenLabConsole = { navigator.push(LabConsoleScreen()) },
-                onOpenCheckIn = { navigator.push(GroundTruthScanScreen()) },
             )
 
-            // The shortcut. Above the quest list on purpose: the commonest thing a
-            // participant does is walk past a code, and the slowest route to acting on
-            // it was open app, find quest, read quest, press start, press scan. This is
-            // one tap and then the camera. `Marker Placement Record.md` ranked it first
-            // of the app changes worth making.
-            ScanShortcutCard(onClick = { navigator.push(ScanShortcutScreen()) })
-
-            // The participant's question, answered above the fold. A session runs for hours with
-            // the app backgrounded; the whole interaction is somebody unlocking their phone and
-            // needing "yes · ZONE-B · 4 s ago" without interpreting anything.
-            SessionStatusCard(
+            // The participant's own question, above everything else: am I being counted right now?
+            // It is also the only thing in the app that records a PERSON rather than a phone, so it
+            // outranks the quest board.
+            CheckInCard(
                 state = state,
-                onOpenStatus = { navigator.push(SessionStatusScreen()) },
-                onOpenCheckIn = { navigator.push(GroundTruthScanScreen()) },
+                onOpenCheckIn = { navigator.push(CheckInScreen()) },
             )
+
+            // One tap to the camera for a QUEST. Distinct from the card above: that one counts a
+            // visit, this one starts a run. They were previously two buttons that both said "scan"
+            // and did different things without saying so.
+            ScanShortcutCard(onClick = { navigator.push(ScanShortcutScreen()) })
 
             QuestBoard(
                 state = state,
                 onRefresh = { screenModel.onEvent(HomeEvent.LoadQuests) },
                 onOpenQuest = { navigator.push(QuestDetailScreen(it)) },
             )
+
+            // Operator only. Per-stream liveness is unreadable and unactionable for a participant,
+            // and for months it told every student "Not recording" about a session they were never
+            // going to run.
+            if (state.isOperator) {
+                InstrumentCard(
+                    state = state,
+                    onOpenStatus = { navigator.push(SessionStatusScreen()) },
+                )
+            }
+        }
+    }
+
+    /**
+     * Checked in: where, how long, and the way out. Not checked in: what to do about it.
+     *
+     * The elapsed time is the whole point. It is the one number that tells a participant the phone
+     * is still counting them, it is what the lock-screen indicator shows, and it is what makes
+     * "check out when you leave" a thing somebody remembers to do.
+     */
+    @Composable
+    private fun CheckInCard(state: HomeState, onOpenCheckIn: () -> Unit) {
+        val active = state.activeCheckIn
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (active != null) Color(0xFFDCFCE7) else Color(0xFFF1F5F9))
+                .clickable(onClick = onOpenCheckIn)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (active != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    LiveDot(running = true, nominal = true)
+                    Text(
+                        "Checked in at ${active.place.display}",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Ink,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    formatElapsed(active.elapsedMillis(state.nowMillis)),
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF166534),
+                )
+                Text(
+                    "Tap to check out when you leave.",
+                    fontSize = 12.sp,
+                    color = Color(0xFF334155),
+                )
+            } else {
+                Text(
+                    "Not checked in",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Ink,
+                )
+                Text(
+                    "Scan any card where you are sitting and the phone counts how long you stay. " +
+                        "This is the one thing here that counts people rather than phones.",
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = Color(0xFF334155),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Check in →",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Accent,
+                )
+            }
         }
     }
 
@@ -143,23 +232,15 @@ class HomeScreen : Screen {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        "Quests",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.8).sp,
-                        color = Ink
-                    )
-                    if (state.participantQuests.isNotEmpty()) {
-                        Text(
-                            text = "${state.participantQuests.size} open · " +
-                                "${formatPoints(state.pointsOnOffer)} points on offer",
-                            fontSize = 12.sp,
-                            color = Muted
-                        )
-                    }
-                }
+                // The count and the points used to be repeated here, verbatim, from the greeting
+                // eighty pixels above. One statement of a number is enough.
+                Text(
+                    "Quests",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.8).sp,
+                    color = Ink
+                )
                 if (!state.isLoadingQuests) {
                     IconButton(onClick = onRefresh) {
                         Icon(
@@ -216,7 +297,7 @@ class HomeScreen : Screen {
                             onClick = { onOpenQuest(quest.id) },
                         )
                     }
-                    if (state.operatorQuests.isNotEmpty()) {
+                    if (state.isOperator && state.operatorQuests.isNotEmpty()) {
                         OperatorTakes(
                             quests = state.operatorQuests,
                             onOpenQuest = onOpenQuest,
@@ -326,12 +407,11 @@ class HomeScreen : Screen {
     }
 
     /**
-     * One tap to the camera.
+     * One tap to the camera, for a quest.
      *
-     * Deliberately the largest thing on the screen after the greeting. Every live quest
-     * begins with a scan, and a participant holding a phone next to a code should not
-     * have to choose a quest first — [ScanShortcutScreen] works out which quest accepts
-     * the code and starts it with the scan already counted.
+     * [ScanShortcutScreen] works out which quest accepts the code and starts it with the scan
+     * already counted. Distinct from the check-in card above, and the copy now says which is which:
+     * two buttons that both said "scan a code" were most of why this screen was hard to read.
      */
     @Composable
     private fun ScanShortcutCard(onClick: () -> Unit) {
@@ -351,14 +431,14 @@ class HomeScreen : Screen {
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Scan a code",
+                        text = "Start a quest by scanning",
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                     )
                     Text(
-                        text = "Next to a marker or a grey box? Start here — thirty seconds is a " +
-                            "whole contribution.",
+                        text = "Point at a card or a grey box and the right quest starts itself. " +
+                            "The shortest takes thirty seconds.",
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                         color = Color(0xFFDBE1FA),
@@ -375,18 +455,14 @@ class HomeScreen : Screen {
     }
 
     /**
-     * "Am I recording? Which zone? How fresh?" — one card, three lines, no jargon.
+     * The instrument, for an operator. "Is it recording, and is every stream alive?"
      *
      * Colour carries the state so it is readable at arm's length, and the headline changes when a
      * stream dies rather than only when the session stops: an instrument that says "recording"
      * while a stream is dead is the exact failure this pass exists to make impossible.
      */
     @Composable
-    private fun SessionStatusCard(
-        state: HomeState,
-        onOpenStatus: () -> Unit,
-        onOpenCheckIn: () -> Unit,
-    ) {
+    private fun InstrumentCard(state: HomeState, onOpenStatus: () -> Unit) {
         val background = when {
             !state.isInstrumentRunning -> Color(0xFFF1F5F9)
             state.instrumentIsNominal -> Color(0xFFDCFCE7)
@@ -411,11 +487,6 @@ class HomeScreen : Screen {
                 )
             }
             Text(
-                state.zone.current?.let { "You are in ${it.zoneId}" } ?: "You are not checked in",
-                fontSize = 14.sp,
-                color = Color(0xFF334155),
-            )
-            Text(
                 state.lastEventAgeMillis
                     ?.let { "last event ${SessionReport.formatDuration(it)} ago" }
                     ?: if (state.isInstrumentRunning) "no events yet" else "nothing recording",
@@ -431,17 +502,8 @@ class HomeScreen : Screen {
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = onOpenCheckIn) {
-                    Text(
-                        if (state.zone.isCheckedIn) "Move zone / check out" else "Check in",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Accent,
-                    )
-                }
                 TextButton(onClick = onOpenStatus) {
                     Text("Details", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Accent)
                 }
@@ -452,11 +514,11 @@ class HomeScreen : Screen {
     /**
      * One quest, as an offer.
      *
-     * The figures are a chip row directly under the name, which is the change that was asked for:
-     * a participant deciding whether to walk this reads the name and the cost in one glance
-     * instead of tracking down a column at the card's foot.
+     * The figures are a chip row directly under the name: a participant deciding whether to walk
+     * this reads the name and the cost in one glance instead of tracking down a column at the
+     * card's foot.
      *
-     * The card's colour comes from its own points band. That carries no claim — it is not a
+     * The card's colour comes from its position in the list. That carries no claim — it is not a
      * difficulty rating and the app does not have one — it exists so a board of five quests looks
      * like five things rather than one thing five times.
      */
@@ -491,7 +553,6 @@ class HomeScreen : Screen {
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // The totals, beside the name so they read as one offer.
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         StatChip("${quest.numTasks} steps")
                         quest.timeEstimateMin?.let { StatChip("$it min") }
@@ -541,7 +602,7 @@ class HomeScreen : Screen {
         )
     }
 
-    /** Green and breathing while the instrument is healthy, still otherwise. */
+    /** Green and breathing while something is live, still otherwise. */
     @Composable
     private fun LiveDot(running: Boolean, nominal: Boolean) {
         val alpha = if (running && nominal) {
@@ -571,16 +632,18 @@ class HomeScreen : Screen {
     /**
      * The greeting, and the three figures under it.
      *
-     * The figures are the "nice data" a student gets for opening the app: how many quests are
-     * open, what they are worth, and how many BLE advertisements this phone has already heard. The
-     * third is the one worth having — it is live, it is this person's own device, and it is the
-     * only number here that moves while they watch it.
+     * The console badge beside the greeting is the operator's entry to the lab console. It is on
+     * the first screen on purpose — it is where an operator finds out why a session is not
+     * measuring, and that question comes up on a bench rather than in a settings menu — but it is
+     * shown only to an operator. A student has no session to diagnose and no panel they can act on.
+     *
+     * The check-in QR that used to sit beside it is gone. Check-in is now a card of its own
+     * directly below, which is both larger and says what it does.
      */
     @Composable
-    private fun GreetingsMessage(
+    private fun Greeting(
         state: HomeState,
         onOpenLabConsole: () -> Unit,
-        onOpenCheckIn: () -> Unit,
     ) {
         Column(
             Modifier
@@ -604,36 +667,13 @@ class HomeScreen : Screen {
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "You are one of the instruments.",
+                        "Check in where you sit, or walk a quest.",
                         fontSize = 15.sp,
                         color = Color(0xFFC9D2F7)
                     )
                 }
 
-                // Instrument badge — doubles as the entry point to the lab console. The console is
-                // reachable from the first screen on purpose: it is where an operator finds out
-                // why a session is not measuring, and that question comes up on a bench, not in a
-                // settings menu.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Check in / out. Beside the instrument badge rather than buried in the lab
-                    // console, because this one is the *participant's* action: it is the only thing
-                    // in the app that records a person rather than a phone, and it has to be
-                    // reachable in the two seconds someone spends walking through a door.
-                    Icon(
-                        imageVector = Icons.Filled.QrCodeScanner,
-                        contentDescription = "Check in or out",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(Color.White.copy(alpha = 0.16f))
-                            .clickable(onClick = onOpenCheckIn)
-                            .padding(8.dp)
-                            .size(18.dp)
-                    )
-
+                if (state.isOperator) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalAlignment = Alignment.CenterVertically,

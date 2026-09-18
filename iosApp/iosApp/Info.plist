@@ -20,6 +20,19 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>dev.dubec.monad.checkin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>monad</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -34,6 +47,8 @@
 	<string>The camera reads the printed codes on lab markers, and during a measurement walk you start yourself it also tracks the phone's own movement through the room so the recording knows where it was. No photographs or video are saved.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app sends UDP packets to devices on your local network for research data collection.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

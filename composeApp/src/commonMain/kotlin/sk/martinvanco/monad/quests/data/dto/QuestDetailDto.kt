@@ -9,6 +9,7 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import sk.martinvanco.monad.core.domain.marker.MarkerCode
 import sk.martinvanco.monad.home.data.dto.QuestDetailResponseDto
 import sk.martinvanco.monad.lab.domain.QuestFeatures
 import sk.martinvanco.monad.home.data.dto.StepResponseDto
@@ -280,42 +281,16 @@ data class ProbeConfig(
     }
 
     companion object {
-        /** The one host a printed payload may name. Anything else is not one of our cards. */
-        private const val ALLOWED_HOST = "monad.dubec.dev"
-
         /**
          * One card's identity, whichever form it was read in. Empty means "not one of ours".
          *
-         * Folding to the trailing path segment is what reconciles the two forms that exist in the
-         * field: `MONAD-SHOWCASE-IN` is printed as a full URL and named in its quest as a bare
-         * code, and before this they were two identities for one piece of card.
-         *
-         * **A URL is only folded when it names our host.** Folding blindly would make
-         * `https://example.org/m/MONAD-FP-07` satisfy a probe, because only the last segment
-         * would ever be compared — so anyone could print a sticker that completes a step from
-         * anywhere. The card is public and photographable, so this is not a strong secret; it is
-         * still the difference between a dwell that happened at a surveyed point and one that did
-         * not, and that is the whole value of the measurement.
-         *
-         * A string with no scheme is treated as a bare code, which is what a hand-typed or
-         * legacy-payload card is.
+         * Delegates to [MarkerCode.key], which is now the single statement of the rule. It moved
+         * out of this file when check-in — which accepts any card — needed the same fold from
+         * `lab/domain`, a package that may not import a DTO. Kept as a named function here
+         * because `ProbeConfig.codeKey` is what the callers and the comments across three
+         * repositories refer to.
          */
-        fun codeKey(raw: String): String {
-            var s = raw.trim()
-            s = s.substringBefore('?').substringBefore('#')
-            s = s.trimEnd('/')
-            if (s.isEmpty()) return ""
-
-            if (s.contains("://")) {
-                val afterScheme = s.substringAfter("://")
-                val host = afterScheme.substringBefore('/').lowercase()
-                if (host != ALLOWED_HOST) return ""
-                return afterScheme.substringAfterLast('/').lowercase()
-            }
-
-            // A bare code must not contain a path either: `a/b` is not a card code.
-            return s.lowercase()
-        }
+        fun codeKey(raw: String): String = MarkerCode.key(raw)
     }
 }
 

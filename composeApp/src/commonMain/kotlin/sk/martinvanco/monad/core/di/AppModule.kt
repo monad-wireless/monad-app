@@ -1,9 +1,13 @@
 package sk.martinvanco.monad.core.di
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.koin.dsl.module
 import sk.martinvanco.monad.auth.data.api.AuthService
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.auth.domain.AuthManager
+import sk.martinvanco.monad.auth.domain.OperatorAccess
 import sk.martinvanco.monad.auth.presentation.login.LoginScreenModel
 import sk.martinvanco.monad.auth.presentation.register.RegisterScreenModel
 import sk.martinvanco.monad.auth.presentation.splash.SplashScreenModel
@@ -23,6 +27,8 @@ import sk.martinvanco.monad.home.presentation.HomeScreenModel
 import sk.martinvanco.monad.lab.data.GroundTruthRepository
 import sk.martinvanco.monad.lab.data.GroundTruthTallyService
 import sk.martinvanco.monad.lab.data.LabConfigService
+import sk.martinvanco.monad.lab.data.LabConfigSiteSource
+import sk.martinvanco.monad.lab.data.QuestPlaceDirectory
 import sk.martinvanco.monad.lab.data.LabSessionRecovery
 import sk.martinvanco.monad.lab.data.LabSessionRepository
 import sk.martinvanco.monad.lab.data.LabSessionUploader
@@ -33,7 +39,11 @@ import sk.martinvanco.monad.lab.data.RoomTallyGateway
 import sk.martinvanco.monad.lab.data.StorageArtefactSink
 import sk.martinvanco.monad.lab.domain.BackgroundResidency
 import sk.martinvanco.monad.lab.domain.BeaconWitness
+import sk.martinvanco.monad.lab.domain.CheckInService
 import sk.martinvanco.monad.lab.domain.ClockSyncService
+import sk.martinvanco.monad.lab.domain.LabSiteSource
+import sk.martinvanco.monad.lab.domain.PlaceDirectory
+import sk.martinvanco.monad.lab.domain.PresenceIndicator
 import sk.martinvanco.monad.lab.domain.GroundTruthRecorder
 import sk.martinvanco.monad.lab.domain.GroundTruthStore
 import sk.martinvanco.monad.lab.domain.IdentityBroadcaster
@@ -47,7 +57,7 @@ import sk.martinvanco.monad.lab.domain.PoseTracker
 import sk.martinvanco.monad.lab.domain.SessionRecorder
 import sk.martinvanco.monad.lab.domain.TrafficGenerator
 import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
-import sk.martinvanco.monad.lab.presentation.GroundTruthScanScreenModel
+import sk.martinvanco.monad.lab.presentation.CheckInScreenModel
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreenModel
 import sk.martinvanco.monad.lab.presentation.SessionStatusScreenModel
 import sk.martinvanco.monad.auth.domain.SessionObserver
@@ -121,7 +131,11 @@ val appModule = module {
     single<SessionObserver> { NotificationsSessionObserver(get(), get(), get()) }
 
     // Domain
-    single { AuthManager(get(), get(), get()) }
+    // One operator flag for the process. Several surfaces branch on it — the home screen, the top
+    // bar, the account screen — and two copies that disagree would show a console next to a card
+    // saying there is none.
+    single { OperatorAccess(get()) }
+    single { AuthManager(get(), get(), get(), get()) }
 
     // BLE transport. One scanner for the whole app: two concurrent Android scans contend for the
     // same radio and halve each other's duty cycle.
@@ -189,6 +203,28 @@ val appModule = module {
         )
     }
     single { GroundTruthRecorder(get(), get()) }
+
+    // Check-in: scan any card, and the phone counts the visit. One for the process, on a scope
+    // that outlives every screen — a check-in runs for hours with the app backgrounded, the OS
+    // indicator's Check out arrives with no screen open, and the ceiling has to fire whether or
+    // not anybody is looking. A screen-scoped instance would lose all three.
+    single<LabSiteSource> { LabConfigSiteSource(get()) }
+    single<PlaceDirectory> { QuestPlaceDirectory(get(), get()) }
+    single { PresenceIndicator() }
+    // The process scope. Declared rather than built inline so `AppModuleGraphTest` can walk the
+    // graph, and `SupervisorJob` so one failed child — a refused broadcast, an indicator the OS
+    // would not draw — cannot cancel the coroutine that is counting somebody's visit.
+    single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+    single {
+        CheckInService(
+            recorder = get(),
+            places = get(),
+            broadcaster = get(),
+            indicator = get(),
+            site = get(),
+            scope = get(),
+        )
+    }
     // Live instrument health -> the lab's LGTM stack, via the API. A singleton observing the one
     // instrument, started once in `App()`: it has to outlive the console screen, because a walk
     // continues with the screen closed and that is exactly when nobody can see the handset.
@@ -210,11 +246,11 @@ val appModule = module {
     single { FactDeck() }
 
     // Screen models
-    factory { SplashScreenModel(get(), get(), get(), get()) }
+    factory { SplashScreenModel(get(), get(), get(), get(), get()) }
     factory { OnboardingScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
-    factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), get(), questId) }
     // IP-128 — device landing. questId is the optional `?q=` from the deep link.
     factory { (slug: String, questId: String?) -> DeviceScreenModel(get(), get(), slug, questId) }
@@ -228,7 +264,7 @@ val appModule = module {
     factory { MyAccountScreenModel(get(), get()) }
     factory { ProfileScreenModel(get(), get()) }
     factory { LabConsoleScreenModel(get(), get(), get(), get(), get(), get(), get(), get()) }
-    factory { GroundTruthScanScreenModel(get(), get(), get(), get()) }
+    factory { CheckInScreenModel(get(), get(), get(), get()) }
     // "Am I recording?" — the participant surface for a backgrounded session.
     factory { SessionStatusScreenModel(get(), get(), get(), get(), get(), get()) }
 }

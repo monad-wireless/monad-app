@@ -30,6 +30,26 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // the manual code entry still works and the walk is unaffected.
         ArBarcodeShim.shared.install(pointer: UnsafeMutableRawPointer(mutating: MonadReadArBarcodeAddress()))
 
+        // The check-in Live Activity. ActivityKit is Swift-only and does not cross the bridge
+        // Kotlin sees, so the shared code calls these closures instead of the framework — the same
+        // arrangement as the pose shim above, and for the same reason. Without this line a
+        // check-in still records and simply shows no lock-screen indicator.
+        PresenceShim.shared.install(
+            // The numbers arrive boxed: a Kotlin function type's `Double` parameters cross the
+            // Objective-C bridge as `KotlinDouble`, because a block's arguments must be objects.
+            start: { place, startedAtMillis, endsAtMillis in
+                MonadPresenceBridge.shared.start(
+                    place: place,
+                    startedAtMillis: startedAtMillis.doubleValue,
+                    endsAtMillis: endsAtMillis.doubleValue
+                )
+            },
+            update: { place in MonadPresenceBridge.shared.update(place: place) },
+            stop: { MonadPresenceBridge.shared.stop() },
+            supported: { KotlinBoolean(bool: MonadPresenceBridge.shared.isSupported) },
+            diagnostics: { MonadPresenceBridge.shared.diagnostics() }
+        )
+
         if firebaseAvailable, FirebaseApp.app() == nil {
             FirebaseApp.configure()
         }
@@ -82,6 +102,15 @@ struct iOSApp: App {
                 // Covers both entry points — a cold launch delivers the URL here
                 // too, so no separate `launchOptions` handling is needed.
                 .onOpenURL { url in
+                    // Check out from the Live Activity. Handled here and NOT parked, because it
+                    // is a command rather than a place to navigate to: the participant tapped a
+                    // button on their lock screen and wants the check-in closed, not a screen
+                    // opened. See MonadPresenceBridge for why this is a link and not an App Intent.
+                    if url.scheme == "monad", url.host == "check-out" {
+                        PresenceCommands.shared.send(command: .checkOut)
+                        return
+                    }
+                    // IP-128 — a scanned device label arrives here.
                     PendingDeepLink.shared.parkUrl(url: url.absoluteString)
                 }
         }

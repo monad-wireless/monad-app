@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.launch
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.auth.domain.AuthManager
+import sk.martinvanco.monad.auth.domain.OperatorAccess
 import sk.martinvanco.monad.auth.presentation.login.LoginScreen
 import sk.martinvanco.monad.core.data.repository.SettingsRepository
 import sk.martinvanco.monad.core.navigation.NavigationManager
@@ -17,10 +18,16 @@ class SplashScreenModel(
     private val authManager: AuthManager,
     private val settingsRepository: SettingsRepository,
     private val userRepository: UserRepository,
+    private val operatorAccess: OperatorAccess,
 ) : StateScreenModel<SplashState>(SplashState()) {
 
     fun checkAuthStatus() {
         screenModelScope.launch {
+            // The cached operator flag first, so the home screen's first frame already draws the
+            // right half of the app. `validateToken` below refreshes it from the server; this only
+            // covers the seconds before that answers, and a launch with no route out.
+            operatorAccess.restore()
+
             // First check if onboarding has been completed
             val onboardingCompleted = settingsRepository.isOnboardingCompleted()
             if (!onboardingCompleted) {

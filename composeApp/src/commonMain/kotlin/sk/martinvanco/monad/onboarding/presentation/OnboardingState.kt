@@ -45,15 +45,22 @@ enum class OnboardingStep(
     val description: String,
     val permission: Permission?,
     val buttonText: String,
+    /**
+     * What skipping this page costs, in the participant's own terms.
+     *
+     * Printed ON the skip control. "Skip for now" is a promise the app does not keep: the
+     * permission is not asked for again, nothing later says it is missing, and the participant
+     * finds out when a quest quietly records nothing. A person may still decline — that is their
+     * right — but they should decline the consequence rather than the dialog.
+     */
+    val skipCost: String? = null,
 ) {
     WELCOME(
         title = "Your phone is the measurement",
-        description = "The library is full of Wi-Fi, and a body standing in the way of a radio " +
-            "signal changes it. Ten small boxes around the room measure that, hundreds of times " +
-            "a second, and we are trying to find out whether it is enough to count people " +
-            "without a camera.\n\nYour part is to be somewhere we have measured, and to let " +
-            "your phone say 'someone is here' while you are. The next two screens explain the " +
-            "two permissions that needs, and what is lost without each.",
+        description = "A body standing in the way of a Wi-Fi signal changes it. Boxes around the " +
+            "room measure that hundreds of times a second, and we are finding out whether it is " +
+            "enough to count people without a camera.\n\nYour part: be somewhere we measure, and " +
+            "let your phone say \"someone is here\" while you are.",
         permission = null,
         buttonText = "Get started",
     ),
@@ -62,6 +69,7 @@ enum class OnboardingStep(
         description = LabPermission.BLUETOOTH.describe(),
         permission = LabPermission.BLUETOOTH.permission,
         buttonText = "Allow Bluetooth",
+        skipCost = "Skip — my phone will not be heard",
     ),
     // "Location — Always" was a page here until 2026-08-26 (IP-140). It asked for a
     // permission neither platform will grant from an onboarding screen — Android 11+
@@ -74,25 +82,27 @@ enum class OnboardingStep(
         description = LabPermission.CAMERA.describe(),
         permission = LabPermission.CAMERA.permission,
         buttonText = "Allow Camera",
+        skipCost = "Skip — I will not scan any codes",
     ),
     TERMS(
         title = "What leaves this phone",
-        description = "Everything is stored under a random participant code, never your name or " +
-            "e-mail.\n\nWhat leaves this phone: which marked points you scanned and when, how " +
-            "long you stood at each, and any headcounts you recorded. That is the whole " +
-            "list.\n\nWhat does not: your location. This app has no code that can read a " +
-            "position — no GPS, no coordinates, nothing. It also never records audio or video, " +
-            "and it cannot record Wi-Fi; no phone can.\n\nContinuing also enables anonymous " +
-            "crash reports.",
+        description = "Everything is stored under a random code, never your name or e-mail.\n\n" +
+            "LEAVES THIS PHONE\nWhich marked points you scanned, when, how long you stayed, and " +
+            "any headcounts you typed in. That is the whole list.\n\n" +
+            "NEVER LEAVES\nYour location. This app has no code that can read a position — no " +
+            "GPS, no coordinates, nothing. No audio, no video, and no Wi-Fi data; no phone can " +
+            "record that.\n\nContinuing also turns on anonymous crash reports.",
         permission = null,
         buttonText = "I agree",
     ),
     COMPLETE(
         title = "You're all set",
-        description = "Pick a quest whenever you are in the library. The shortest takes thirty " +
-            "seconds.\n\nOne thing worth knowing: keep the app open and the screen awake while " +
-            "a run is going. On an iPhone the broadcast stops the moment you switch away, and " +
-            "nothing on screen will tell you.",
+        description = "Two things you can do, whenever you are in the library.\n\n" +
+            "CHECK IN\nScan any card where you sit. The phone counts how long you stay, and " +
+            "closes it on its own after three hours.\n\n" +
+            "WALK A QUEST\nThe shortest takes thirty seconds. Keep the app on screen while one " +
+            "runs — on an iPhone the broadcast stops the moment you switch away, and nothing " +
+            "tells you.",
         permission = null,
         buttonText = "Start",
     ),

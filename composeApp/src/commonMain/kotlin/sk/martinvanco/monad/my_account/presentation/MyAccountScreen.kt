@@ -46,6 +46,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.ui.draw.clip
+import sk.martinvanco.monad.core.presentation.components.AppVersionLine
 import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
 import sk.martinvanco.monad.notifications.presentation.NotificationSettingsScreen
 
@@ -214,6 +215,13 @@ class MyAccountScreen : Screen {
                                 color = Color.Gray
                             )
                         }
+
+                        // Which build this is. At the foot, where a version conventionally lives
+                        // and where somebody looks when they are about to report something. Tap it
+                        // for the full build id — the same string the session sidecar records, so a
+                        // report can be joined to the recordings this build produced.
+                        Spacer(modifier = Modifier.height(20.dp))
+                        AppVersionLine()
                     }
                 }
             }

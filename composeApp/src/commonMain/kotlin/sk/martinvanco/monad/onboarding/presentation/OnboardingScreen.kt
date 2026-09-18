@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
@@ -30,8 +32,6 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Rocket
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
@@ -142,8 +142,6 @@ class OnboardingScreen : Screen {
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.weight(0.1f))
-
                 AnimatedContent(
                     targetState = state.currentStep,
                     transitionSpec = {
@@ -156,44 +154,57 @@ class OnboardingScreen : Screen {
                             animationSpec = tween(300)
                         ) + fadeOut(animationSpec = tween(300)))
                     },
-                    modifier = Modifier.weight(0.6f),
+                    // All the spare room, because the page scrolls now. The old 0.6 weight with
+                    // two 0.1 spacers clipped the consent copy on a small handset and gave no
+                    // sign that anything was below the fold.
+                    modifier = Modifier.weight(1f),
                     label = "OnboardingContent"
                 ) { step ->
                     val isGranted = step.permission?.let { state.isPermissionGranted(it) } ?: false
                     OnboardingStepContent(
                         step = step,
-                        isPermissionGranted = isGranted
+                        isPermissionGranted = isGranted,
+                        pageLabel = "${state.currentPage + 1} of ${state.totalPages}",
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 PageIndicator(
                     currentPage = state.currentPage,
                     totalPages = state.totalPages
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 OnboardingButtons(
                     state = state,
                     onNextClick = { screenModel.onNextClick() },
                     onSkipClick = { screenModel.onSkipClick() }
                 )
-
-                Spacer(modifier = Modifier.weight(0.1f))
             }
         }
     }
 }
 
+/**
+ * One page.
+ *
+ * It SCROLLS. The consent page is the longest text in the app and has to stay that way — every
+ * sentence on it is a fact about what leaves the phone — and on a small handset it was previously
+ * clipped by a fixed-weight column, with no indication that anything was missing. Consent a person
+ * could not finish reading is not consent.
+ */
 @Composable
 private fun OnboardingStepContent(
     step: OnboardingStep,
-    isPermissionGranted: Boolean
+    isPermissionGranted: Boolean,
+    pageLabel: String,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -228,7 +239,18 @@ private fun OnboardingStepContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // "2 of 5". The dots below say where you are; this says how much is left, which is the
+        // question somebody actually has on a permission sequence.
+        Text(
+            text = pageLabel,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(
             text = step.title,
@@ -327,7 +349,9 @@ private fun OnboardingButtons(
                 .height(56.dp),
             shape = RoundedCornerShape(12.dp),
             enabled = !state.isLoading,
-            colors = if (isPermissionGranted && permission != null) {
+            // `isPermissionGranted` is already false when the step gates no permission,
+            // so the redundant null check the compiler flagged is gone.
+            colors = if (isPermissionGranted) {
                 ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF4CAF50)
                 )
@@ -344,7 +368,7 @@ private fun OnboardingButtons(
             } else {
                 val buttonText = when {
                     isDeniedPermanently -> "Open Settings"
-                    isPermissionGranted && permission != null -> "Continue"
+                    isPermissionGranted -> "Continue"
                     else -> currentStep.buttonText
                 }
 
@@ -365,6 +389,12 @@ private fun OnboardingButtons(
             }
         }
 
+        // The skip control names the CONSEQUENCE, not the act.
+        //
+        // It used to say "Skip for now", which is a promise the app does not keep: nothing asks
+        // again, no later screen says the permission is missing, and the participant finds out when
+        // a quest quietly records nothing. Declining is their right; declining an unnamed cost is
+        // not a decision they were given the chance to make.
         if (permission != null && !isPermissionGranted && !state.isLastPage) {
             Spacer(modifier = Modifier.height(12.dp))
             TextButton(
@@ -372,9 +402,10 @@ private fun OnboardingButtons(
                 enabled = !state.isLoading
             ) {
                 Text(
-                    text = "Skip for now",
+                    text = currentStep.skipCost ?: "Skip for now",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
                 )
             }
         }

@@ -27,9 +27,23 @@ class QuestsService(private val ktorClient: KtorClient) {
      * The capability list is sent so the backend withholds quests needing hardware this handset
      * lacks. A quest offered to a device that cannot satisfy it does not fail loudly — it produces
      * a session that looks complete and is missing the measurement, which is worse.
+     *
+     * **[token] is what makes an operator take arrive at all.** `/api/quests` is `PUBLIC_ACCESS`
+     * (security.yaml) and this call sent no Authorization header, so the audience filter IP-145
+     * added — `if (!$this->isGranted('ROLE_SUPERADMIN'))` — was evaluated against an anonymous
+     * token on every request this app has ever made. Operator rows were therefore withheld from
+     * everybody including the operator, and the app's whole `operatorQuests` branch was
+     * unreachable over the wire. A public route still authenticates a bearer token when one is
+     * present, so passing it costs nothing and restores the feature.
+     *
+     * Null sends no header and gets the participant listing, which is the right answer for a
+     * signed-out caller.
      */
-    suspend fun getActiveQuests(): QuestListResponseDto {
+    suspend fun getActiveQuests(token: String? = null): QuestListResponseDto {
         val response = ktorClient.client.get("/api/quests") {
+            if (!token.isNullOrBlank()) {
+                headers { append(HttpHeaders.Authorization, "Bearer $token") }
+            }
             parameter("capabilities", detectCapabilities().capabilities.sorted().joinToString(","))
             parameter("status", "active")
         }

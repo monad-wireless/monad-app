@@ -132,6 +132,15 @@
             android:name=".lab.service.LabSessionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!--
+            The Check out button on the check-in notification. Not exported: the only sender is
+            this app's own PendingIntent, and an exported receiver would let any app on the phone
+            end a participant's check-in.
+        -->
+        <receiver
+            android:name=".lab.domain.CheckOutReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

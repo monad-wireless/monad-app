@@ -36,7 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import sk.martinvanco.monad.core.config.AppConfig
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -94,6 +96,21 @@ class LabConsoleScreen : Screen {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // Which binary this is, at the top of the console rather than the foot.
+                //
+                // It is the operator's screen and the build id is the operator's fact: it is what
+                // every session this phone records carries in its sidecar as `build_id`, so the
+                // first question about a suspect recording — "which build made it?" — is answered
+                // where the recording is being steered from. A dirty build says so, because a
+                // recording from an uncommitted tree is attributable to this machine and to no
+                // commit.
+                Text(
+                    text = "build ${AppConfig.BUILD_ID}",
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFF64748B),
+                )
+
                 // Two consoles, one screen. While a walk runs the operator is standing in a room
                 // holding a phone: they get the panels a walk is steered by and nothing else.
                 // Idle, they get the setup and housekeeping panels — which are exactly the ones
