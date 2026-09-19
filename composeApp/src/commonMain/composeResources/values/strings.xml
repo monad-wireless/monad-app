@@ -1,18 +1,27 @@
 <?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Every key here is rendered by a screen, and that is the rule this file is kept to.
+
+    TEN KEYS WERE DELETED ON 2026-09-18, all of them unreachable: `app_name`, `nav_home`,
+    `nav_back`, `loading`, `error`, `retry`, `empty_state`, `no_data_available`,
+    `create_account_screen_log_in` and `logo`. Not one had a `Res.string.` reference anywhere in
+    `composeApp/src` or `iosApp`, and the app performs no dynamic resource lookup, so nothing
+    could reach them by name either. They were found while fixing a typo in `loading`
+    ("Loadi ng...") that had therefore never been on a screen — which is the argument for the
+    rule: a string nothing renders cannot be wrong, so it never gets fixed, and a translator
+    working `values-sk` is asked to translate screens that do not exist.
+
+    `app_name` is the one worth explaining. The Android manifest's `android:label="@string/app_name"`
+    resolves to `composeApp/src/androidMain/res/values/strings.xml`, a SEPARATE Android resource
+    file that still holds it. Compose Resources and Android resources are different systems; the
+    copy here was a duplicate that nothing read. The iOS name comes from `Info.plist`
+    (`APP_NAME` in `Config.xcconfig`) and never from this file.
+
+    Keep this file's key set identical to `values-sk/strings.xml`. A key present in one locale and
+    absent from the other falls back silently, which is how a half-translated screen goes unnoticed.
+-->
 <resources>
-    <!-- App name -->
-    <string name="app_name">Monad</string>
-
-    <!-- Navigation -->
-    <string name="nav_home">Home</string>
-    <string name="nav_back">Back</string>
-
     <!-- Common -->
-    <string name="loading">Loadi ng...</string>
-    <string name="error">Error</string>
-    <string name="retry">Retry</string>
-    <string name="empty_state">No items found</string>
-    <string name="no_data_available">No data available</string>
     <string name="field_label_name">Your name</string>
     <string name="field_label_email">Email</string>
     <string name="field_label_password">Password</string>
@@ -22,16 +31,22 @@
     <string name="login_screen">Login</string>
         <string name="login_screen_login">Login</string>
         <string name="login_screen_forgot_password">Forgot Password?</string>
-        <string name="login_screen_reset_password">Reset Password</string>
         <string name="login_screen_no_acc">No account yet?</string>
-
+        <!--
+            There is no automatic reset, anywhere in this project: the API has no such endpoint
+            and the admin login turns its own link off for the same reason. Recovery is a person.
+            Saying so is the whole point of this dialog — the link used to do nothing at all.
+            %1$s is AppConfig.SUPPORT_EMAIL, so the address lives in one place.
+        -->
+        <string name="login_screen_password_help_title">Forgot your password?</string>
+        <string name="login_screen_password_help_body">This app cannot reset a password yet. Write to %1$s and your account will be sorted out by hand.</string>
+        <string name="login_screen_password_help_write">Write an email</string>
+        <string name="login_screen_password_help_close">Close</string>
 
     <string name="create_account_screen">Create Account</string>
         <string name="create_account_screen_already_have_acc">Already have an account?</string>
-        <string name="create_account_screen_log_in">Log In</string>
 
     <!-- Top Bar -->
-    <string name="logo">Logo</string>
     <string name="profile">Profile</string>
 
     <!-- IP-151 — the one dwell panel about the participant. Every number is live quest state. -->

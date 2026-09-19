@@ -34,6 +34,19 @@ actual suspend fun detectCapabilities(): DeviceCapabilities {
         // offered a witness quest, start it, and record nothing, which is precisely the silent
         // failure the capability filter exists to prevent.
     )
+    // Trajectory tracking, asked of the hardware and not of the LiDAR. `probe()` returns
+    // `Unsupported` only where ARKit world tracking is absent; a non-Pro iPhone answers
+    // `Available` and tracks on camera and IMU, losing the mesh artefact and nothing else.
+    //
+    // `NeedsPermission` counts as capable on purpose. The camera grant is transient and is asked
+    // for inside the run, so treating it as a missing capability would drop the quest out of the
+    // catalogue with nothing on screen to explain it — the same reason BLE_ADVERTISE is claimed
+    // unconditionally and refuses loudly at start() instead.
+    val poseAvailability = runCatching { PoseTracker().probe() }.getOrNull()
+    if (poseAvailability != null && poseAvailability !is LabSensorModule.Availability.Unsupported) {
+        tokens += Capability.POSE_TRACK
+    }
+
     // LiDAR and UWB are claimed only when their module's runtime probe agrees.
     tokens += availableModuleCapabilities()
 

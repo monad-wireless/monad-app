@@ -21,6 +21,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import sk.martinvanco.monad.core.config.AppConfig
 import sk.martinvanco.monad.core.data.remote.KtorClient
+import sk.martinvanco.monad.core.telemetry.CrashContext
 import sk.martinvanco.monad.core.util.Platform
 import sk.martinvanco.monad.core.util.currentTimeMillis
 import sk.martinvanco.monad.lab.domain.LabInstrument
@@ -357,6 +358,12 @@ class LabTelemetryShipper(
 
             buffer.add(sample)
         }
+
+        // The same three labels onto every crash report from here on, so a Crashlytics stack and a
+        // Mimir series can be put side by side. Done HERE because this is where the app learns
+        // them, and a second place that derived them would be a second answer. Outside the lock:
+        // it is an IPC call into Firebase and it guards nothing this lock protects.
+        CrashContext.bindSession(sessionId = session, participant = participant, site = site)
     }
 
     private suspend fun flush() {

@@ -2,9 +2,6 @@ package sk.martinvanco.monad.onboarding.presentation
 
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import dev.gitlive.firebase.Firebase
-import dev.gitlive.firebase.crashlytics.crashlytics
-import io.github.aakira.napier.Napier
 import dev.icerock.moko.permissions.Permission
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -40,7 +37,6 @@ class OnboardingScreenModel(
                 }
             }
             OnboardingStep.TERMS -> {
-                enableCrashReporting()
                 goToNextPage()
             }
             OnboardingStep.COMPLETE -> {
@@ -85,22 +81,6 @@ class OnboardingScreenModel(
         if (page in 0 until state.value.totalPages) {
             mutableState.value = state.value.copy(currentPage = page)
         }
-    }
-
-    /**
-     * Crash reporting is **best-effort and optional**, matching the build: `google-services.json`
-     * carries per-deployment secrets, is not in the repository, and its Gradle plugins are applied
-     * only when the file is present. Without it there is no default `FirebaseApp`, and calling
-     * Crashlytics throws `IllegalStateException` — which used to take down the Terms step and made
-     * a clean checkout unusable past onboarding (fresh clones, CI builds, and any lab handset
-     * flashed from source).
-     *
-     * Telemetry must never be the reason a participant cannot start a session, so a missing
-     * Firebase degrades to "no crash reporting" and is logged rather than thrown.
-     */
-    private fun enableCrashReporting() {
-        runCatching { Firebase.crashlytics.setCrashlyticsCollectionEnabled(true) }
-            .onFailure { Napier.w("[onboarding] crash reporting unavailable, continuing: ${it.message}") }
     }
 
     private fun completeOnboarding() {

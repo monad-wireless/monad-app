@@ -26,24 +26,33 @@
 // PAID lab team distinct from a personal one. It is the personal team. There is only one, and
 // there never was another.
 //
-// WHAT THIS BUILD CANNOT DO, because a free personal team can sign none of it
-// ---------------------------------------------------------------------------
-// An entitlement a team cannot grant is a SIGNING failure, not a runtime one, so the entitlements
-// file is an empty dict and these four are absent rather than requested:
+// ENTITLEMENTS, and what changed on 2026-09-18
+// --------------------------------------------
+// For as long as this build signed with the FREE personal team, the entitlements file was an empty
+// dict: an entitlement a team cannot grant is a SIGNING failure rather than a runtime one, so four
+// were absent rather than requested. A paid Apple Developer Program membership now exists — App
+// Store Connect holds the "Monad Scanner" record — so two of the four are back:
 //
-//   aps-environment       No push, at all. The in-app inbox still works — it polls
-//                         GET /api/me/notifications over HTTP and needs no entitlement. Live
-//                         Activities are unaffected: this app starts and updates its own, which
-//                         needs neither push nor an entitlement.
-//   associated-domains    No Universal Links. Scanning a printed card with the CAMERA app opens
-//                         Safari, which is why monad.dubec.dev/m/<code> must be a real page. The
-//                         in-app scanner is unaffected.
-//   HotspotConfiguration  Cannot join a Wi-Fi network itself. Irrelevant here: the AX210 fleet
-//                         cannot be an access point, so there is none to join.
-//   wifi-info             Cannot read back the SSID, so a session sidecar records an empty one.
+//   aps-environment       REQUESTED AGAIN. Push works on iPhone for the first time; the in-app
+//                         inbox always did, because it polls GET /api/me/notifications over HTTP.
+//                         Needs an APNs .p8 key uploaded to the monad-count Firebase project too.
+//   associated-domains    REQUESTED AGAIN, as applinks: + webcredentials: on monad.dubec.dev. The
+//                         domain's half is /.well-known/apple-app-site-association and it serves an
+//                         EMPTY claim until web.applinks.ios_app_ids is set in monad-knowledge's
+//                         config.toml. An empty claim fails silently on the handset.
+//   HotspotConfiguration  Still out. Cannot join a Wi-Fi network itself, and there is none to join:
+//                         the AX210 fleet cannot be an access point.
+//   wifi-info             Still out. Cannot read back the SSID, so a session sidecar records an
+//                         empty one. Nothing in the analysis reads that field.
 //
-// A free personal team's provisioning profile expires after SEVEN DAYS. The app stops launching on
-// the eighth and needs a rebuild from Xcode.
+// THE TEAM ID BELOW IS NOT YET VERIFIED AGAINST THE PAID MEMBERSHIP. 3D6D8LQ6F2 is the personal
+// team's id. An individual enrolment may or may not keep it. Read the live answer from
+// Xcode -> Settings -> Accounts, next to the membership row, and if it differs, change it in THREE
+// places or the links break silently: DEVELOPMENT_TEAM in the pbxproj, the widget's copy of it, and
+// web.applinks.ios_app_ids in monad-knowledge's config.toml (`<TEAMID>.dev.dubec.monad`).
+//
+// The free team's seven-day provisioning expiry no longer applies. A paid team's development
+// profile lasts a year, and a TestFlight build is good for 90 days from upload.
 APP_NAME = Monad Scan
 OTHER_LDFLAGS = $(inherited) -lsqlite3
 ENTITLEMENTS_FILE = iosApp/iosApp.entitlements

@@ -35,6 +35,16 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!--
+	    Crash reporting is ON by default and the participant can opt out. Stated here so the default
+	    is a fact of the build rather than a line of Kotlin somebody has to find, and so it cannot
+	    silently disagree with the Android manifest's matching meta-data.
+
+	    `App.kt` re-asserts the answer at every launch, which is what clears the persisted `false`
+	    left by the build that switched collection off at every start. See `CrashContext`.
+	-->
+	<key>FirebaseCrashlyticsCollectionEnabled</key>
+	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
@@ -47,6 +57,31 @@
 	<string>The camera reads the printed codes on lab markers, and during a measurement walk you start yourself it also tracks the phone's own movement through the room so the recording knows where it was. No photographs or video are saved.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app sends UDP packets to devices on your local network for research data collection.</string>
+	<!--
+	    ITMS-90683, the BLOCKING one on build 6 (2026-09-19).
+
+	    The app never starts a Nearby Interaction session. It calls `NISession.isSupported()` in two
+	    places — `HandsetDescriptor.ios.kt` and `SensorModules.ios.kt` — to record whether this
+	    handset has a U1/U2 chip, because a walk's odometry quality depends on which iPhone recorded
+	    it. Apple's validator demands a purpose string for the REFERENCE, not for a call that asks
+	    for permission, so no prompt will ever show this sentence. It is written to be true anyway,
+	    in case the ranging half is ever built.
+
+	    TWO LOCATION STRINGS ARE DELIBERATELY ABSENT, and the same email asked for them as warnings:
+	    `NSLocationWhenInUseUsageDescription` and `NSLocationAlwaysAndWhenInUseUsageDescription`.
+	    Same cause, opposite answer. The only CoreLocation reference left on iOS is
+	    `CLLocationManager.headingAvailable()`, a static magnetometer check that asks for nothing,
+	    and the location capability was REMOVED on 2026-08-26 (`BeaconWitness.ios.kt` carries the
+	    reasoning and what it cost). The consent copy a participant agrees to promises no location of
+	    any kind. A purpose string claiming otherwise would be the app contradicting its own consent
+	    text to silence a warning Apple does not require fixing.
+
+	    Restoring iOS beacon witnessing (Phase 5) brings all of it back together: the Always
+	    permission, the `location` background mode, both strings, and an edit to the consent copy.
+	    That is one deliberate decision, not four drifted settings.
+	-->
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>MonadCount records whether this iPhone supports ultra-wideband ranging, as one line of the device description saved with a measurement session. The app does not range to other devices.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

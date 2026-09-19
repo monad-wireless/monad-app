@@ -17,6 +17,8 @@ import sk.martinvanco.monad.auth.presentation.splash.SplashScreen
 import sk.martinvanco.monad.core.di.appModule
 import sk.martinvanco.monad.core.di.platformModule
 import sk.martinvanco.monad.core.autofill.CredentialSave
+import sk.martinvanco.monad.core.data.repository.SettingsRepository
+import sk.martinvanco.monad.core.telemetry.CrashContext
 import sk.martinvanco.monad.core.navigation.CustomScreenTransition
 import sk.martinvanco.monad.core.deeplink.DeepLink
 import sk.martinvanco.monad.core.deeplink.PendingDeepLink
@@ -35,8 +37,6 @@ import sk.martinvanco.monad.notifications.domain.PushTokenRegistrar
 import sk.martinvanco.monad.quests.presentation.quest_detail.QuestDetailScreen
 import sk.martinvanco.monad.ui.theme.AppTheme
 import cafe.adriel.voyager.navigator.Navigator as VoyagerNavigator
-import dev.gitlive.firebase.Firebase
-import dev.gitlive.firebase.crashlytics.crashlytics
 
 fun initKoin(appDeclaration: KoinAppDeclaration = {}) {
     startKoin {
@@ -55,12 +55,13 @@ fun App() {
         } catch (e: Exception) {
             // Already initialized
         }
-        try {
-            Firebase.crashlytics.setCrashlyticsCollectionEnabled(false)
-            Logger.i("Firebase initialized, Crashlytics disabled until user accepts terms")
-        } catch (e: Exception) {
-            Logger.e("Firebase Crashlytics error: ${e.message}", throwable = e)
-        }
+        // Crash reporting is NOT decided here. It used to be — this block called
+        // `setCrashlyticsCollectionEnabled(false)` on every process start, which undid the `true`
+        // the onboarding terms step wrote once. Firebase's flag is durable, the terms step runs
+        // once ever, and this block runs at every launch, so from the second launch onwards the
+        // app reported no crash at all. It is applied in the LaunchedEffect below instead, once
+        // Koin can hand over the repository that holds the opt-out.
+
         // IP-157 — the push token's lifecycle and the tap-to-route path live in the registrar; a
         // push received while the app is open refreshes the inbox so the badge moves. Installed
         // here because kmpNotifier's listener list is process-wide and this block runs once.
@@ -88,6 +89,22 @@ fun App() {
     // Setup Coil ImageLoader with platform-specific networking
     setSingletonImageLoaderFactory { context ->
         createImageLoader(context)
+    }
+
+    // Crash reporting, re-asserted at every launch. ON unless the participant opted out.
+    //
+    // Here and not in the `remember` block above, because reading the opt-out is a suspend call
+    // against SQLDelight and that block is synchronous. The cost is that a crash in the first
+    // frames of a cold start is not collected; the alternative was collecting nothing at all after
+    // the first launch, which is what shipped until 2026-09-18. See CrashContext for the history
+    // and for the keys that join a crash report to the handset's LGTM series.
+    //
+    // FAILS OPEN. A repository that cannot be read leaves collection on, because a diagnostic that
+    // switches itself off when the app is unwell is the one that is never there when needed.
+    LaunchedEffect(Unit) {
+        val optedOut = runCatching { getKoin().get<SettingsRepository>().isCrashReportingOptedOut() }
+            .getOrElse { false }
+        CrashContext.applyStartup(optedOut)
     }
 
     AppTheme(darkTheme = false) {

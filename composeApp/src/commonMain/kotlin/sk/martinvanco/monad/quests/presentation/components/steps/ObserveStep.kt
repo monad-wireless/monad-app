@@ -54,6 +54,14 @@ fun ObserveStep(
 ) {
     val config = remember(task) { TaskConfigParser.getObserveConfig(task) }
     val instrumentState by instrument.state.collectAsState()
+    // A running session and a phone on air are two different facts, and this step used to check
+    // only the first. `ProbeStep` and `BleAdvertiseStep` have always collected both, for the same
+    // reason they matter more here: the fleet's BLE record is the ONLY thing that says where a
+    // reading was taken, so a count recorded while the frame was off is a number with no position.
+    val broadcasting by instrument.isBroadcasting.collectAsState(initial = false)
+    // Did this session ASK to broadcast? A witness-only quest that never wanted the frame on air
+    // must not be nagged about it. Same condition the lab console warns on.
+    val broadcastExpected = instrumentState.request?.broadcast == true
     val scope = rememberCoroutineScope()
 
     var count by remember { mutableStateOf(0) }
@@ -79,6 +87,10 @@ fun ObserveStep(
                         reading = reading,
                         ofReadings = required,
                         prompt = cfg.prompt,
+                        // Read at the instant Record was pressed, not at step entry: an iOS
+                        // handset drops off air the moment the app backgrounds, and the reading
+                        // after that is the one that needs the flag.
+                        onAir = broadcasting,
                     ),
                 ),
             )
@@ -100,6 +112,7 @@ fun ObserveStep(
             ObserveContent(
                 config = config,
                 sessionRunning = instrumentState.isRunning,
+                silent = broadcastExpected && !broadcasting,
                 count = count,
                 recorded = recorded,
                 required = required,
@@ -148,6 +161,8 @@ fun ObserveStep(
 private fun ObserveContent(
     config: ObserveConfig?,
     sessionRunning: Boolean,
+    /** The session asked for the identity frame and the phone is not putting it on air. */
+    silent: Boolean,
     count: Int,
     recorded: Int,
     required: Int,
@@ -176,6 +191,18 @@ private fun ObserveContent(
                     "Retry the instrument from the warning banner, or tell the operator.",
                 Color(0xFFFEE2E2),
                 Color(0xFF991B1B),
+            )
+
+            // Amber rather than red, and the difference is not decoration. The count still
+            // reaches the timeline and is still worth recording — what it loses is its position,
+            // because nothing on the fleet can hear where the phone was. Telling the participant
+            // to stop would throw away a usable reading; telling them nothing would publish a
+            // set of counts that silently cannot be placed.
+            silent -> ObserveNotice(
+                "Your phone is not on air, so the receivers cannot tell where these counts were " +
+                    "taken. Keep the app open and the screen on. The numbers are still recorded.",
+                Color(0xFFFEF3C7),
+                Color(0xFF92400E),
             )
         }
 

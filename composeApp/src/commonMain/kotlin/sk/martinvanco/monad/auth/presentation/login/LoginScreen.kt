@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -38,6 +40,10 @@ import monad.composeapp.generated.resources.login_screen
 import monad.composeapp.generated.resources.login_screen_forgot_password
 import monad.composeapp.generated.resources.login_screen_login
 import monad.composeapp.generated.resources.login_screen_no_acc
+import monad.composeapp.generated.resources.login_screen_password_help_body
+import monad.composeapp.generated.resources.login_screen_password_help_close
+import monad.composeapp.generated.resources.login_screen_password_help_title
+import monad.composeapp.generated.resources.login_screen_password_help_write
 import monad.composeapp.generated.resources.monad_logo_dark
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
@@ -45,6 +51,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import sk.martinvanco.monad.core.config.AppConfig
 import sk.martinvanco.monad.core.deeplink.PreSessionScreen
 import sk.martinvanco.monad.core.presentation.components.button_primary.ButtonPrimary
 import sk.martinvanco.monad.core.presentation.components.filled_input.FilledInput
@@ -64,6 +71,7 @@ class LoginScreen : Screen, PreSessionScreen {
         val screenModel = koinScreenModel<LoginScreenModel>()
         val state by screenModel.state.collectAsState()
         val keyboardController = LocalSoftwareKeyboardController.current
+        val uriHandler = LocalUriHandler.current
 
         Box(
             modifier = Modifier
@@ -174,6 +182,44 @@ class LoginScreen : Screen, PreSessionScreen {
                     .align(Alignment.BottomCenter)
                     .width(91.dp)
                     .height(30.dp)
+            )
+        }
+
+        if (state.showPasswordHelp) {
+            AlertDialog(
+                onDismissRequest = { screenModel.onEvent(LoginEvent.DismissPasswordHelp) },
+                title = { Text(text = stringResource(Res.string.login_screen_password_help_title)) },
+                text = {
+                    Text(
+                        text = stringResource(
+                            Res.string.login_screen_password_help_body,
+                            AppConfig.SUPPORT_EMAIL,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            // `runCatching` because a handset with no mail client configured
+                            // throws here rather than doing nothing, and a crash on the login
+                            // screen would be a far worse answer than a dialog that just closes.
+                            // The address is in the body text above either way, so somebody whose
+                            // phone cannot open it can still read it and write from elsewhere.
+                            runCatching { uriHandler.openUri("mailto:${AppConfig.SUPPORT_EMAIL}") }
+                            screenModel.onEvent(LoginEvent.DismissPasswordHelp)
+                        }
+                    ) {
+                        Text(text = stringResource(Res.string.login_screen_password_help_write))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { screenModel.onEvent(LoginEvent.DismissPasswordHelp) }
+                    ) {
+                        Text(text = stringResource(Res.string.login_screen_password_help_close))
+                    }
+                },
             )
         }
     }

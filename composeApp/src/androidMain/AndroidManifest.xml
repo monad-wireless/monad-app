@@ -127,6 +127,18 @@
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="messages" />
 
+        <!--
+            Crash reporting is ON by default and the participant can opt out. Stated here so the
+            default is a fact of the build rather than a line of Kotlin somebody has to find, and so
+            it cannot silently disagree with the iOS Info.plist's matching key.
+
+            App.kt re-asserts the answer at every launch, which is what clears the persisted false
+            left by the build that switched collection off at every start. See CrashContext.
+        -->
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="true" />
+
         <!-- Keeps a lab session alive with the screen off. Holds no measurement logic. -->
         <service
             android:name=".lab.service.LabSessionService"

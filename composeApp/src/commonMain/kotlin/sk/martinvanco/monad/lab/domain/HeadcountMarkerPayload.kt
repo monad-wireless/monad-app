@@ -26,6 +26,13 @@ import kotlinx.serialization.Serializable
  * - **A ground truth claim.** [count] is what one person believed they could see.
  *   It is a human reading with human error, not an oracle, and the field name says
  *   `count` rather than `occupancy` for exactly that reason.
+ *
+ * What it DOES carry, as of v2, is [onAir] — whether the identity frame was actually
+ * being broadcast when the participant pressed Record. The fleet's BLE record is what
+ * places this reading, so a reading taken while the phone was silent has no position
+ * and never will. Without the flag that case is indistinguishable from a fleet that
+ * heard nothing, and the two call for opposite responses: one discards the reading,
+ * the other investigates the receivers.
  */
 @Serializable
 data class HeadcountMarkerPayload(
@@ -38,8 +45,17 @@ data class HeadcountMarkerPayload(
     @SerialName("of_readings") val ofReadings: Int,
     /** The question as it was put to them, verbatim — two prompts are two measurements. */
     val prompt: String,
+    /**
+     * Was the identity frame on air at this instant?
+     *
+     * `null` means the question was not recorded, which is every v1 row. It is NOT `false`:
+     * a row written before this field existed says nothing about the radio, and reading its
+     * absence as silence would discard readings that were fine.
+     */
+    @SerialName("on_air") val onAir: Boolean? = null,
 ) {
     companion object {
-        const val SCHEMA: String = "monad-app/headcount-marker/v1"
+        /** v2 (2026-09-18) added [onAir]. A v1 row carries no on-air fact, not a negative one. */
+        const val SCHEMA: String = "monad-app/headcount-marker/v2"
     }
 }

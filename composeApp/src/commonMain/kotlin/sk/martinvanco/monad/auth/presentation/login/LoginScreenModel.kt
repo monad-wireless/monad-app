@@ -22,7 +22,16 @@ class LoginScreenModel(
                 navigationManager.navigateTo(RegisterScreen())
             }
             LoginEvent.ForgotPasswordClick -> {
-                // TODO: Navigate to forgot password screen
+                // Not a navigation. The TODO this replaces waited on a forgot-password SCREEN,
+                // and there is nothing for such a screen to call: `AuthController` has register,
+                // login, account-delete and me, and the project has no mail transport, so a reset
+                // link could not be sent even if an endpoint existed. The admin login reached the
+                // same conclusion and hides its own link (`forgot_password_enabled => false`).
+                // Recovery is the researcher, by hand, so the dialog says so.
+                mutableState.value = state.value.copy(showPasswordHelp = true)
+            }
+            LoginEvent.DismissPasswordHelp -> {
+                mutableState.value = state.value.copy(showPasswordHelp = false)
             }
             LoginEvent.LoginButtonClick -> {
                 login()

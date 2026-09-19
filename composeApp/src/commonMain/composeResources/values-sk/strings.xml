@@ -1,18 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Every key here is rendered by a screen. Ten that were not were deleted on 2026-09-18:
+    app_name, nav_home, nav_back, loading, error, retry, empty_state, no_data_available,
+    create_account_screen_log_in and logo. See the English file for why, and keep the two key
+    sets identical — a key present in one locale and absent from the other falls back silently.
+
+    Slovak is PARTIAL. The IP-151 dwell panel and the password-help dialog are translated; the
+    auth form labels around them are still English, and leaving them as English here rather than
+    deleting them is what keeps the key sets equal.
+-->
 <resources>
-    <!-- App name -->
-    <string name="app_name">Monad</string>
-
-    <!-- Navigation -->
-    <string name="nav_home">Home</string>
-    <string name="nav_back">Back</string>
-
     <!-- Common -->
-    <string name="loading">Loading...</string>
-    <string name="error">Error</string>
-    <string name="retry">Retry</string>
-    <string name="empty_state">No items found</string>
-    <string name="no_data_available">No data available</string>
     <string name="field_label_name">Your name</string>
     <string name="field_label_email">Email</string>
     <string name="field_label_password">Password</string>
@@ -22,16 +20,21 @@
     <string name="login_screen">Login</string>
     <string name="login_screen_login">Login</string>
     <string name="login_screen_forgot_password">Forgot Password?</string>
-    <string name="login_screen_reset_password">Reset Password</string>
     <string name="login_screen_no_acc">No account yet?</string>
-
+    <!--
+        Translated, although the auth screens around it are not yet: this is the one string on
+        the login form that tells a participant what to DO, and the beta signup page they came
+        from (`/join`) is Slovak. %1$s is AppConfig.SUPPORT_EMAIL.
+    -->
+    <string name="login_screen_password_help_title">Zabudli ste heslo?</string>
+    <string name="login_screen_password_help_body">Aplikácia zatiaľ nevie obnoviť heslo. Napíšte na %1$s a váš účet vybavíme ručne.</string>
+    <string name="login_screen_password_help_write">Napísať e-mail</string>
+    <string name="login_screen_password_help_close">Zavrieť</string>
 
     <string name="create_account_screen">Create Account</string>
     <string name="create_account_screen_already_have_acc">Already have an account?</string>
-    <string name="create_account_screen_log_in">Log In</string>
 
     <!-- Top Bar -->
-    <string name="logo">Logo</string>
     <string name="profile">Profil</string>
 
     <!-- IP-151 — jediný panel o účastníkovi. Každé číslo je živý stav výpravy. -->

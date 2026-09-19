@@ -36,6 +36,20 @@ object AppConfig {
     val SITE_URL: String = BASE_URL.replace("://api.", "://")
 
     /**
+     * Where a participant writes when the app cannot help them itself.
+     *
+     * The one address this project shows a participant. It is the same one on the site's privacy
+     * page, on the `/join` signup form and in the consent text the signup stores, and keeping it
+     * the same is the point: somebody who signed up on a web page and is now stuck on this login
+     * form should recognise the address rather than wonder whether they have reached the right
+     * project.
+     *
+     * A constant rather than a string resource, because it is not translated and must not drift
+     * between the two locale files.
+     */
+    const val SUPPORT_EMAIL = "jakub.dubec@stuba.sk"
+
+    /**
      * Request timeout in milliseconds.
      *
      * Deliberately generous compared with a consumer app: a phone joined to an experiment AP

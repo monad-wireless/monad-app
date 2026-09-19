@@ -20,6 +20,22 @@ class SettingsRepository(
         const val KEY_QUEST_COMPLETED_SEEN = "quest_completed_seen"
 
         /**
+         * The participant turned crash reporting OFF. Absent or `false` means it is on.
+         *
+         * An OPT-OUT and not a consent, which is the change of 2026-09-18. It used to be gated on
+         * the onboarding terms step, and the gate did not work: `App()` set Firebase's flag to
+         * `false` at every process start, so the `true` the terms step wrote once survived exactly
+         * until the next launch and nothing was ever reported after that. Collection is now on by
+         * default and this row is the only thing that stops it.
+         *
+         * Stored here rather than left to Firebase's own persisted flag, because the app must
+         * re-assert the answer at every launch to clear the `false` the broken build left behind,
+         * and because Firebase's flag is not readable as a record. That flag is the effect, this
+         * row is the record.
+         */
+        const val KEY_CRASH_REPORTING_OPT_OUT = "crash_reporting_opt_out"
+
+        /**
          * The last `is_operator` this handset was told by `GET /api/auth/me`.
          *
          * Persisted so the first frame after launch already knows which half of the app to draw;
@@ -46,6 +62,15 @@ class SettingsRepository(
 
     suspend fun setOnboardingCompleted(completed: Boolean) = withContext(Dispatchers.IO) {
         setSetting(KEY_ONBOARDING_COMPLETED, completed.toString())
+    }
+
+    /** Fails OPEN: only an explicit stored `true` turns crash reporting off. */
+    suspend fun isCrashReportingOptedOut(): Boolean = withContext(Dispatchers.IO) {
+        getSetting(KEY_CRASH_REPORTING_OPT_OUT) == "true"
+    }
+
+    suspend fun setCrashReportingOptedOut(optedOut: Boolean) = withContext(Dispatchers.IO) {
+        setSetting(KEY_CRASH_REPORTING_OPT_OUT, optedOut.toString())
     }
 
     /** Fails closed: anything other than a stored `true` reads as a plain participant. */

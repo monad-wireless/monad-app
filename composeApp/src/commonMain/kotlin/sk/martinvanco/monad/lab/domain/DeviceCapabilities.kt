@@ -58,6 +58,26 @@ object Capability {
     /** Has a camera usable for QR fixes. */
     const val CAMERA_QR = "camera.qr"
 
+    /**
+     * Can record its own trajectory — visual-inertial odometry for the length of a session.
+     *
+     * **Deliberately independent of [LIDAR_MESH], and that separation is the point.** The mesh
+     * needs LiDAR; the trajectory does not. Every ARKit-capable iPhone tracks, and a non-Pro one
+     * simply falls back to camera and IMU: the scale drifts further and no geometry is exported,
+     * which costs a `mesh.ply` artefact and not the walk. A survey on a phone without LiDAR is a
+     * survey that produces no mesh, not a survey that produces nothing.
+     *
+     * Claimed on the HARDWARE question alone. A revoked camera permission is a runtime refusal
+     * with a reason attached ([PoseTracker.probe] returns `NeedsPermission`), on the same rule
+     * [BLE_ADVERTISE] follows: a transient permission must not silently remove a quest from the
+     * catalogue, because the participant then has nothing to fix and nothing to read.
+     *
+     * Android never claims it. `PoseTracker.android.kt` is a deliberate stub — ARCore needs a
+     * rendering Activity that was never built — so a tracked quest on Android completes normally
+     * and records no trajectory, which is exactly the silent failure this filter exists to stop.
+     */
+    const val POSE_TRACK = "pose.track"
+
     /** Scene-reconstruction-grade depth: ARKit LiDAR mesh, or ARCore depth on capable hardware. */
     const val LIDAR_MESH = "lidar.mesh"
 

@@ -1,21 +1,53 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-    The app's entitlements. Deliberately EMPTY.
+    The app's entitlements.
 
-    This build signs with a free personal team, which can grant none of the four this app once
-    asked for. An entitlement a team cannot grant is a signing failure rather than a runtime one,
-    so they are absent instead of requested. Config.xcconfig lists each one and what its absence
-    costs; the short version is push, Universal Links, joining a Wi-Fi network and reading the
-    SSID back. None of them is needed to record a session.
+    This file was an empty dict for as long as the build signed with a free personal team, which
+    can grant none of these: an entitlement a team cannot grant is a SIGNING failure rather than a
+    runtime one, so they were absent instead of requested. A paid Apple Developer Program
+    membership now exists — App Store Connect holds the app record — so the two this app actually
+    needs are requested again. Config.xcconfig carries the full history and the two that stay out.
 
-    This file replaced a pair — iosApp.entitlements asking for all four, and
-    iosApp-personal.entitlements holding an empty dict — selected by a gitignored override. With
-    one team there is one answer, so there is one file.
+    aps-environment
+        Required for ANY push on iOS. FirebaseMessaging and kmpNotifier are already wired in
+        iOSApp.swift and in the shared code, and without this line they have no APNs token to
+        register, so IP-157's push half was dead on iPhone while the in-app inbox (which polls
+        GET /api/me/notifications over plain HTTP and needs no entitlement) kept working.
 
-    Live Activities need nothing here. The check-in widget is started and updated by the app
-    itself (MonadPresenceBridge), not pushed to, so it works on this signing path.
+        The value is `development` on purpose. Xcode substitutes `production` when it exports an
+        archive against a distribution profile, which is what a TestFlight or App Store build is,
+        so writing `production` here would only break the debug build on a cable.
+
+        Firebase also needs an APNs authentication key (.p8) uploaded to the monad-count project,
+        or the token is registered and no message is ever delivered.
+
+    com.apple.developer.associated-domains
+        Two claims on one domain, both already served by monad.dubec.dev:
+
+          applinks:        a printed marker scanned with the CAMERA app opens the app instead of
+                           Safari. The claimed paths are /d/* (fleet device labels) and /m/* (lab
+                           marker cards); the in-app scanner never depended on this.
+          webcredentials:  a password saved for monad.dubec.dev is offered on the login screen and
+                           saved back under the domain's name rather than an opaque bundle id.
+
+        The domain's half of both claims is
+        /.well-known/apple-app-site-association, served by monad_knowledge.web.routes.applinks.
+        IT IS AN EMPTY CLAIM UNTIL `web.applinks.ios_app_ids` IS SET IN config.toml AND THE SITE IS
+        RELEASED. An empty claim fails silently on the handset, so check the served file before
+        blaming the entitlement.
+
+    Live Activities need nothing here. The check-in widget is started and updated by the app itself
+    (MonadPresenceBridge), not pushed to, so it works on any signing path.
 -->
 <plist version="1.0">
-<dict/>
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:monad.dubec.dev</string>
+		<string>webcredentials:monad.dubec.dev</string>
+	</array>
+</dict>
 </plist>

@@ -35,6 +35,13 @@ actual suspend fun detectCapabilities(): DeviceCapabilities {
     if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
         tokens += Capability.CAMERA_QR
     }
+
+    // Capability.POSE_TRACK is NOT claimed, and its absence is the whole point. ARCore could
+    // produce the same six-degree-of-freedom stream ARKit does, but `PoseTracker.android.kt` is a
+    // deliberate stub: the session must be driven from a GL surface, which is a rendering Activity
+    // nobody has written. An Android handset claiming this token would be offered a tracked survey,
+    // walk all twenty stops, and upload a session with an empty pose stream — a run that looks
+    // complete and is missing the measurement. Add it in the same commit that lands the Activity.
     if (pm.hasSystemFeature(PackageManager.FEATURE_SENSOR_BAROMETER)) {
         tokens += Capability.BAROMETER
     }
