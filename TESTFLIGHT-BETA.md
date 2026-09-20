@@ -154,19 +154,22 @@ the app prompts for none of them.
 | Key | Referenced by | Answer |
 |---|---|---|
 | `NSNearbyInteractionUsageDescription` | `NISession.isSupported()` in `HandsetDescriptor.ios.kt` and `SensorModules.ios.kt` | **Added.** Blocking. |
-| `NSLocationWhenInUseUsageDescription` | `CLLocationManager.headingAvailable()` | Deliberately absent. |
-| `NSLocationAlwaysAndWhenInUseUsageDescription` | the same | Deliberately absent. |
+| `NSLocationWhenInUseUsageDescription` | `CLLocationManager.headingAvailable()` | **Reference deleted** on build 8. |
+| `NSLocationAlwaysAndWhenInUseUsageDescription` | the same one line | **Reference deleted** on build 8. |
 
-The location pair was a warning, not a requirement, and the answer is no. iOS location was removed
-on 2026-08-26 with the beacon witness, the only reference left is a static magnetometer check that
-asks for nothing, and the consent copy a participant agrees to promises no location of any kind. A
-purpose string claiming otherwise would have the app contradict its own consent text to silence a
-warning Apple does not require fixing.
+Build 7 was accepted and still carried the location pair as warnings. Rather than write two purpose
+strings that would have the Info.plist contradict the consent copy — which promises no location of
+any kind — the one line that caused them was deleted. `HandsetDescriptor.ios.kt` no longer reports a
+`heading` sensor fact.
 
-That is a decision with a cost attached. If Apple ever promotes those two from warning to error, the
-choice is to add the strings **and** fix the consent copy, or to delete the `headingAvailable()`
-probe and lose a real field from the handset descriptor. Restoring iOS beacon witnessing (Phase 5)
-settles it the other way and brings the whole set back at once.
+The cost is close to nothing. `magnetometer`, read through CoreMotion two lines above it, is the same
+physical fact and needs no purpose string. The backend stores `sensors` verbatim and validates only
+that it is a list (`App\Quest\HandsetDescriptor`), and "unknown is absent" is already the contract,
+so a descriptor without `heading` is legal rather than broken. Only iOS descriptors change; Android
+is untouched.
+
+Restoring iOS beacon witnessing (Phase 5) reverses all of it at once: the Always permission, the
+`location` background mode, both purpose strings, the probe, and an edit to the consent copy.
 
 ### 4.2 Test Information, on the TestFlight tab
 

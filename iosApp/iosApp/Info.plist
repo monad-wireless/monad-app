@@ -67,18 +67,19 @@
 	    for permission, so no prompt will ever show this sentence. It is written to be true anyway,
 	    in case the ranging half is ever built.
 
-	    TWO LOCATION STRINGS ARE DELIBERATELY ABSENT, and the same email asked for them as warnings:
-	    `NSLocationWhenInUseUsageDescription` and `NSLocationAlwaysAndWhenInUseUsageDescription`.
-	    Same cause, opposite answer. The only CoreLocation reference left on iOS is
-	    `CLLocationManager.headingAvailable()`, a static magnetometer check that asks for nothing,
-	    and the location capability was REMOVED on 2026-08-26 (`BeaconWitness.ios.kt` carries the
-	    reasoning and what it cost). The consent copy a participant agrees to promises no location of
-	    any kind. A purpose string claiming otherwise would be the app contradicting its own consent
-	    text to silence a warning Apple does not require fixing.
+	    TWO LOCATION STRINGS ARE ABSENT BECAUSE THE CODE THAT ASKED FOR THEM IS GONE.
+	    `NSLocationWhenInUseUsageDescription` and `NSLocationAlwaysAndWhenInUseUsageDescription` were
+	    warned about on builds 6 and 7, both times because of ONE line:
+	    `CLLocationManager.headingAvailable()` in `HandsetDescriptor.ios.kt`, a static magnetometer
+	    check that asks the user for nothing. Writing those strings would have this file contradict
+	    the consent copy, which promises no location of any kind, so the reference was deleted
+	    instead. `magnetometer` from CoreMotion is the same physical fact and needs no string.
 
-	    Restoring iOS beacon witnessing (Phase 5) brings all of it back together: the Always
-	    permission, the `location` background mode, both strings, and an edit to the consent copy.
-	    That is one deliberate decision, not four drifted settings.
+	    iOS location was removed with the beacon witness on 2026-08-26 (`BeaconWitness.ios.kt` has the
+	    reasoning and the cost). Restoring iOS beacon witnessing (Phase 5) brings all of it back
+	    together: the Always permission, the `location` background mode, both strings, the
+	    `headingAvailable` probe, and an edit to the consent copy. One deliberate decision, not five
+	    drifted settings.
 	-->
 	<key>NSNearbyInteractionUsageDescription</key>
 	<string>MonadCount records whether this iPhone supports ultra-wideband ranging, as one line of the device description saved with a measurement session. The app does not range to other devices.</string>

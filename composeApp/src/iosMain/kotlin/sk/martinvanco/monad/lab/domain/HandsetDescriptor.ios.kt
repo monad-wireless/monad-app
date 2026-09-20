@@ -9,7 +9,6 @@ import kotlinx.cinterop.ptr
 import kotlinx.cinterop.toKString
 import platform.ARKit.ARSceneReconstructionMesh
 import platform.ARKit.ARWorldTrackingConfiguration
-import platform.CoreLocation.CLLocationManager
 import platform.CoreMotion.CMAltimeter
 import platform.CoreMotion.CMMotionManager
 import platform.Foundation.NSNumber
@@ -67,7 +66,7 @@ private fun processInfoInt(key: String): Int? = runCatching {
  *
  * What iOS can say and what it cannot, honestly: the machine identifier through `utsname`, the OS
  * build out of `operatingSystemVersionString`; per-subsystem availability flags through CoreMotion,
- * CoreLocation, NearbyInteraction and ARKit; thermal and power state through `NSProcessInfo` (KVC). NO radio block — iOS publishes no
+ * NearbyInteraction and ARKit (NOT CoreLocation — see the `heading` note below); thermal and power state through `NSProcessInfo` (KVC). NO radio block — iOS publishes no
  * BLE PHY set and no Wi-Fi standard support API, so `radio` stays `{}` and the admin says so.
  * The battery level needs monitoring switched on for the one read and is restored after it.
  */
@@ -85,8 +84,25 @@ actual suspend fun describeHandset(handsetId: String): HandsetDescriptor {
         }
         runCatching { CMAltimeter.isRelativeAltitudeAvailable() }.getOrNull()
             ?.let { add(SensorFact("barometer", available = it)) }
-        runCatching { CLLocationManager.headingAvailable() }.getOrNull()
-            ?.let { add(SensorFact("heading", available = it)) }
+        // NO `heading` FACT ON iOS, and the reason is App Review rather than the sensor.
+        //
+        // It came from `CLLocationManager.headingAvailable()`, a static call that asks the user for
+        // nothing. Apple's validator demands a purpose string for the REFERENCE, so this one line
+        // earned two ITMS-90683 warnings on every upload: NSLocationWhenInUseUsageDescription and
+        // NSLocationAlwaysAndWhenInUseUsageDescription. The app requests neither permission, iOS
+        // location was removed with the beacon witness on 2026-08-26, and the consent copy a
+        // participant agrees to promises no location of any kind — so writing those strings would
+        // have the Info.plist contradict the consent text to silence a warning.
+        //
+        // It costs almost nothing. `magnetometer` two lines above is the same physical fact read
+        // through CoreMotion, which needs no purpose string: an iPhone with a magnetometer has a
+        // heading. The backend stores `sensors` verbatim and validates only that it is a list
+        // (`App\Quest\HandsetDescriptor`), and "unknown is absent" is already the contract, so an
+        // absent fact is a legal descriptor rather than a broken one.
+        //
+        // Restoring iOS beacon witnessing (Phase 5) brings location back deliberately: the Always
+        // permission, the `location` background mode, both purpose strings, the consent copy, and
+        // this line with them.
         runCatching { NISession.isSupported() }.getOrNull()
             ?.let { add(SensorFact("uwb", available = it)) }
         runCatching { ARWorldTrackingConfiguration.supportsSceneReconstruction(ARSceneReconstructionMesh) }.getOrNull()
