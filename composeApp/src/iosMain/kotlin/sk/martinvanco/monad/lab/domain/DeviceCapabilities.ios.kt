@@ -25,6 +25,8 @@ actual suspend fun detectCapabilities(): DeviceCapabilities {
         Capability.BLE_ADVERTISE,
         Capability.CAMERA_QR,
         Capability.BAROMETER,
+        // Software, not hardware: this build carries the v3 sweep code (IP-162).
+        Capability.OBSERVE_ROOM_SWEEP,
         // BLE_WITNESS and BACKGROUND_RESIDENCY are NOT claimed here any more (2026-08-26).
         //
         // On iOS they were the same capability — one CoreLocation beacon session served as both —

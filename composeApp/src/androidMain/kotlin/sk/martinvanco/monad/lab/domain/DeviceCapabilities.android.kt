@@ -23,6 +23,8 @@ actual suspend fun detectCapabilities(): DeviceCapabilities {
     // minSdk is 29, so WifiNetworkSpecifier + Network.bindSocket are always present.
     tokens += Capability.WIFI_ASSOCIATE
     tokens += Capability.BACKGROUND_RESIDENCY
+    // Software, not hardware: this build carries the v3 sweep code (IP-162).
+    tokens += Capability.OBSERVE_ROOM_SWEEP
 
     if (pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
         tokens += Capability.BLE_WITNESS

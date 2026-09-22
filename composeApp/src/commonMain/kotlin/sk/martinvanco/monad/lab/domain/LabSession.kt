@@ -347,10 +347,24 @@ object LabArtefact {
     const val CLOCK = "clock.tsv"
 
     /**
+     * The raw four-stamp exchanges every burst in `clock.tsv` was reduced from, plus the attempts
+     * that produced none (IP-162). `clock.tsv` is the estimate; this is its evidence.
+     */
+    const val CLOCK_EXCHANGES = "clock-exchanges.tsv"
+
+    /**
      * Step boundaries and their experimental condition. Without this the other streams are a
      * continuous recording with no machine-readable record of which part was which take.
      */
     const val MARKERS = "markers.tsv"
+
+    /**
+     * `monad-lab/evidence-manifest/v1` (IP-162): the sealed inventory of this recording's uploaded
+     * bytes, each named with its SHA-256. Written only for a recording that carries a v3 sweep
+     * event, after every stream and blob and before the sidecar, so the backend can verify every
+     * listed hash against what it holds and seal the recording once.
+     */
+    const val EVIDENCE_MANIFEST = "evidence-manifest.json"
 
     /**
      * Ground truth: who was in the room, by explicit human act.
@@ -416,7 +430,7 @@ object LabArtefact {
     const val WORLD_MAP = "worldmap.armap"
 
     val ALL = listOf(
-        SIDECAR, TRAFFIC, BEACONS, TRANSITIONS, CLOCK, MARKERS, HEALTH, POSE, MESH_LOG, MESH,
-        LOG, WORLD_MAP, GROUND_TRUTH,
+        SIDECAR, TRAFFIC, BEACONS, TRANSITIONS, CLOCK, CLOCK_EXCHANGES, MARKERS, HEALTH, POSE,
+        MESH_LOG, MESH, LOG, WORLD_MAP, GROUND_TRUTH, EVIDENCE_MANIFEST,
     )
 }

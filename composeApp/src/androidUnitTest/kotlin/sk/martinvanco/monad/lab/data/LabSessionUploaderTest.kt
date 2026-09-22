@@ -240,6 +240,7 @@ class LabSessionUploaderTest {
                 LabArtefact.BEACONS,
                 LabArtefact.TRANSITIONS,
                 LabArtefact.CLOCK,
+                LabArtefact.CLOCK_EXCHANGES,
                 LabArtefact.MARKERS,
                 LabArtefact.HEALTH,
                 LabArtefact.POSE,

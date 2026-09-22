@@ -78,6 +78,17 @@ object Capability {
      */
     const val POSE_TRACK = "pose.track"
 
+    /**
+     * Can run the IP-162 room-sweep Counting contract: `monad-quest/observe/v2` configs, v3 sweep
+     * events with durable acknowledgement, raw clock exchanges and a sealed evidence manifest.
+     *
+     * A SOFTWARE capability, claimed by every build that carries this code and by no earlier one.
+     * The backend enforces it on listing AND on start, so a handset running the previous build is
+     * never served a sweep quest it would render as five partial views. It finishes its legacy
+     * enrollment and uploads legacy payloads instead.
+     */
+    const val OBSERVE_ROOM_SWEEP = "observe.room_sweep.v1"
+
     /** Scene-reconstruction-grade depth: ARKit LiDAR mesh, or ARCore depth on capable hardware. */
     const val LIDAR_MESH = "lidar.mesh"
 

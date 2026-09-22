@@ -54,6 +54,26 @@ CREATE TABLE IF NOT EXISTS ClockSampleRecord (
 
 CREATE INDEX IF NOT EXISTS idx_clock_session ON ClockSampleRecord(sessionId);
 
+-- Raw clock exchanges (IP-162): the four stamps every burst was reduced from, and the attempts
+-- that produced none. ClockSampleRecord above keeps the estimate; this keeps its evidence, so a
+-- reader can re-run the minimum-delay selection and check the fit rather than trust it. A failed
+-- attempt is a row with NULL stamps and a reason, never a row with invented stamps.
+CREATE TABLE IF NOT EXISTS ClockExchangeRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    burstId TEXT NOT NULL,
+    source TEXT NOT NULL,
+    t1Ns INTEGER,
+    t2Ns INTEGER,
+    t3Ns INTEGER,
+    t4Ns INTEGER,
+    valid INTEGER NOT NULL,
+    kept INTEGER NOT NULL,
+    reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_clock_exchange_session ON ClockExchangeRecord(sessionId);
+
 
 -- Pose track: where the phone was, sampled.
 --
@@ -242,6 +262,20 @@ SELECT COUNT(*) FROM ClockSampleRecord WHERE sessionId = ?;
 
 deleteClockBySession:
 DELETE FROM ClockSampleRecord WHERE sessionId = ?;
+
+-- Raw clock exchanges
+insertClockExchange:
+INSERT INTO ClockExchangeRecord(sessionId, burstId, source, t1Ns, t2Ns, t3Ns, t4Ns, valid, kept, reason)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectClockExchangesBySession:
+SELECT * FROM ClockExchangeRecord WHERE sessionId = ? ORDER BY id ASC;
+
+countClockExchangesBySession:
+SELECT COUNT(*) FROM ClockExchangeRecord WHERE sessionId = ?;
+
+deleteClockExchangesBySession:
+DELETE FROM ClockExchangeRecord WHERE sessionId = ?;
 
 -- Markers
 insertMarker:

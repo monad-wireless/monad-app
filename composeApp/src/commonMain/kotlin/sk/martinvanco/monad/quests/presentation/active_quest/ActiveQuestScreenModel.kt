@@ -90,7 +90,8 @@ class ActiveQuestScreenModel(
                             } catch (e: Exception) {
                                 null // Ignore invalid JSON config
                             }
-                        }
+                        },
+                        stepCompletionId = step.backendId,
                     )
                 }
 
@@ -373,7 +374,8 @@ class ActiveQuestScreenModel(
                     },
                     config = step.stepConfig?.let {
                         kotlinx.serialization.json.Json.parseToJsonElement(it)
-                    }
+                    },
+                    stepCompletionId = step.backendId,
                 )
             }
             val allCompleted = steps.isNotEmpty() && steps.all { it.status == "completed" }

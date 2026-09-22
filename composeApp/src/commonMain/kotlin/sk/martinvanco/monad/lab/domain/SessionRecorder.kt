@@ -44,6 +44,13 @@ interface SessionRecorder {
     suspend fun appendClock(sessionId: String, estimate: ClockEstimate)
 
     /**
+     * Append one burst's raw exchanges (IP-162). Batched per burst, one transaction, so a burst is
+     * either wholly in the record or wholly absent — half a burst would re-reduce to a different
+     * estimate than the one `clock.tsv` carries.
+     */
+    suspend fun appendClockExchanges(sessionId: String, burst: ClockBurstRecord)
+
+    /**
      * Append a batch of poses.
      *
      * Batched, unlike every other append here, because this stream is paced rather than
@@ -149,6 +156,8 @@ data class SessionCounts(
      */
     val waypoints: Long = 0,
     val clock: Long = 0,
+    /** Rows in `clock-exchanges.tsv`: raw four-stamp exchanges and failed attempts (IP-162). */
+    val clockExchanges: Long = 0,
     val health: Long = 0,
     /** Rows in `pose.tsv`. */
     val pose: Long = 0,

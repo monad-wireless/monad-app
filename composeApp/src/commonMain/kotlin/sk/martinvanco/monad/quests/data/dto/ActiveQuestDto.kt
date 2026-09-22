@@ -13,7 +13,13 @@ data class ActiveTaskDto(
     val description: String,
     val type: TaskType,
     val status: TaskStatus,
-    val config: JsonElement? = null // Dynamic config based on task type
+    val config: JsonElement? = null, // Dynamic config based on task type
+    /**
+     * The backend's completion row for this step, minted at quest start (IP-162). A v3 sweep event
+     * carries it verbatim, so the evidence names the step it belongs to rather than an ordinal.
+     * Null only for a task built without a step row, which no quest screen does.
+     */
+    @SerialName("step_completion_id") val stepCompletionId: String? = null,
 )
 
 /**

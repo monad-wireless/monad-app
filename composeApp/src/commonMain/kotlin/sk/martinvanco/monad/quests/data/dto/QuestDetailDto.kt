@@ -315,7 +315,71 @@ data class ObserveConfig(
      * that no survey supports, and the widget would enforce it silently.
      */
     @SerialName("max_count") val maxCount: Int? = null,
-) : TaskConfig
+    /**
+     * IP-162: `monad-quest/observe/v2` names the room-sweep contract. Absent on every snapshot
+     * frozen before it, which is the legacy partial-view contract above — never a sweep.
+     */
+    val schema: String? = null,
+    /** `room_sweep_cumulative`, the one mode v2 defines. Anything else is refused on this client. */
+    val mode: String? = null,
+    @SerialName("protocol_id") val protocolId: String? = null,
+    /** Digest of the frozen protocol; every v3 event repeats it so a run names the rules it ran under. */
+    @SerialName("protocol_sha256") val protocolSha256: String? = null,
+    /** The rooms a participant may select at sweep start. One room is preselected and confirmed. */
+    val rooms: List<SweepRoom> = emptyList(),
+    val checkpoints: SweepCheckpointPolicy? = null,
+    @SerialName("observer_convention") val observerConvention: String? = null,
+) : TaskConfig {
+
+    /** A v2 room sweep this build knows how to run. */
+    val isSweep: Boolean
+        get() = schema == SWEEP_SCHEMA && mode == SWEEP_MODE
+
+    /** No schema at all: the pre-IP-162 partial-view contract. */
+    val isLegacy: Boolean get() = schema == null
+
+    /**
+     * A schema or mode this build does not know. Neither legacy nor sweep: the step refuses to
+     * run rather than guess which of two measurements the author meant.
+     */
+    val isUnsupported: Boolean get() = !isLegacy && !isSweep
+
+    /** What a sweep step is missing before it can start, empty when nothing. */
+    fun sweepProblems(): List<String> {
+        if (!isSweep) return emptyList()
+        val out = mutableListOf<String>()
+        if (protocolId.isNullOrBlank()) out += "protocol_id"
+        if (protocolSha256.isNullOrBlank()) out += "protocol_sha256"
+        if (rooms.isEmpty()) out += "rooms"
+        if (checkpoints == null) out += "checkpoints"
+        if (observerConvention != OBSERVER_EXCLUDE_SELF) out += "observer_convention"
+        if (prompt.isBlank()) out += "prompt"
+        return out
+    }
+
+    companion object {
+        const val SWEEP_SCHEMA = "monad-quest/observe/v2"
+        const val SWEEP_MODE = "room_sweep_cumulative"
+        const val OBSERVER_EXCLUDE_SELF = "exclude_self"
+    }
+}
+
+/** One room a sweep may cover, as the quest builder froze it from GIS. The phone never authors one. */
+@Serializable
+data class SweepRoom(
+    @SerialName("room_id") val roomId: String,
+    @SerialName("floor_id") val floorId: String,
+    val label: String,
+    @SerialName("geometry_version") val geometryVersion: String,
+    @SerialName("coverage_version") val coverageVersion: String,
+    @SerialName("coverage_instructions") val coverageInstructions: String,
+)
+
+@Serializable
+data class SweepCheckpointPolicy(
+    @SerialName("min_checkpoints") val minCheckpoints: Int = 0,
+    @SerialName("required_for_complete") val requiredForComplete: Boolean = false,
+)
 
 /**
  * Configuration for `connect_to_ap`.

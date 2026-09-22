@@ -435,7 +435,9 @@ sqldelight {
             //      sentence that explains a failure survives the process that said it
             // 14 — NotificationRecord: the inbox cache (IP-157), so the unread badge and the
             //      list are answerable on a phone with no route out
-            version = 15
+            // 15 — ClockExchangeRecord (IP-162): the raw four-stamp exchanges every clock burst was
+            //      reduced from, so the phone-to-fleet clock fit can be verified rather than trusted
+            version = 16
         }
     }
 }

@@ -3,11 +3,17 @@ package sk.martinvanco.monad.lab.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import sk.martinvanco.monad.Database
 import sk.martinvanco.monad.LabSessionRecord
 import sk.martinvanco.monad.core.config.AppConfig
 import sk.martinvanco.monad.lab.domain.BeaconObservation
+import sk.martinvanco.monad.lab.domain.ClockBurstRecord
 import sk.martinvanco.monad.lab.domain.ClockEstimate
+import sk.martinvanco.monad.lab.domain.HeadcountSweepEvent
 import sk.martinvanco.monad.lab.domain.SessionStatus
 import sk.martinvanco.monad.lab.domain.TrafficSample
 import sk.martinvanco.monad.lab.domain.InstrumentLogEntry
@@ -329,6 +335,64 @@ class LabSessionRepository(
             )
         }
 
+    override suspend fun appendClockExchanges(sessionId: String, burst: ClockBurstRecord) =
+        withContext(Dispatchers.IO) {
+            samples.transaction {
+                burst.exchanges.forEach { exchange ->
+                    samples.insertClockExchange(
+                        sessionId = sessionId,
+                        burstId = burst.burstId,
+                        source = burst.source,
+                        t1Ns = exchange.t1Nanos,
+                        t2Ns = exchange.t2Nanos,
+                        t3Ns = exchange.t3Nanos,
+                        t4Ns = exchange.t4Nanos,
+                        valid = 1,
+                        kept = if (burst.keptT4Nanos == exchange.t4Nanos) 1 else 0,
+                        reason = null,
+                    )
+                }
+                burst.failures.forEach { reason ->
+                    samples.insertClockExchange(
+                        sessionId = sessionId,
+                        burstId = burst.burstId,
+                        source = burst.source,
+                        t1Ns = null,
+                        t2Ns = null,
+                        t3Ns = null,
+                        t4Ns = null,
+                        valid = 0,
+                        kept = 0,
+                        reason = reason,
+                    )
+                }
+            }
+        }
+
+    /**
+     * The v3 sweep events this recording holds, in marker order, each with its envelope `mono_ns`
+     * (IP-162). Legacy and foreign payloads are skipped by [HeadcountSweepEvent.parse]; the rows
+     * themselves stay in `markers.tsv`.
+     */
+    suspend fun sweepEvents(sessionId: String): List<Pair<Long, HeadcountSweepEvent>> = withContext(Dispatchers.IO) {
+        samples.markersForSession(sessionId).executeAsList()
+            .filter { it.kind == SessionMarker.Kind.HEADCOUNT.wire }
+            .mapNotNull { row -> HeadcountSweepEvent.parse(row.payload)?.let { row.monoNs to it } }
+    }
+
+    /** Every distinct `schema` string carried by a headcount payload in this recording. */
+    suspend fun headcountPayloadSchemas(sessionId: String): Set<String> = withContext(Dispatchers.IO) {
+        samples.markersForSession(sessionId).executeAsList()
+            .filter { it.kind == SessionMarker.Kind.HEADCOUNT.wire }
+            .mapNotNull { row ->
+                runCatching {
+                    (Json.parseToJsonElement(row.payload ?: return@mapNotNull null) as? JsonObject)
+                        ?.get("schema")?.jsonPrimitive?.contentOrNull
+                }.getOrNull()
+            }
+            .toSet()
+    }
+
     /** Append a labelled point to the session timeline. See [SessionMarker]. */
     override suspend fun appendMarker(sessionId: String, marker: SessionMarker) =
         withContext(Dispatchers.IO) {
@@ -384,6 +448,7 @@ class LabSessionRepository(
             blocks = samples.countBlockMarkersBySession(sessionId).executeAsOne(),
             waypoints = samples.countWaypointMarkersBySession(sessionId).executeAsOne(),
             clock = samples.countClockBySession(sessionId).executeAsOne(),
+            clockExchanges = samples.countClockExchangesBySession(sessionId).executeAsOne(),
             health = samples.countHealthBySession(sessionId).executeAsOne(),
             pose = samples.countPoseBySession(sessionId).executeAsOne(),
             poseNormal = samples.countPoseNormalBySession(sessionId).executeAsOne(),
@@ -622,6 +687,25 @@ class LabSessionRepository(
     }
 
     /**
+     * `clock-exchanges.tsv` (IP-162): one row per exchange attempt, in burst order. A failed attempt
+     * has empty stamp columns and a reason; `kept` marks the exchange the minimum-delay filter
+     * selected, so the estimate in `clock.tsv` can be reproduced from this file alone.
+     */
+    suspend fun clockExchangesTsv(sessionId: String): ByteArray = withContext(Dispatchers.IO) {
+        val rows = samples.selectClockExchangesBySession(sessionId).executeAsList()
+        buildString {
+            appendLine("burst_id\tsource\tt1_ns\tt2_ns\tt3_ns\tt4_ns\tvalid\tkept\treason")
+            rows.forEach {
+                val reason = (it.reason ?: "").replace("\t", " ").replace("\n", " ").replace("\r", "")
+                appendLine(
+                    "${it.burstId}\t${it.source}\t${it.t1Ns ?: ""}\t${it.t2Ns ?: ""}\t${it.t3Ns ?: ""}\t" +
+                        "${it.t4Ns ?: ""}\t${it.valid}\t${it.kept}\t$reason"
+                )
+            }
+        }.encodeToByteArray()
+    }
+
+    /**
      * Delete a session and its samples. Refuses unless the session is already `uploaded` — the one
      * rule this whole class exists to enforce.
      */
@@ -754,6 +838,7 @@ class LabSessionRepository(
             samples.deleteTransitionsBySession(sessionId)
             samples.deleteClockBySession(sessionId)
             samples.deleteMarkersForSession(sessionId)
+            samples.deleteClockExchangesBySession(sessionId)
             samples.deleteHealthBySession(sessionId)
             samples.deletePoseBySession(sessionId)
             samples.deleteMeshBySession(sessionId)
@@ -772,6 +857,7 @@ class LabSessionRepository(
             samples.deleteTransitionsBySession(sessionId)
             samples.deleteClockBySession(sessionId)
             samples.deleteMarkersForSession(sessionId)
+            samples.deleteClockExchangesBySession(sessionId)
             samples.deleteHealthBySession(sessionId)
             samples.deletePoseBySession(sessionId)
             samples.deleteMeshBySession(sessionId)

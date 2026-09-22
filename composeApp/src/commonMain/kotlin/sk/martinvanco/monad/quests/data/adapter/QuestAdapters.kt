@@ -1,7 +1,13 @@
 package sk.martinvanco.monad.quests.data.adapter
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import sk.martinvanco.monad.auth.data.repository.UserRepository
+import sk.martinvanco.monad.lab.domain.CanonicalJson
+import sk.martinvanco.monad.lab.domain.SnapshotDigestSource
 import sk.martinvanco.monad.home.data.api.QuestsService
 import sk.martinvanco.monad.lab.data.LabConfigService
 import sk.martinvanco.monad.lab.data.LabSessionRepository
@@ -142,4 +148,39 @@ class QuestStepJournalAdapter(
         }
 
     override suspend fun clear(enrollmentId: String) = steps.deleteByEnrollmentId(enrollmentId)
+}
+
+/**
+ * The frozen step snapshot's digest for the IP-162 evidence manifest.
+ *
+ * Hashes the canonical JSON of `[{order, type, name, config}, …]` over the enrollment's step rows
+ * as the start response froze them. The same rows the completion submission reads, so the digest
+ * names exactly the configuration the participant ran and nothing the quest was edited to since.
+ */
+class EnrollmentSnapshotDigestAdapter(
+    private val steps: QuestStepCompletionRepository,
+) : SnapshotDigestSource {
+
+    override suspend fun snapshotSha256(enrollmentId: String): String? {
+        val rows = steps.getByEnrollmentId(enrollmentId).sortedBy { it.stepOrder }
+        if (rows.isEmpty()) return null
+        val snapshot = JsonArray(
+            rows.map { row ->
+                JsonObject(
+                    mapOf(
+                        "order" to JsonPrimitive(row.stepOrder),
+                        "type" to JsonPrimitive(row.stepType),
+                        "name" to JsonPrimitive(row.stepName),
+                        "config" to (
+                            row.stepConfig?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }
+                                ?: JsonNull
+                            ),
+                    ),
+                )
+            },
+        )
+        // A config that carries a floating-point number cannot be canonicalised; the manifest then
+        // has no snapshot digest rather than a made-up one.
+        return runCatching { CanonicalJson.sha256(snapshot) }.getOrNull()
+    }
 }

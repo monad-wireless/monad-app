@@ -7,7 +7,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.core.util.currentTimeMillis
+import sk.martinvanco.monad.lab.domain.EvidenceManifest
 import sk.martinvanco.monad.lab.domain.LabArtefact
+import sk.martinvanco.monad.lab.domain.SealedArtefact
+import sk.martinvanco.monad.lab.domain.Sha256
+import sk.martinvanco.monad.lab.domain.SnapshotDigestSource
 import sk.martinvanco.monad.lab.domain.upload.ArtefactOutcome
 import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
 import sk.martinvanco.monad.lab.domain.upload.FlushReport
@@ -65,6 +69,12 @@ class LabSessionUploader(
      * `uploadError` a stuck session leaves behind. `null` in tests, where there is nothing to ship to.
      */
     private val telemetry: LabTelemetryShipper? = null,
+    /**
+     * Where the IP-162 evidence manifest gets `snapshot_sha256`. `null` in tests and on a build
+     * that has no quest journal to ask; a recording with sweep events then uploads no manifest and
+     * the backend reports it pending rather than sealed.
+     */
+    private val snapshots: SnapshotDigestSource? = null,
 ) {
     private val _progress = MutableStateFlow<UploadProgress?>(null)
     val progress: StateFlow<UploadProgress?> = _progress.asStateFlow()
@@ -259,6 +269,9 @@ class LabSessionUploader(
 
         val counts = repository.counts(sessionId)
         val outcomes = mutableListOf<ArtefactOutcome>()
+        // What went up, hashed as the bytes that went up (IP-162). Only consulted when the
+        // recording carries a v3 sweep event; for every other session it is computed and dropped.
+        val sealed = mutableListOf<SealedArtefact>()
 
         /**
          * One stream. Rendered lazily, one at a time: a thirty-minute session at 200 Hz is ~360 000
@@ -271,16 +284,20 @@ class LabSessionUploader(
             contentType: String = TSV,
             render: suspend () -> ByteArray,
         ): Boolean {
+            val content = render()
             val outcome = attempt(
                 sessionId = sessionId,
                 artefact = artefact,
                 rows = rows,
-                content = render(),
+                content = content,
                 contentType = contentType,
                 token = token,
                 participantId = record.participantId,
                 site = record.site.orEmpty(),
             )
+            if (outcome.succeeded) {
+                sealed += SealedArtefact(artefact, Sha256.hex(content), content.size.toLong(), contentType)
+            }
             outcomes += outcome
             if (!outcome.succeeded) {
                 // Stop at the first failure so the sidecar is never uploaded over an incomplete
@@ -297,6 +314,7 @@ class LabSessionUploader(
         if (!step(LabArtefact.BEACONS, counts.beacons) { repository.beaconsTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.TRANSITIONS, counts.transitions) { repository.transitionsTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.CLOCK, counts.clock) { repository.clockTsv(sessionId) }) return outcomes
+        if (!step(LabArtefact.CLOCK_EXCHANGES, counts.clockExchanges) { repository.clockExchangesTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.MARKERS, counts.markers) { repository.markersTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.HEALTH, counts.health) { repository.healthTsv(sessionId) }) return outcomes
         if (!step(LabArtefact.POSE, counts.pose) { repository.poseTsv(sessionId) }) return outcomes
@@ -342,6 +360,61 @@ class LabSessionUploader(
                 repository.markFailed(sessionId, "${blob.name}: ${outcome.error}")
                 Napier.w("[lab] session $sessionId upload failed at ${blob.name}, data retained")
                 return outcomes
+            }
+            // Parted uploads hash the whole object the same way a single body does: the bytes are
+            // read once more here, which for a mesh is tens of megabytes and happens only when the
+            // recording also carries a sweep — a Counting run records no mesh.
+            if (counts.markers > 0) {
+                repository.blobBytes(sessionId, blob.name)?.let { bytes ->
+                    sealed += SealedArtefact(blob.name, Sha256.hex(bytes), bytes.size.toLong(), blob.contentType)
+                }
+            }
+        }
+
+        // The evidence manifest (IP-162): after every artefact it names, before the sidecar that
+        // marks the prefix complete. Only for a recording carrying a v3 sweep event; a walk or a
+        // legacy Counting run uploads exactly what it always did.
+        val sweepEvents = repository.sweepEvents(sessionId).map { it.second }
+        if (sweepEvents.isNotEmpty()) {
+            val enrollmentId = record.enrollmentId ?: sweepEvents.first().enrollmentId
+            val snapshotSha256 = snapshots?.snapshotSha256(enrollmentId)
+            // The sidecar goes up AFTER the manifest by contract (its presence marks the prefix
+            // complete), but its bytes are already final here, so the manifest names them: the
+            // backend verifies the hash once metadata.json lands.
+            val sidecarBytes = sidecar.encodeToByteArray()
+            val manifest = snapshotSha256?.let {
+                EvidenceManifest.build(
+                    sidecarJson = sidecar,
+                    events = sweepEvents,
+                    payloadSchemas = repository.headcountPayloadSchemas(sessionId),
+                    artefacts = sealed.toList() +
+                        SealedArtefact(LabArtefact.SIDECAR, Sha256.hex(sidecarBytes), sidecarBytes.size.toLong(), JSON),
+                    snapshotSha256 = it,
+                )
+            }
+            if (manifest == null) {
+                // Not a failure of the upload: the streams are up and the sidecar will follow. The
+                // backend sees a recording with sweep events and no seal, and reports it pending.
+                Napier.w(
+                    "[lab] session $sessionId carries ${sweepEvents.size} sweep event(s) but no manifest " +
+                        "could be built (snapshot digest ${if (snapshotSha256 == null) "unavailable" else "present"})"
+                )
+            } else {
+                val manifestOutcome = attempt(
+                    sessionId = sessionId,
+                    artefact = LabArtefact.EVIDENCE_MANIFEST,
+                    rows = sealed.size.toLong(),
+                    content = EvidenceManifest.encode(manifest),
+                    contentType = JSON,
+                    token = token,
+                    participantId = record.participantId,
+                    site = record.site.orEmpty(),
+                )
+                outcomes += manifestOutcome
+                if (!manifestOutcome.succeeded) {
+                    repository.markFailed(sessionId, "${LabArtefact.EVIDENCE_MANIFEST}: ${manifestOutcome.error}")
+                    return outcomes
+                }
             }
         }
 

@@ -44,6 +44,26 @@ data class ClockExchange(
 }
 
 /**
+ * One burst's raw evidence, before the minimum-delay filter reduced it (IP-162).
+ *
+ * `clock.tsv` has always carried the *estimate* — offset, delay, skew, sample count — and not the
+ * exchanges it was reduced from, so a reader could check the fit against itself and nothing else.
+ * This record keeps the four stamps of every exchange, which of them the estimator kept, and every
+ * attempt that produced no exchange, so the burst can be re-reduced offline and the fit verified
+ * rather than believed. Failures are outcomes and are kept as rows with no stamps; nothing here is
+ * ever filled in.
+ */
+data class ClockBurstRecord(
+    val burstId: String,
+    val source: String,
+    val exchanges: List<ClockExchange>,
+    /** `t4` of the exchange the estimator kept, or null when the burst produced none. */
+    val keptT4Nanos: Long?,
+    /** One reason per attempt that produced no exchange. */
+    val failures: List<String>,
+)
+
+/**
  * The estimate the session carries. `offsetNanos` maps device-monotonic → collector-reference:
  *
  * ```

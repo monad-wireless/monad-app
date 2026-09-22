@@ -805,6 +805,41 @@ class LabInstrument(
         note("mark ${kind.wire}: $label")
     }
 
+    /**
+     * [mark], with the outcome handed back instead of logged (IP-162).
+     *
+     * A headcount sweep event is a human's count, and a count the UI advanced past while the append
+     * failed is a number that exists nowhere. So this path returns: `failure` when no session is
+     * running (the marker had nowhere to go) and `failure` when the platform store refused the row,
+     * `success` only after `appendMarker` returned — which is the SQLite insert having committed.
+     * The caller advances its state on success and retries with the **same** event on failure.
+     */
+    suspend fun markDurable(
+        kind: SessionMarker.Kind,
+        label: String,
+        stepId: String? = null,
+        payload: String? = null,
+    ): Result<SessionMarker> {
+        val sessionId = _state.value.sessionId?.takeIf { it.isNotEmpty() }
+            ?: return Result.failure(IllegalStateException("no measurement session is running; the count was not recorded"))
+        val nowNanos = monotonicNanos()
+        val marker = SessionMarker(
+            kind = kind,
+            label = label,
+            stepId = stepId,
+            payload = payload,
+            monotonicNanos = nowNanos,
+            wallMillis = currentTimeMillis(),
+        )
+        return runCatching { repository.appendMarker(sessionId, marker) }
+            .onFailure { Napier.w("[lab] durable marker refused: ${it.message}") }
+            .onSuccess { note("mark ${kind.wire}: $label") }
+            .map { marker }
+    }
+
+    /** The recording this instrument is writing into, or null when none is running. */
+    val recordingSessionId: String? get() = _state.value.sessionId?.takeIf { it.isNotEmpty() }
+
     // ---- identity broadcast -----------------------------------------------------------------
 
     /**
@@ -1539,7 +1574,17 @@ class LabInstrument(
         request: SessionRequest,
         opening: Boolean,
     ) {
-        clockSync.runReferenceBurst(referenceClock, request.clockSync)
+        clockSync.runReferenceBurst(
+            referenceClock,
+            request.clockSync,
+            // The raw four-stamp exchanges, kept beside the estimate they were reduced to (IP-162).
+            // A failure to persist them is logged and does not fail the burst: the estimate is
+            // still evidence, and the analysis records that the raw rows are missing.
+            onBurst = { burst ->
+                runCatching { repository.appendClockExchanges(sessionId, burst) }
+                    .onFailure { Napier.w("[lab] clock exchanges dropped: ${it.message}") }
+            },
+        )
             .onSuccess { estimate ->
                 repository.appendClock(sessionId, estimate)
                 runCatching {

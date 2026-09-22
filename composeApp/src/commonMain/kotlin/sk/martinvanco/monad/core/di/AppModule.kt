@@ -55,7 +55,9 @@ import sk.martinvanco.monad.lab.domain.LabInstrument
 import sk.martinvanco.monad.lab.domain.ReferenceClock
 import sk.martinvanco.monad.lab.domain.PoseTracker
 import sk.martinvanco.monad.lab.domain.SessionRecorder
+import sk.martinvanco.monad.lab.domain.SnapshotDigestSource
 import sk.martinvanco.monad.lab.domain.TrafficGenerator
+import sk.martinvanco.monad.quests.data.adapter.EnrollmentSnapshotDigestAdapter
 import sk.martinvanco.monad.lab.domain.upload.ArtefactSink
 import sk.martinvanco.monad.lab.presentation.CheckInScreenModel
 import sk.martinvanco.monad.lab.presentation.LabConsoleScreenModel
@@ -179,7 +181,10 @@ val appModule = module {
     // those rules be tested against a real schema instead of believed. It carries two protocols
     // because there are two: one body for a TSV, and parts for a mesh — see `PartedUpload`.
     single<ArtefactSink> { StorageArtefactSink(get()) }
-    single { LabSessionUploader(get(), get(), get(), get(), get(), telemetry = get()) }
+    // The IP-162 evidence manifest names the frozen step snapshot's digest; the rows live in the
+    // quest journal, reached through a lab-side port so the upload path names no quest repository.
+    single<SnapshotDigestSource> { EnrollmentSnapshotDigestAdapter(get()) }
+    single { LabSessionUploader(get(), get(), get(), get(), get(), telemetry = get(), snapshots = get()) }
     // Pre-flight readiness. Holds the same singleton socket the instrument uses, so it refuses to
     // probe while a session is live and always resets the clock service afterwards.
     single { PreflightService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }

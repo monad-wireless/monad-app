@@ -105,12 +105,22 @@ class ClockSyncService(
     suspend fun runReferenceBurst(
         clock: ReferenceClock,
         policy: ClockSyncPolicy = ClockSyncPolicy(),
+        /**
+         * Receives the raw exchanges of this burst, kept and failed alike, before they are reduced
+         * (IP-162). The instrument persists them beside the estimate; a test or the console passes
+         * nothing and the burst behaves as it always has.
+         */
+        onBurst: (suspend (ClockBurstRecord) -> Unit)? = null,
     ): Result<ClockEstimate> = withContext(Dispatchers.IO) {
         val exchanges = mutableListOf<ClockExchange>()
+        val failures = mutableListOf<String>()
         repeat(policy.burstSize) { index ->
             clock.exchange()
                 .onSuccess { exchanges += it }
-                .onFailure { _lastError.value = "${clock.source}: ${it.message}" }
+                .onFailure {
+                    _lastError.value = "${clock.source}: ${it.message}"
+                    failures += it.message ?: it::class.simpleName.orEmpty()
+                }
             // Spacing between exchanges, not before the first: an HTTP burst is already slow enough that
             // a leading delay would be felt at session start for nothing.
             if (policy.burstSpacingMs > 0 && index < policy.burstSize - 1) delay(policy.burstSpacingMs)
@@ -118,11 +128,22 @@ class ClockSyncService(
 
         val previous = _estimate.value.takeIf { it.samples > 0 }
         val reduced = ClockEstimator.fromBurst(exchanges, previous)
-            ?: return@withContext Result.failure(
+        onBurst?.invoke(
+            ClockBurstRecord(
+                burstId = "${clock.source}-${monotonicNanos()}",
+                source = clock.source,
+                exchanges = exchanges.toList(),
+                keptT4Nanos = reduced?.anchorNanos,
+                failures = failures.toList(),
+            )
+        )
+        if (reduced == null) {
+            return@withContext Result.failure(
                 IllegalStateException(
                     "${clock.source} burst produced no usable exchange (${policy.burstSize} attempted)"
                 )
             )
+        }
 
         _estimate.value = reduced
         _history.value = (_history.value + reduced).takeLast(MAX_HISTORY)

@@ -1,0 +1,24 @@
+-- Migration 15: raw clock exchanges (IP-162).
+--
+-- `clock.tsv` carried the estimate each burst was reduced to and never the exchanges it was reduced
+-- from, so the phone-to-fleet clock mapping could be checked against itself and against nothing
+-- else. This table keeps the four stamps of every exchange, which one the estimator kept, and the
+-- attempts that produced no exchange, so a burst can be re-reduced offline and the fit verified.
+--
+-- Purely additive. A device upgrading from schema 15 gains one empty table; recordings made before
+-- this migration carry no exchange rows, and the analysis says so rather than fabricating them.
+CREATE TABLE IF NOT EXISTS ClockExchangeRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId TEXT NOT NULL,
+    burstId TEXT NOT NULL,
+    source TEXT NOT NULL,
+    t1Ns INTEGER,
+    t2Ns INTEGER,
+    t3Ns INTEGER,
+    t4Ns INTEGER,
+    valid INTEGER NOT NULL,
+    kept INTEGER NOT NULL,
+    reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_clock_exchange_session ON ClockExchangeRecord(sessionId);

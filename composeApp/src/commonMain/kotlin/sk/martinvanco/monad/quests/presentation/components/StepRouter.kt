@@ -15,10 +15,11 @@ import sk.martinvanco.monad.quests.presentation.components.steps.*
  * @param stepNumber Sequential number of this step in the quest
  * @param task The active task to render
  * @param onComplete Callback when the step is completed, carrying what the step OBSERVED as JSON,
- *   or null when it observed nothing. Only a [TaskType.PROBE] reports anything today — the
- *   surveyed point it consumed — and that payload is the only record of where a dwell happened
- *   that leaves the device. Every other step passes null, explicitly rather than by omission, so
- *   adding an observation to one of them is a change at that step and nowhere else.
+ *   or null when it observed nothing. A [TaskType.PROBE] reports the surveyed point it consumed —
+ *   the only record of where a dwell happened that leaves the device — and a [TaskType.OBSERVE]
+ *   running the IP-162 room sweep reports its typed summary. Every other step passes null,
+ *   explicitly rather than by omission, so adding an observation to one of them is a change at
+ *   that step and nowhere else.
  * @param preScannedValue a code the participant already scanned outside the quest — the QR deep
  *   link that opened the app. Only a [TaskType.PROBE] consumes it, and only when it matches one of
  *   that step's targets, so it can never satisfy a step the participant did not stand in front of.
@@ -97,10 +98,12 @@ fun StepRouter(
         }
 
         TaskType.OBSERVE -> {
+            // A room sweep (IP-162) reports its typed summary — recording, sweep, final event,
+            // count and coverage — as the step's observation; the legacy partial view reports null.
             ObserveStep(
                 stepNumber = stepNumber,
                 task = task,
-                onComplete = { onComplete(null) },
+                onComplete = onComplete,
                 modifier = modifier
             )
         }
