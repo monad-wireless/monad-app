@@ -1,6 +1,8 @@
 package sk.martinvanco.monad.quests.presentation.components.steps
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -48,6 +50,15 @@ import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
  * A tap that failed to record says so and offers a retry under the same event identity; a second
  * tap while one is in flight is refused. The counter below the log is the participant's scratch
  * value for the *next* checkpoint and nothing more.
+ *
+ * **How many spots is up to the participant** (2026-09-23). The first live Counting quest asked for
+ * five viewpoint readings and a researcher who could see the room from two spots had to invent
+ * three more. Neither contract needs a fixed number: a legacy step's `min_readings` is now the
+ * suggested number of spots and *Done* is offered after the first reading, with `of_readings` still
+ * recording what was suggested so a reader can tell a short set from a full one. A sweep has no
+ * minimum at all — checkpoints are optional, and *Count from one spot* starts the sweep and goes
+ * straight to the final total. What a single spot covered is what the participant declares: the
+ * whole room, or a named part of it, in which case the reference is for that part and says so.
  */
 @Composable
 fun ObserveStep(
@@ -166,6 +177,9 @@ private fun SweepContent(
     var activity by remember(stepCompletionId) { mutableStateOf("unknown") }
     var duplicateRisk by remember(stepCompletionId) { mutableStateOf("none_observed") }
     var completed by remember(stepCompletionId) { mutableStateOf(false) }
+    // The participant chose to count from where they stand. The sweep is the same two events
+    // (start, finalise); only the screen skips the checkpoint stage and asks what the spot covered.
+    var singleSpot by remember(stepCompletionId) { mutableStateOf(false) }
 
     val ceiling = config.maxCount
     val busy = ui.pending || ui.canRetry
@@ -221,36 +235,57 @@ private fun SweepContent(
         when (phase) {
             SweepPhase.NOT_STARTED -> {
                 Text(
-                    text = "Walk the room once and count every other person once. Do not count yourself.",
+                    text = "Count every other person once. Do not count yourself. Walk the room, or count " +
+                        "what you can see from one spot — as many spots as you need, no minimum.",
                     fontSize = 15.sp,
                     color = Color(0xFF0F172A),
                     textAlign = TextAlign.Center,
                 )
-                config.rooms.forEach { room ->
-                    ChoiceRow(
-                        label = room.label,
-                        selected = selectedRoom?.roomId == room.roomId,
-                        onSelect = { selectedRoom = room },
-                    )
+                if (config.rooms.size > 1) {
+                    config.rooms.forEach { room ->
+                        ChoiceRow(
+                            label = room.label,
+                            selected = selectedRoom?.roomId == room.roomId,
+                            onSelect = { selectedRoom = room },
+                        )
+                    }
                 }
                 selectedRoom?.let {
                     Text(
-                        text = it.coverageInstructions,
+                        text = (if (config.rooms.size == 1) "${it.label}. " else "") + it.coverageInstructions,
                         fontSize = 13.sp,
                         color = Color(0xFF334155),
                         textAlign = TextAlign.Center,
                     )
                 }
                 ObserversPicker(observers, onChange = { observers = it })
-                Button(
-                    enabled = selectedRoom != null && sessionRunning && !busy,
-                    onClick = {
-                        val room = selectedRoom ?: return@Button
-                        scope.launch { controller.start(room, observers, onAir) }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
-                    shape = RoundedCornerShape(6.dp),
-                ) { Text("Start sweep", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        enabled = selectedRoom != null && sessionRunning && !busy,
+                        onClick = {
+                            val room = selectedRoom ?: return@Button
+                            singleSpot = false
+                            scope.launch { controller.start(room, observers, onAir) }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
+                        shape = RoundedCornerShape(6.dp),
+                    ) { Text("Walk the room", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
+                    OutlinedButton(
+                        enabled = selectedRoom != null && sessionRunning && !busy,
+                        onClick = {
+                            val room = selectedRoom ?: return@OutlinedButton
+                            scope.launch {
+                                controller.start(room, observers, onAir).onSuccess {
+                                    singleSpot = true
+                                    coverage = HeadcountSweepEvent.COVERAGE_PARTIAL
+                                    reason = ""
+                                    mode = SweepMode.FINISHING
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(6.dp),
+                    ) { Text("Count from one spot", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                }
             }
 
             SweepPhase.ACTIVE -> {
@@ -268,25 +303,35 @@ private fun SweepContent(
                     enabled = !busy,
                 )
                 val recordedSoFar = ui.sweep.runningTotal
-                Text(
-                    text = when {
-                        recordedSoFar == null -> "No checkpoint recorded yet."
-                        else -> "Recorded so far: $recordedSoFar people, ${ui.sweep.checkpoints.size} checkpoint(s)" +
-                            (if (ui.sweep.corrections > 0) ", ${ui.sweep.corrections} correction(s)" else "")
-                    },
-                    fontSize = 13.sp,
-                    color = Color(0xFF64748B),
-                    textAlign = TextAlign.Center,
-                )
+                if (mode != SweepMode.FINISHING || !singleSpot) {
+                    Text(
+                        text = when {
+                            recordedSoFar == null -> "No checkpoint yet. Checkpoints are optional: record one when you " +
+                                "stop somewhere, or go straight to the final total."
+                            else -> "Recorded so far: $recordedSoFar people, ${ui.sweep.checkpoints.size} checkpoint(s)" +
+                                (if (ui.sweep.corrections > 0) ", ${ui.sweep.corrections} correction(s)" else "")
+                        },
+                        fontSize = 13.sp,
+                        color = Color(0xFF64748B),
+                        textAlign = TextAlign.Center,
+                    )
+                }
                 when (mode) {
                     SweepMode.COUNTING -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
-                                enabled = sessionRunning && !busy,
-                                onClick = { scope.launch { controller.checkpoint(counter, onAir) } },
+                                enabled = !busy,
+                                onClick = { mode = SweepMode.FINISHING },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
                                 shape = RoundedCornerShape(6.dp),
-                            ) { Text("Record $counter so far", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
+                            ) { Text("Finish with $counter", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
+                            OutlinedButton(
+                                enabled = sessionRunning && !busy,
+                                onClick = { scope.launch { controller.checkpoint(counter, onAir) } },
+                                shape = RoundedCornerShape(6.dp),
+                            ) { Text("Checkpoint $counter", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (ui.sweep.correctableEventId != null) {
                                 OutlinedButton(
                                     enabled = !busy,
@@ -294,18 +339,11 @@ private fun SweepContent(
                                     shape = RoundedCornerShape(6.dp),
                                 ) { Text("Correct last", fontSize = 14.sp) }
                             }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                enabled = !busy,
-                                onClick = { mode = SweepMode.FINISHING },
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text("Finish sweep", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
                             OutlinedButton(
                                 enabled = !busy,
                                 onClick = { reason = ""; mode = SweepMode.ABORTING },
                                 shape = RoundedCornerShape(6.dp),
-                            ) { Text("Save as partial", fontSize = 14.sp) }
+                            ) { Text("Stop, keep as partial", fontSize = 14.sp) }
                         }
                     }
 
@@ -334,12 +372,34 @@ private fun SweepContent(
 
                     SweepMode.FINISHING -> {
                         Text(
-                            "Final total: $counter other people. Now say what this sweep covered.",
+                            if (singleSpot) {
+                                "Set the counter to everyone you can see from here, then say what this spot covers."
+                            } else {
+                                "Final total: $counter other people. Now say what this sweep covered."
+                            },
                             fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A), textAlign = TextAlign.Center,
                         )
-                        ChoiceGroup("Coverage of the room", HeadcountSweepEvent.COVERAGES, coverage) { coverage = it }
+                        ChoiceGroup(
+                            title = "What did you cover?",
+                            options = HeadcountSweepEvent.COVERAGES,
+                            selected = coverage,
+                            label = ::coverageLabel,
+                        ) { coverage = it }
                         if (coverage != HeadcountSweepEvent.COVERAGE_COMPLETE) {
-                            ReasonField(reason, onChange = { reason = it }, label = "What was not covered, and why")
+                            PartChips(current = reason, onPick = { reason = it })
+                            ReasonField(
+                                reason,
+                                onChange = { reason = it },
+                                label = if (coverage == HeadcountSweepEvent.COVERAGE_PARTIAL) {
+                                    "Which part of the room did you count?"
+                                } else {
+                                    "Why is the coverage unknown?"
+                                },
+                            )
+                            Text(
+                                "The reference will be for that part only, not for the whole room.",
+                                fontSize = 12.sp, color = Color(0xFF64748B), textAlign = TextAlign.Center,
+                            )
                         }
                         ChoiceGroup("Did people come or go during the sweep?", HeadcountSweepEvent.STABILITIES, stability) { stability = it }
                         ChoiceGroup("What were people doing?", HeadcountSweepEvent.ACTIVITIES, activity) { activity = it }
@@ -365,9 +425,10 @@ private fun SweepContent(
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
                                 shape = RoundedCornerShape(6.dp),
                             ) { Text("Save final total $counter", fontSize = 14.sp, color = Color.White) }
-                            OutlinedButton(onClick = { mode = SweepMode.COUNTING }, shape = RoundedCornerShape(6.dp)) {
-                                Text("Back", fontSize = 14.sp)
-                            }
+                            OutlinedButton(
+                                onClick = { singleSpot = false; mode = SweepMode.COUNTING },
+                                shape = RoundedCornerShape(6.dp),
+                            ) { Text(if (singleSpot) "Walk instead" else "Back", fontSize = 14.sp) }
                         }
                     }
 
@@ -400,7 +461,8 @@ private fun SweepContent(
                 val sweep = ui.sweep
                 Text(
                     text = if (phase == SweepPhase.FINALISED) {
-                        "Final total ${sweep.finalCount} other people, coverage ${sweep.coverage}, occupancy ${sweep.occupancyStability}."
+                        "Final total ${sweep.finalCount} other people. Covered: ${coverageLabel(sweep.coverage.orEmpty()).lowercase()}" +
+                            (sweep.coverageReason?.let { " ($it)" } ?: "") + ". Occupancy ${sweep.occupancyStability}."
                     } else {
                         "Saved as partial: ${sweep.runningTotal ?: 0} people counted so far. ${sweep.abortReason.orEmpty()}"
                     },
@@ -462,14 +524,58 @@ private fun ChoiceRow(label: String, selected: Boolean, onSelect: () -> Unit) {
 }
 
 @Composable
-private fun ChoiceGroup(title: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
+private fun ChoiceGroup(
+    title: String,
+    options: List<String>,
+    selected: String,
+    label: (String) -> String = { it.replace('_', ' ') },
+    onSelect: (String) -> Unit,
+) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
         Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF334155))
         options.forEach { option ->
-            ChoiceRow(label = option.replace('_', ' '), selected = option == selected, onSelect = { onSelect(option) })
+            ChoiceRow(label = label(option), selected = option == selected, onSelect = { onSelect(option) })
         }
     }
 }
+
+/** The wire value stays `complete | partial | unknown`; the screen says what each means. */
+private fun coverageLabel(coverage: String): String = when (coverage) {
+    HeadcountSweepEvent.COVERAGE_COMPLETE -> "The whole room"
+    HeadcountSweepEvent.COVERAGE_PARTIAL -> "Part of the room"
+    HeadcountSweepEvent.COVERAGE_UNKNOWN -> "Not sure"
+    else -> coverage
+}
+
+/**
+ * Quick descriptions of which part of a room one spot covers. Each tap sets the reason text, which
+ * stays editable: the participant can name the part in their own words, and the text is what the
+ * `coverage_reason` field carries. A chip is a shortcut, not a vocabulary — the contract keeps free text
+ * so a room with an unusual layout is not forced into the wrong half.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PartChips(current: String, onPick: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        PART_CHOICES.forEach { choice ->
+            FilterChip(
+                selected = current == choice,
+                onClick = { onPick(choice) },
+                label = { Text(choice, fontSize = 12.sp) },
+            )
+        }
+    }
+}
+
+private val PART_CHOICES = listOf(
+    "Left half",
+    "Right half",
+    "Near the entrance",
+    "Far end",
+    "Window side",
+    "One row of desks",
+    "What I could see from the door",
+)
 
 @Composable
 private fun ObserversPicker(value: Int?, onChange: (Int?) -> Unit) {
@@ -602,9 +708,10 @@ private fun LegacyObserveContent(
             )
             Text(
                 text = when {
-                    recorded == 0 -> "$required spots to record"
-                    recorded < required -> "$recorded of $required recorded" +
-                        (lastRecorded?.let { " · last was $it" } ?: "")
+                    recorded == 0 -> "Count what you can see from here and record it. The quest suggests " +
+                        "$required spots; stop when you have covered what you can."
+                    recorded < required -> "$recorded recorded, $required suggested" +
+                        (lastRecorded?.let { " · last was $it" } ?: "") + ". Done whenever you are."
                     else -> "$recorded recorded — enough, and more is welcome"
                 },
                 fontSize = 13.sp,
@@ -624,10 +731,12 @@ private fun LegacyObserveContent(
                         color = Color.White,
                     )
                 }
-                // Available only once the step's own bar is cleared, and then always — a
-                // participant who wants to give ten readings instead of five should not be
-                // stopped, and one who has given five should not be trapped.
-                if (recorded >= required && !hasCompleted) {
+                // Available after the FIRST reading, and then always. `min_readings` is the
+                // suggested number of spots, not a bar: a participant who can see the room from
+                // two spots should not invent three more, and one who wants ten should not be
+                // stopped. The payload's `of_readings` still says what was suggested, so a
+                // reader tells a two-reading set from a five-reading one.
+                if (recorded >= 1 && !hasCompleted) {
                     OutlinedButton(
                         onClick = {
                             hasCompleted = true
@@ -635,7 +744,7 @@ private fun LegacyObserveContent(
                         },
                         shape = RoundedCornerShape(6.dp),
                     ) {
-                        Text("Done", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (recorded < required) "Done with $recorded" else "Done", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
