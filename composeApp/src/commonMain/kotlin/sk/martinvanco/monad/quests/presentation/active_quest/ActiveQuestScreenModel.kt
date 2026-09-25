@@ -23,7 +23,6 @@ import sk.martinvanco.monad.quests.data.dto.TaskType
 import sk.martinvanco.monad.lab.domain.LabInstrument
 import sk.martinvanco.monad.lab.domain.SessionMarker
 import sk.martinvanco.monad.quests.domain.QuestSessionCoordinator
-import sk.martinvanco.monad.quests.domain.port.QuestSkip
 
 class ActiveQuestScreenModel(
     private val sessionCoordinator: QuestSessionCoordinator,
@@ -33,6 +32,9 @@ class ActiveQuestScreenModel(
     private val userRepository: UserRepository,
     private val questId: String
 ) : StateScreenModel<ActiveQuestState>(ActiveQuestState(questId = questId)) {
+
+    /** Set once the participant confirmed an early end, so a Retry resubmits that, not a finish. */
+    private var endingEarly = false
 
     init {
         observeInstrument()
@@ -261,36 +263,56 @@ class ActiveQuestScreenModel(
         mutableState.value = mutableState.value.copy(showEndQuestConfirmation = false)
     }
 
+    /**
+     * End the run before its last step: fail the step the participant stands on, then close the
+     * session through the same [QuestSessionCoordinator.finishSession] path a finished run takes.
+     *
+     * This used to only navigate. The step was marked failed in a coroutine that the navigation
+     * raced (the `replace` disposes this model and cancels its scope), and nothing ever called
+     * `finishSession`: the instrument kept recording, the backend enrollment stayed
+     * `in_progress`, the local `activeQuestId` stayed set, and the ended-early screen told the
+     * participant their data had been uploaded when nothing had been sent.
+     */
     private fun confirmEndQuest() {
-        // The instrument keeps running until submitQuest() closes the session; ending the quest
-        // early is a quest-state change, not a reason to truncate the measurement mid-flight.
+        mutableState.value = mutableState.value.copy(showEndQuestConfirmation = false)
+        endQuestEarly()
+    }
 
-        // Mark current active step as failed
+    private fun endQuestEarly() {
+        endingEarly = true
         screenModelScope.launch {
             val enrollmentId = mutableState.value.enrollmentId
-            val steps = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
-            val activeStep = steps.find { it.status == "in_progress" }
+            // Idempotent under a retry: once the step is failed no step is in progress any more.
+            val activeStep = questStepCompletionRepository.getByEnrollmentId(enrollmentId)
+                .find { it.status == "in_progress" }
 
             activeStep?.let { step ->
-                val currentTime = currentTimeMillis()
                 questStepCompletionRepository.markStepFailed(
                     backendId = step.backendId,
-                    completedAt = currentTime,
+                    completedAt = currentTimeMillis(),
                     skipMessage = "Quest ended early by user",
                     skipErrorCode = "USER_CANCELLED"
                 )
             }
-        }
+            // The end boundary of the last take, raised before finishSession() stops the
+            // instrument, so the analysis can tell an abandoned tail from a completed one.
+            instrument.mark(
+                kind = SessionMarker.Kind.ANNOTATION,
+                label = "quest ended early",
+                stepId = activeStep?.backendId,
+                payload = activeStep?.stepConfig,
+            )
+            reloadTasks()
 
-        // Navigate to ended early screen
-        mutableState.value = mutableState.value.copy(
-            showEndQuestConfirmation = false,
-            navigateToEndedEarlyScreen = true
-        )
+            // No blanket skip record: each step keeps its own reason (USER_CANCELLED on the step
+            // it ended on, QUEST_ENDED_EARLY on the ones it never reached, the failTask reason on
+            // one that failed earlier). A non-null skip would overwrite all of them.
+            closeRun(success = false)
+        }
     }
 
     private fun retryUpload() {
-        submitQuest(success = true)
+        if (endingEarly) endQuestEarly() else submitQuest(success = true)
     }
 
     private fun dismissCompletionError() {
@@ -394,42 +416,45 @@ class ActiveQuestScreenModel(
      * the abandoned screen, in three copies that had already drifted apart. It now lives once, in
      * [QuestSessionCoordinator].
      */
-    private fun submitQuest(success: Boolean, failReason: String? = null) {
-        screenModelScope.launch {
-            val enrollmentId = mutableState.value.enrollmentId
-            if (enrollmentId.isEmpty()) {
-                mutableState.value = mutableState.value.copy(completionError = "No active enrollment")
-                return@launch
-            }
+    private fun submitQuest(success: Boolean) {
+        screenModelScope.launch { closeRun(success) }
+    }
 
-            mutableState.value = mutableState.value.copy(
-                isUploading = true,
-                uploadProgress = "Closing session..."
-            )
+    private suspend fun closeRun(success: Boolean) {
+        val enrollmentId = mutableState.value.enrollmentId
+        if (enrollmentId.isEmpty()) {
+            mutableState.value = mutableState.value.copy(completionError = "No active enrollment")
+            return
+        }
 
-            val outcome = sessionCoordinator.finishSession(
-                questId = questId,
-                enrollmentId = enrollmentId,
-                startedWallMillis = mutableState.value.startTime,
-                completed = success,
-                skip = failReason?.let { QuestSkip(message = it, errorCode = null) },
-            )
+        mutableState.value = mutableState.value.copy(
+            isUploading = true,
+            uploadProgress = "Closing session..."
+        )
 
-            mutableState.value = if (outcome.completionSubmitted) {
-                mutableState.value.copy(
-                    isUploading = false,
-                    navigateToCompletedScreen = true,
-                )
+        val outcome = sessionCoordinator.finishSession(
+            questId = questId,
+            enrollmentId = enrollmentId,
+            startedWallMillis = mutableState.value.startTime,
+            completed = success,
+        )
+
+        mutableState.value = if (outcome.completionSubmitted) {
+            if (success) {
+                mutableState.value.copy(isUploading = false, navigateToCompletedScreen = true)
             } else {
-                mutableState.value.copy(
-                    isUploading = false,
-                    // Data is retained locally; the lab console shows it as unsynced and can retry.
-                    completionError = "Not submitted (${outcome.completionError ?: "unknown"}). " +
-                        "${outcome.sessionsUnsynced} session(s) kept on device.",
-                )
+                mutableState.value.copy(isUploading = false, navigateToEndedEarlyScreen = true)
             }
+        } else {
+            mutableState.value.copy(
+                isUploading = false,
+                // Data is retained locally; the lab console shows it as unsynced and can retry.
+                completionError = "Not submitted (${outcome.completionError ?: "unknown"}). " +
+                    "${outcome.sessionsUnsynced} session(s) kept on device.",
+            )
         }
     }
+
     private fun failTask(taskIndex: Int, reason: String) {
         screenModelScope.launch {
             val enrollmentId = mutableState.value.enrollmentId
