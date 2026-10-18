@@ -204,8 +204,7 @@ class CheckInScreen : Screen {
         ) {
             Text("Not checked in", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
             Text(
-                "Scan any MonadCount card where you are sitting and the phone counts how long you " +
-                    "stay. This is the only thing in the app that counts PEOPLE rather than phones.",
+                "Scan the card where you sit. We count how long you stay.",
                 fontSize = 13.sp,
                 color = Color(0xFF334155),
             )

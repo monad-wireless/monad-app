@@ -1,5 +1,20 @@
 package sk.martinvanco.monad.quests.presentation.components.steps
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -10,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -22,6 +38,7 @@ import sk.martinvanco.monad.lab.data.LabSessionRepository
 import sk.martinvanco.monad.lab.domain.HeadcountMarkerPayload
 import sk.martinvanco.monad.lab.domain.HeadcountSweepEvent
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.Phase
 import sk.martinvanco.monad.lab.domain.SessionMarker
 import sk.martinvanco.monad.lab.domain.SweepPhase
 import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
@@ -51,14 +68,16 @@ import sk.martinvanco.monad.quests.presentation.components.QuestStepCard
  * tap while one is in flight is refused. The counter below the log is the participant's scratch
  * value for the *next* checkpoint and nothing more.
  *
- * **How many spots is up to the participant** (2026-09-23). The first live Counting quest asked for
- * five viewpoint readings and a researcher who could see the room from two spots had to invent
- * three more. Neither contract needs a fixed number: a legacy step's `min_readings` is now the
- * suggested number of spots and *Done* is offered after the first reading, with `of_readings` still
- * recording what was suggested so a reader can tell a short set from a full one. A sweep has no
- * minimum at all — checkpoints are optional, and *Count from one spot* starts the sweep and goes
- * straight to the final total. What a single spot covered is what the participant declares: the
- * whole room, or a named part of it, in which case the reference is for that part and says so.
+ * **How many spots is up to the participant** (2026-09-23). Neither contract needs a fixed number:
+ * a legacy step's `min_readings` is the suggested number of spots and *Done* is offered after the
+ * first reading. A sweep has no minimum at all — saving a running total is optional, and *Count
+ * from here* starts the sweep and goes straight to the final total.
+ *
+ * **Screen rules (2026-10-17, after the first field runs).** The words are short and say what to
+ * press. A refused tap always says why, in place: the replay refusing a lower total used to leave
+ * "Save final total" doing nothing. A counter below the last saved total is offered the correction
+ * it needs instead of a refusal. The few seconds the instrument spends starting are shown as
+ * starting, not as a red failure.
  */
 @Composable
 fun ObserveStep(
@@ -76,6 +95,7 @@ fun ObserveStep(
     // so a count recorded while the frame was off is a number with no position.
     val broadcasting by instrument.isBroadcasting.collectAsState(initial = false)
     val broadcastExpected = instrumentState.request?.broadcast == true
+    val starting = instrumentState.phase != Phase.IDLE && !instrumentState.isRunning
 
     QuestStepCard(
         stepNumber = stepNumber,
@@ -86,22 +106,20 @@ fun ObserveStep(
         content = {
             when {
                 config == null -> ObserveNotice(
-                    "This step has no counting configuration. It cannot run — tell the operator.",
-                    Color(0xFFFEE2E2),
-                    Color(0xFF991B1B),
+                    "This step has no counting setup. Tell the organiser.",
+                    NoticeTone.ERROR,
                 )
 
                 config.isUnsupported -> ObserveNotice(
-                    "This counting step uses a contract this app build does not know " +
-                        "(${config.schema} / ${config.mode}). Update the app; the step cannot run here.",
-                    Color(0xFFFEE2E2),
-                    Color(0xFF991B1B),
+                    "This step needs a newer app. Update the app and try again.",
+                    NoticeTone.ERROR,
                 )
 
                 config.isSweep -> SweepContent(
                     config = config,
                     task = task,
                     sessionRunning = instrumentState.isRunning,
+                    sessionStarting = starting,
                     silent = broadcastExpected && !broadcasting,
                     onAir = if (broadcastExpected) broadcasting else null,
                     instrument = instrument,
@@ -112,6 +130,7 @@ fun ObserveStep(
                 else -> LegacyObserveContent(
                     config = config,
                     sessionRunning = instrumentState.isRunning,
+                    sessionStarting = starting,
                     silent = broadcastExpected && !broadcasting,
                     broadcasting = broadcasting,
                     instrument = instrument,
@@ -125,11 +144,13 @@ fun ObserveStep(
 
 // ---- the room sweep (IP-162) --------------------------------------------------------------------
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SweepContent(
     config: ObserveConfig,
     task: ActiveTaskDto,
     sessionRunning: Boolean,
+    sessionStarting: Boolean,
     silent: Boolean,
     /** What the app observes of its own radio; null when the quest never asked for the frame. */
     onAir: Boolean?,
@@ -138,18 +159,24 @@ private fun SweepContent(
     onComplete: (stepData: String?) -> Unit,
 ) {
     val stepCompletionId = task.stepCompletionId
-    val enrollmentId = instrument.state.value.request?.enrollmentId
     val problems = remember(config) { config.sweepProblems() }
-    if (stepCompletionId == null || enrollmentId.isNullOrBlank() || problems.isNotEmpty()) {
+    if (stepCompletionId == null || problems.isNotEmpty()) {
         ObserveNotice(
-            when {
-                problems.isNotEmpty() -> "This sweep configuration is incomplete (${problems.joinToString()}). Tell the operator."
-                stepCompletionId == null -> "This step carries no completion identity, so its counts could not be attributed. Restart the quest."
-                else -> "No enrollment is attached to the measurement session. Restart the quest."
+            if (problems.isNotEmpty()) {
+                "This step is set up wrong (${problems.joinToString()}). Tell the organiser."
+            } else {
+                "This step lost its link to your run. End the quest and start it again."
             },
-            Color(0xFFFEE2E2),
-            Color(0xFF991B1B),
+            NoticeTone.ERROR,
         )
+        return
+    }
+    // The enrollment is the instrument's: it is set when the session starts. Until then the
+    // step waits for the session; it is not a broken run, and saying "restart the quest" during
+    // the few seconds of start-up sent people back out of a working run.
+    val enrollmentId = instrument.state.value.request?.enrollmentId
+    if (enrollmentId.isNullOrBlank()) {
+        SessionNotice(starting = sessionStarting)
         return
     }
 
@@ -160,11 +187,12 @@ private fun SweepContent(
     val ui by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
 
-    // The participant's scratch value for the NEXT checkpoint. Not the sweep state: that is the
-    // replayed log above, and the two are shown apart on purpose.
+    // The participant's scratch value for the NEXT saved total. Not the sweep state: that is the
+    // replayed log, and the two are shown apart on purpose. Seeded from the log once the session
+    // runs, so a resumed sweep starts from what it had saved.
     var counter by remember(stepCompletionId) { mutableStateOf(0) }
     var seeded by remember(stepCompletionId) { mutableStateOf(false) }
-    if (!seeded && ui.attached) {
+    if (!seeded && ui.attached && sessionRunning) {
         counter = ui.sweep.runningTotal ?: 0
         seeded = true
     }
@@ -178,433 +206,390 @@ private fun SweepContent(
     var duplicateRisk by remember(stepCompletionId) { mutableStateOf("none_observed") }
     var completed by remember(stepCompletionId) { mutableStateOf(false) }
     // The participant chose to count from where they stand. The sweep is the same two events
-    // (start, finalise); only the screen skips the checkpoint stage and asks what the spot covered.
+    // (start, finalise); only the screen skips the saved-total stage.
     var singleSpot by remember(stepCompletionId) { mutableStateOf(false) }
 
     val ceiling = config.maxCount
     val busy = ui.pending || ui.canRetry
     val phase = ui.sweep.phase
+    val saved = ui.sweep.runningTotal
+    // The replay refuses a total below the last saved one unless a correction says why. The screen
+    // asks for the correction before the participant presses anything that would be refused.
+    val belowSaved = saved != null && counter < saved
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        when {
-            !sessionRunning || ui.noSession -> ObserveNotice(
-                "The measurement session is not running, so your counts cannot be recorded. " +
-                    "Retry the instrument from the warning banner, or tell the operator.",
-                Color(0xFFFEE2E2),
-                Color(0xFF991B1B),
-            )
-
-            silent -> ObserveNotice(
-                "Your phone is not on air, so the receivers cannot tell where you are. Keep the app " +
-                    "open and the screen on. Your counts are still recorded.",
-                Color(0xFFFEF3C7),
-                Color(0xFF92400E),
+        AnimatedVisibility(!sessionRunning || ui.noSession, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            SessionNotice(starting = sessionStarting)
+        }
+        AnimatedVisibility(sessionRunning && silent, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            ObserveNotice(
+                "Your phone is not broadcasting. Keep the app open and the screen on. Your counts are still saved.",
+                NoticeTone.WARNING,
             )
         }
         if (ui.recovered && phase == SweepPhase.ACTIVE) {
             ObserveNotice(
-                "This sweep was resumed from ${ui.sweep.eventsAccepted} recorded event(s). If people moved " +
-                    "while the app was away, save it as partial and start again.",
-                Color(0xFFFEF3C7),
-                Color(0xFF92400E),
+                "We restored your count. If people moved while the app was closed, stop and save as partial.",
+                NoticeTone.WARNING,
             )
         }
-        ui.lastError?.let {
-            ObserveNotice(it, Color(0xFFFEE2E2), Color(0xFF991B1B))
-            if (ui.canRetry) {
-                OutlinedButton(
-                    enabled = !ui.pending,
-                    onClick = { scope.launch { controller.retry() } },
-                    shape = RoundedCornerShape(6.dp),
-                ) { Text("Retry recording", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
-            }
+        AnimatedVisibility(ui.lastError != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            ObserveNotice(
+                text = ui.lastError.orEmpty(),
+                tone = NoticeTone.ERROR,
+                action = if (ui.canRetry) "Retry" else "OK",
+                onAction = {
+                    if (ui.canRetry) scope.launch { controller.retry() } else controller.dismissError()
+                },
+                actionEnabled = !ui.pending,
+            )
         }
         if (!ui.sweep.isValid) {
             ObserveNotice(
-                "The recorded events disagree with the sweep rules (${ui.sweep.errors.joinToString { it.code }}). " +
-                    "What you counted is kept; this run cannot become a room reference.",
-                Color(0xFFFEE2E2),
-                Color(0xFF991B1B),
+                "Something in this count does not add up (${ui.sweep.errors.joinToString { it.code }}). " +
+                    "Your numbers are kept, but this run will not be used as a reference.",
+                NoticeTone.ERROR,
             )
         }
 
-        when (phase) {
-            SweepPhase.NOT_STARTED -> {
-                Text(
-                    text = "Count every other person once. Do not count yourself. Walk the room, or count " +
-                        "what you can see from one spot — as many spots as you need, no minimum.",
-                    fontSize = 15.sp,
-                    color = Color(0xFF0F172A),
-                    textAlign = TextAlign.Center,
-                )
-                if (config.rooms.size > 1) {
-                    config.rooms.forEach { room ->
-                        ChoiceRow(
-                            label = room.label,
-                            selected = selectedRoom?.roomId == room.roomId,
-                            onSelect = { selectedRoom = room },
+        AnimatedContent(
+            targetState = phase,
+            transitionSpec = { (fadeIn(tween(220)) + slideInVertically { it / 8 }) togetherWith fadeOut(tween(150)) },
+            label = "sweep-phase",
+        ) { shownPhase ->
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                when (shownPhase) {
+                    SweepPhase.NOT_STARTED -> {
+                        Steps(
+                            "Count everyone in the room once.",
+                            "Do not count yourself.",
+                            "Walk around, or count from one spot.",
                         )
-                    }
-                }
-                selectedRoom?.let {
-                    Text(
-                        text = (if (config.rooms.size == 1) "${it.label}. " else "") + it.coverageInstructions,
-                        fontSize = 13.sp,
-                        color = Color(0xFF334155),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                ObserversPicker(observers, onChange = { observers = it })
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = selectedRoom != null && sessionRunning && !busy,
-                        onClick = {
-                            val room = selectedRoom ?: return@Button
+                        if (config.rooms.size > 1) {
+                            Question("Which room are you in?")
+                            Chips(
+                                options = config.rooms.map { it.roomId },
+                                selected = selectedRoom?.roomId,
+                                label = { id -> config.rooms.first { it.roomId == id }.label },
+                            ) { id -> selectedRoom = config.rooms.first { it.roomId == id } }
+                        } else {
+                            selectedRoom?.let { Question(it.label) }
+                        }
+                        selectedRoom?.coverageInstructions?.takeIf { it.isNotBlank() }?.let { Hint(it) }
+                        ObserversPicker(observers, onChange = { observers = it })
+                        val canStart = selectedRoom != null && sessionRunning && !busy
+                        PrimaryButton("Start counting", enabled = canStart) {
+                            val room = selectedRoom ?: return@PrimaryButton
                             singleSpot = false
                             scope.launch { controller.start(room, observers, onAir) }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
-                        shape = RoundedCornerShape(6.dp),
-                    ) { Text("Walk the room", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
-                    OutlinedButton(
-                        enabled = selectedRoom != null && sessionRunning && !busy,
-                        onClick = {
-                            val room = selectedRoom ?: return@OutlinedButton
+                        }
+                        SecondaryButton("I see the room from here", enabled = canStart) {
+                            val room = selectedRoom ?: return@SecondaryButton
                             scope.launch {
                                 controller.start(room, observers, onAir).onSuccess {
                                     singleSpot = true
+                                    // One spot is a partial reference by default (his rule,
+                                    // 2026-09-23): the participant names the part, or picks
+                                    // "Whole room" when the spot really sees all of it.
                                     coverage = HeadcountSweepEvent.COVERAGE_PARTIAL
                                     reason = ""
                                     mode = SweepMode.FINISHING
                                 }
                             }
-                        },
-                        shape = RoundedCornerShape(6.dp),
-                    ) { Text("Count from one spot", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
-                }
-            }
-
-            SweepPhase.ACTIVE -> {
-                Text(
-                    text = config.prompt,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF0F172A),
-                    textAlign = TextAlign.Center,
-                )
-                Counter(
-                    count = counter,
-                    onDecrement = { if (counter > 0) counter -= 1 },
-                    onIncrement = { if (ceiling == null || counter < ceiling) counter += 1 },
-                    enabled = !busy,
-                )
-                val recordedSoFar = ui.sweep.runningTotal
-                if (mode != SweepMode.FINISHING || !singleSpot) {
-                    Text(
-                        text = when {
-                            recordedSoFar == null -> "No checkpoint yet. Checkpoints are optional: record one when you " +
-                                "stop somewhere, or go straight to the final total."
-                            else -> "Recorded so far: $recordedSoFar people, ${ui.sweep.checkpoints.size} checkpoint(s)" +
-                                (if (ui.sweep.corrections > 0) ", ${ui.sweep.corrections} correction(s)" else "")
-                        },
-                        fontSize = 13.sp,
-                        color = Color(0xFF64748B),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                when (mode) {
-                    SweepMode.COUNTING -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                enabled = !busy,
-                                onClick = { mode = SweepMode.FINISHING },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text("Finish with $counter", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
-                            OutlinedButton(
-                                enabled = sessionRunning && !busy,
-                                onClick = { scope.launch { controller.checkpoint(counter, onAir) } },
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text("Checkpoint $counter", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (ui.sweep.correctableEventId != null) {
-                                OutlinedButton(
-                                    enabled = !busy,
-                                    onClick = { reason = ""; mode = SweepMode.CORRECTING },
-                                    shape = RoundedCornerShape(6.dp),
-                                ) { Text("Correct last", fontSize = 14.sp) }
-                            }
-                            OutlinedButton(
-                                enabled = !busy,
-                                onClick = { reason = ""; mode = SweepMode.ABORTING },
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text("Stop, keep as partial", fontSize = 14.sp) }
-                        }
+                        if (selectedRoom == null) Hint("Pick a room first.")
                     }
 
-                    SweepMode.CORRECTING -> {
-                        Text(
-                            "Set the counter to the corrected total and say why. The original checkpoint is kept.",
-                            fontSize = 13.sp, color = Color(0xFF334155), textAlign = TextAlign.Center,
+                    SweepPhase.ACTIVE -> {
+                        Hint(if (singleSpot) "People you can see from here" else config.prompt)
+                        Counter(
+                            count = counter,
+                            onDecrement = { if (counter > 0) counter -= 1 },
+                            onIncrement = { if (ceiling == null || counter < ceiling) counter += 1 },
+                            enabled = !busy && mode != SweepMode.ABORTING,
                         )
-                        ReasonField(reason, onChange = { reason = it }, label = "Reason for the correction")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                enabled = reason.isNotBlank() && !busy,
-                                onClick = {
-                                    scope.launch {
-                                        controller.correctLast(counter, reason, onAir).onSuccess { mode = SweepMode.COUNTING }
-                                    }
+                        if (!singleSpot) {
+                            Hint(
+                                when (saved) {
+                                    null -> "Tap + for each person."
+                                    else -> "Last saved: $saved" +
+                                        (if (ui.sweep.corrections > 0) " · ${ui.sweep.corrections} corrected" else "")
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text("Record correction to $counter", fontSize = 14.sp, color = Color.White) }
-                            OutlinedButton(onClick = { mode = SweepMode.COUNTING }, shape = RoundedCornerShape(6.dp)) {
-                                Text("Back", fontSize = 14.sp)
+                            )
+                        }
+
+                        AnimatedContent(
+                            targetState = mode,
+                            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) using SizeTransform(clip = false) },
+                            label = "sweep-mode",
+                        ) { shownMode ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                when (shownMode) {
+                                    SweepMode.COUNTING -> CountingActions(
+                                        counter = counter,
+                                        saved = saved,
+                                        belowSaved = belowSaved,
+                                        busy = busy,
+                                        sessionRunning = sessionRunning,
+                                        canCorrect = ui.sweep.correctableEventId != null,
+                                        onSave = { scope.launch { controller.checkpoint(counter, onAir) } },
+                                        onDone = { controller.dismissError(); mode = SweepMode.FINISHING },
+                                        onCorrect = { reason = ""; mode = SweepMode.CORRECTING },
+                                        onRestore = { counter = saved ?: counter },
+                                        onStop = { reason = ""; mode = SweepMode.ABORTING },
+                                    )
+
+                                    SweepMode.CORRECTING -> {
+                                        Question("Change last saved total from ${saved ?: 0} to $counter?")
+                                        ReasonField(reason, onChange = { reason = it }, label = "Why? (e.g. counted someone twice)")
+                                        PrimaryButton("Save correction", enabled = reason.isNotBlank() && !busy) {
+                                            scope.launch {
+                                                controller.correctLast(counter, reason, onAir).onSuccess { mode = SweepMode.COUNTING }
+                                            }
+                                        }
+                                        TextLink("Back") { mode = SweepMode.COUNTING }
+                                    }
+
+                                    SweepMode.FINISHING -> FinishForm(
+                                        counter = counter,
+                                        saved = saved,
+                                        singleSpot = singleSpot,
+                                        coverage = coverage,
+                                        onCoverage = { coverage = it },
+                                        reason = reason,
+                                        onReason = { reason = it },
+                                        stability = stability,
+                                        onStability = { stability = it },
+                                        activity = activity,
+                                        onActivity = { activity = it },
+                                        duplicateRisk = duplicateRisk,
+                                        onDuplicateRisk = { duplicateRisk = it },
+                                        observers = observers,
+                                        onObservers = { observers = it },
+                                        busy = busy,
+                                        onCorrectFirst = { reason = ""; mode = SweepMode.CORRECTING },
+                                        onSave = {
+                                            scope.launch {
+                                                controller.finalise(
+                                                    count = counter,
+                                                    coverage = coverage,
+                                                    coverageReason = reason,
+                                                    occupancyStability = stability,
+                                                    activity = activity,
+                                                    duplicateRisk = duplicateRisk,
+                                                    observersInArea = observers,
+                                                    onAir = onAir,
+                                                ).onSuccess { mode = SweepMode.COUNTING }
+                                            }
+                                        },
+                                        onBack = { singleSpot = false; mode = SweepMode.COUNTING },
+                                    )
+
+                                    SweepMode.ABORTING -> {
+                                        Question("Stop here?")
+                                        Hint("What you saved so far is kept as a partial count.")
+                                        ReasonField(reason, onChange = { reason = it }, label = "Why are you stopping?")
+                                        PrimaryButton(
+                                            "Stop and save",
+                                            enabled = reason.isNotBlank() && !busy,
+                                            color = Color(0xFF92400E),
+                                        ) {
+                                            scope.launch {
+                                                controller.abort(reason, onAir).onSuccess { mode = SweepMode.COUNTING }
+                                            }
+                                        }
+                                        TextLink("Keep counting") { mode = SweepMode.COUNTING }
+                                    }
+                                }
                             }
                         }
                     }
 
-                    SweepMode.FINISHING -> {
+                    SweepPhase.FINALISED, SweepPhase.ABORTED -> {
+                        val sweep = ui.sweep
+                        DoneBadge()
                         Text(
-                            if (singleSpot) {
-                                "Set the counter to everyone you can see from here, then say what this spot covers."
+                            text = if (shownPhase == SweepPhase.FINALISED) {
+                                "Saved: ${sweep.finalCount} ${if (sweep.finalCount == 1) "person" else "people"}"
                             } else {
-                                "Final total: $counter other people. Now say what this sweep covered."
+                                "Saved as partial: ${sweep.runningTotal ?: 0}"
                             },
-                            fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A), textAlign = TextAlign.Center,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A),
+                            textAlign = TextAlign.Center,
                         )
-                        ChoiceGroup(
-                            title = "What did you cover?",
-                            options = HeadcountSweepEvent.COVERAGES,
-                            selected = coverage,
-                            label = ::coverageLabel,
-                        ) { coverage = it }
-                        if (coverage != HeadcountSweepEvent.COVERAGE_COMPLETE) {
-                            PartChips(current = reason, onPick = { reason = it })
-                            ReasonField(
-                                reason,
-                                onChange = { reason = it },
-                                label = if (coverage == HeadcountSweepEvent.COVERAGE_PARTIAL) {
-                                    "Which part of the room did you count?"
-                                } else {
-                                    "Why is the coverage unknown?"
-                                },
-                            )
-                            Text(
-                                "The reference will be for that part only, not for the whole room.",
-                                fontSize = 12.sp, color = Color(0xFF64748B), textAlign = TextAlign.Center,
-                            )
-                        }
-                        ChoiceGroup("Did people come or go during the sweep?", HeadcountSweepEvent.STABILITIES, stability) { stability = it }
-                        ChoiceGroup("What were people doing?", HeadcountSweepEvent.ACTIVITIES, activity) { activity = it }
-                        ChoiceGroup("Could anyone have been counted twice?", HeadcountSweepEvent.DUPLICATE_RISKS, duplicateRisk) { duplicateRisk = it }
-                        ObserversPicker(observers, onChange = { observers = it })
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                enabled = !busy && (coverage == HeadcountSweepEvent.COVERAGE_COMPLETE || reason.isNotBlank()),
-                                onClick = {
-                                    scope.launch {
-                                        controller.finalise(
-                                            count = counter,
-                                            coverage = coverage,
-                                            coverageReason = reason,
-                                            occupancyStability = stability,
-                                            activity = activity,
-                                            duplicateRisk = duplicateRisk,
-                                            observersInArea = observers,
-                                            onAir = onAir,
-                                        ).onSuccess { mode = SweepMode.COUNTING }
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text("Save final total $counter", fontSize = 14.sp, color = Color.White) }
-                            OutlinedButton(
-                                onClick = { singleSpot = false; mode = SweepMode.COUNTING },
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text(if (singleSpot) "Walk instead" else "Back", fontSize = 14.sp) }
-                        }
-                    }
-
-                    SweepMode.ABORTING -> {
-                        Text(
-                            "The counts recorded so far are kept as a partial observation. Say why the sweep stops here.",
-                            fontSize = 13.sp, color = Color(0xFF334155), textAlign = TextAlign.Center,
+                        Hint(
+                            if (shownPhase == SweepPhase.FINALISED) {
+                                coverageLabel(sweep.coverage.orEmpty()) + (sweep.coverageReason?.let { ": $it" } ?: "")
+                            } else {
+                                sweep.abortReason.orEmpty()
+                            },
                         )
-                        ReasonField(reason, onChange = { reason = it }, label = "Why the sweep is incomplete")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                enabled = reason.isNotBlank() && !busy,
-                                onClick = {
-                                    scope.launch {
-                                        controller.abort(reason, onAir).onSuccess { mode = SweepMode.COUNTING }
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF92400E)),
-                                shape = RoundedCornerShape(6.dp),
-                            ) { Text("Save as partial", fontSize = 14.sp, color = Color.White) }
-                            OutlinedButton(onClick = { mode = SweepMode.COUNTING }, shape = RoundedCornerShape(6.dp)) {
-                                Text("Back", fontSize = 14.sp)
+                        if (!completed) {
+                            PrimaryButton("Continue") {
+                                completed = true
+                                onComplete(controller.stepDataJson())
                             }
                         }
                     }
-                }
-            }
-
-            SweepPhase.FINALISED, SweepPhase.ABORTED -> {
-                val sweep = ui.sweep
-                Text(
-                    text = if (phase == SweepPhase.FINALISED) {
-                        "Final total ${sweep.finalCount} other people. Covered: ${coverageLabel(sweep.coverage.orEmpty()).lowercase()}" +
-                            (sweep.coverageReason?.let { " ($it)" } ?: "") + ". Occupancy ${sweep.occupancyStability}."
-                    } else {
-                        "Saved as partial: ${sweep.runningTotal ?: 0} people counted so far. ${sweep.abortReason.orEmpty()}"
-                    },
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF0F172A),
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    text = "Recorded on this phone (${sweep.eventsAccepted} events). It uploads with the session; " +
-                        "the operator's console shows when it is verified.",
-                    fontSize = 13.sp,
-                    color = Color(0xFF64748B),
-                    textAlign = TextAlign.Center,
-                )
-                if (!completed) {
-                    Button(
-                        onClick = {
-                            completed = true
-                            onComplete(controller.stepDataJson())
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
-                        shape = RoundedCornerShape(6.dp),
-                    ) { Text("Done", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun CountingActions(
+    counter: Int,
+    saved: Int?,
+    belowSaved: Boolean,
+    busy: Boolean,
+    sessionRunning: Boolean,
+    canCorrect: Boolean,
+    onSave: () -> Unit,
+    onDone: () -> Unit,
+    onCorrect: () -> Unit,
+    onRestore: () -> Unit,
+    onStop: () -> Unit,
+) {
+    if (belowSaved) {
+        // A lower total is a correction, never a silent new checkpoint: the contract keeps the
+        // saved number and the reason it changed. Offer exactly that, or the way back.
+        ObserveNotice("That is less than your last saved total ($saved).", NoticeTone.WARNING)
+        PrimaryButton("Correct it to $counter", enabled = !busy && canCorrect, onClick = onCorrect)
+        SecondaryButton("Back to $saved", enabled = !busy, onClick = onRestore)
+        return
+    }
+    PrimaryButton("Finish: $counter ${if (counter == 1) "person" else "people"}", enabled = !busy, onClick = onDone)
+    SecondaryButton(
+        if (saved == counter) "Saved" else "Save progress ($counter)",
+        enabled = sessionRunning && !busy && saved != counter,
+        onClick = onSave,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (canCorrect) TextLink("Fix last saved", enabled = !busy, onClick = onCorrect)
+        TextLink("Stop early", enabled = !busy, onClick = onStop)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FinishForm(
+    counter: Int,
+    saved: Int?,
+    singleSpot: Boolean,
+    coverage: String,
+    onCoverage: (String) -> Unit,
+    reason: String,
+    onReason: (String) -> Unit,
+    stability: String,
+    onStability: (String) -> Unit,
+    activity: String,
+    onActivity: (String) -> Unit,
+    duplicateRisk: String,
+    onDuplicateRisk: (String) -> Unit,
+    observers: Int?,
+    onObservers: (Int?) -> Unit,
+    busy: Boolean,
+    onCorrectFirst: () -> Unit,
+    onSave: () -> Unit,
+    onBack: () -> Unit,
+) {
+    if (saved != null && counter < saved) {
+        ObserveNotice("Your total ($counter) is below your last saved total ($saved).", NoticeTone.WARNING)
+        PrimaryButton("Correct it first", enabled = !busy, onClick = onCorrectFirst)
+        TextLink("Back", onClick = onBack)
+        return
+    }
+    Question(if (singleSpot) "Set the number, then answer three quick questions." else "Almost done. Three quick questions.")
+
+    Question("Did you count the whole room?")
+    Chips(HeadcountSweepEvent.COVERAGES, coverage, ::coverageLabel, onCoverage)
+    AnimatedVisibility(coverage != HeadcountSweepEvent.COVERAGE_COMPLETE) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chips(PART_CHOICES, reason.takeIf { it in PART_CHOICES }, { it }, onReason)
+            ReasonField(
+                reason,
+                onChange = onReason,
+                label = if (coverage == HeadcountSweepEvent.COVERAGE_PARTIAL) "Which part?" else "Why not sure?",
+            )
+        }
+    }
+
+    Question("Did people come or go?")
+    Chips(HeadcountSweepEvent.STABILITIES, stability, ::stabilityLabel, onStability)
+
+    Question("What were people doing?")
+    Chips(HeadcountSweepEvent.ACTIVITIES, activity, ::activityLabel, onActivity)
+
+    Question("Could you have counted someone twice?")
+    Chips(HeadcountSweepEvent.DUPLICATE_RISKS, duplicateRisk, ::duplicateLabel, onDuplicateRisk)
+
+    ObserversPicker(observers, onChange = onObservers)
+
+    PrimaryButton(
+        "Save $counter ${if (counter == 1) "person" else "people"}",
+        enabled = !busy && (coverage == HeadcountSweepEvent.COVERAGE_COMPLETE || reason.isNotBlank()),
+        onClick = onSave,
+    )
+    TextLink(if (singleSpot) "Walk the room instead" else "Back to counting", onClick = onBack)
 }
 
 private enum class SweepMode { COUNTING, CORRECTING, FINISHING, ABORTING }
 
-@Composable
-private fun Counter(count: Int, onDecrement: () -> Unit, onIncrement: () -> Unit, enabled: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-        CounterButton("−", onDecrement, enabled = enabled && count > 0)
-        Text(
-            text = "$count",
-            fontSize = 72.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF0F172A),
-            modifier = Modifier.widthIn(min = 96.dp),
-            textAlign = TextAlign.Center,
-        )
-        CounterButton("+", onIncrement, enabled = enabled)
-    }
-}
-
-@Composable
-private fun ChoiceRow(label: String, selected: Boolean, onSelect: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        RadioButton(selected = selected, onClick = onSelect)
-        Text(label, fontSize = 14.sp, color = Color(0xFF0F172A))
-    }
-}
-
-@Composable
-private fun ChoiceGroup(
-    title: String,
-    options: List<String>,
-    selected: String,
-    label: (String) -> String = { it.replace('_', ' ') },
-    onSelect: (String) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF334155))
-        options.forEach { option ->
-            ChoiceRow(label = label(option), selected = option == selected, onSelect = { onSelect(option) })
-        }
-    }
-}
-
 /** The wire value stays `complete | partial | unknown`; the screen says what each means. */
 private fun coverageLabel(coverage: String): String = when (coverage) {
-    HeadcountSweepEvent.COVERAGE_COMPLETE -> "The whole room"
-    HeadcountSweepEvent.COVERAGE_PARTIAL -> "Part of the room"
+    HeadcountSweepEvent.COVERAGE_COMPLETE -> "Whole room"
+    HeadcountSweepEvent.COVERAGE_PARTIAL -> "Part of it"
     HeadcountSweepEvent.COVERAGE_UNKNOWN -> "Not sure"
     else -> coverage
 }
 
-/**
- * Quick descriptions of which part of a room one spot covers. Each tap sets the reason text, which
- * stays editable: the participant can name the part in their own words, and the text is what the
- * `coverage_reason` field carries. A chip is a shortcut, not a vocabulary — the contract keeps free text
- * so a room with an unusual layout is not forced into the wrong half.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun PartChips(current: String, onPick: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        PART_CHOICES.forEach { choice ->
-            FilterChip(
-                selected = current == choice,
-                onClick = { onPick(choice) },
-                label = { Text(choice, fontSize = 12.sp) },
-            )
-        }
-    }
+private fun stabilityLabel(value: String): String = when (value) {
+    "stable" -> "No"
+    "changed" -> "Yes"
+    else -> "Not sure"
 }
 
+private fun activityLabel(value: String): String = when (value) {
+    "seated" -> "Sitting"
+    "moving" -> "Moving"
+    "mixed" -> "Both"
+    else -> "Not sure"
+}
+
+private fun duplicateLabel(value: String): String = when (value) {
+    "none_observed" -> "No"
+    "possible" -> "Maybe"
+    else -> "Not sure"
+}
+
+/**
+ * Quick descriptions of which part of a room was covered. Each tap sets the reason text, which
+ * stays editable: the text is what the `coverage_reason` field carries. A chip is a shortcut, not a
+ * vocabulary — the contract keeps free text so an unusual layout is not forced into the wrong half.
+ */
 private val PART_CHOICES = listOf(
     "Left half",
     "Right half",
-    "Near the entrance",
+    "Near the door",
     "Far end",
     "Window side",
     "One row of desks",
-    "What I could see from the door",
 )
-
-@Composable
-private fun ObserversPicker(value: Int?, onChange: (Int?) -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            "How many people are counting in this room right now, you included?",
-            fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF334155),
-        )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf(1, 2, 3).forEach { n ->
-                RadioButton(selected = value == n, onClick = { onChange(n) })
-                Text("$n", fontSize = 14.sp)
-            }
-            RadioButton(selected = value == null, onClick = { onChange(null) })
-            Text("don't know", fontSize = 14.sp)
-        }
-    }
-}
-
-@Composable
-private fun ReasonField(value: String, onChange: (String) -> Unit, label: String) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        singleLine = false,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
 
 // ---- the legacy partial view (IP-140), unchanged in contract ----------------------------------
 
@@ -612,6 +597,7 @@ private fun ReasonField(value: String, onChange: (String) -> Unit, label: String
 private fun LegacyObserveContent(
     config: ObserveConfig,
     sessionRunning: Boolean,
+    sessionStarting: Boolean,
     /** The session asked for the identity frame and the phone is not putting it on air. */
     silent: Boolean,
     broadcasting: Boolean,
@@ -656,41 +642,20 @@ private fun LegacyObserveContent(
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         when {
-            required <= 0 -> ObserveNotice(
-                "This step has no counting configuration. It cannot run — tell the operator.",
-                Color(0xFFFEE2E2),
-                Color(0xFF991B1B),
-            )
-
-            !sessionRunning -> ObserveNotice(
-                "The measurement session is not running, so your counts will not be recorded. " +
-                    "Retry the instrument from the warning banner, or tell the operator.",
-                Color(0xFFFEE2E2),
-                Color(0xFF991B1B),
-            )
-
+            required <= 0 -> ObserveNotice("This step has no counting setup. Tell the organiser.", NoticeTone.ERROR)
+            !sessionRunning -> SessionNotice(starting = sessionStarting)
             silent -> ObserveNotice(
-                "Your phone is not on air, so the receivers cannot tell where these counts were " +
-                    "taken. Keep the app open and the screen on. The numbers are still recorded.",
-                Color(0xFFFEF3C7),
-                Color(0xFF92400E),
+                "Your phone is not broadcasting. Keep the app open and the screen on. Your counts are still saved.",
+                NoticeTone.WARNING,
             )
         }
 
-        config.prompt.takeIf { it.isNotBlank() }?.let {
-            Text(
-                text = it,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF0F172A),
-                textAlign = TextAlign.Center,
-            )
-        }
+        config.prompt.takeIf { it.isNotBlank() }?.let { Question(it) }
 
         Counter(
             count = count,
@@ -706,50 +671,199 @@ private fun LegacyObserveContent(
                 color = Color(0xFF22C55E),
                 trackColor = Color(0xFFE2E8F0),
             )
-            Text(
-                text = when {
-                    recorded == 0 -> "Count what you can see from here and record it. The quest suggests " +
-                        "$required spots; stop when you have covered what you can."
-                    recorded < required -> "$recorded recorded, $required suggested" +
-                        (lastRecorded?.let { " · last was $it" } ?: "") + ". Done whenever you are."
-                    else -> "$recorded recorded — enough, and more is welcome"
+            Hint(
+                when {
+                    recorded == 0 -> "Count what you see, then tap Save. About $required spots is good."
+                    else -> "$recorded saved" + (lastRecorded?.let { " · last $it" } ?: "") + ". Stop whenever you like."
                 },
-                fontSize = 13.sp,
-                color = Color(0xFF64748B),
-                textAlign = TextAlign.Center,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { record() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
-                    shape = RoundedCornerShape(6.dp),
-                ) {
-                    Text(
-                        text = "Record $count",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                    )
-                }
-                // Available after the FIRST reading, and then always. `min_readings` is the
-                // suggested number of spots, not a bar: a participant who can see the room from
-                // two spots should not invent three more, and one who wants ten should not be
-                // stopped. The payload's `of_readings` still says what was suggested, so a
-                // reader tells a two-reading set from a five-reading one.
-                if (recorded >= 1 && !hasCompleted) {
-                    OutlinedButton(
-                        onClick = {
-                            hasCompleted = true
-                            onComplete()
-                        },
-                        shape = RoundedCornerShape(6.dp),
-                    ) {
-                        Text(if (recorded < required) "Done with $recorded" else "Done", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
+            PrimaryButton("Save $count", onClick = { record() })
+            // Available after the FIRST reading, and then always. `min_readings` is the
+            // suggested number of spots, not a bar. The payload's `of_readings` still says what
+            // was suggested, so a reader tells a two-reading set from a five-reading one.
+            if (recorded >= 1 && !hasCompleted) {
+                SecondaryButton("I'm done") {
+                    hasCompleted = true
+                    onComplete()
                 }
             }
         }
     }
+}
+
+// ---- shared pieces -------------------------------------------------------------------------------
+
+@Composable
+private fun SessionNotice(starting: Boolean) {
+    if (starting) {
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFE2E8FD))
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFF5B6ECC))
+            Text("Getting ready… a few seconds.", fontSize = 14.sp, color = Color(0xFF3730A3))
+        }
+    } else {
+        ObserveNotice(
+            "Recording is off, so counts cannot be saved. Tap Retry in the banner at the top.",
+            NoticeTone.ERROR,
+        )
+    }
+}
+
+@Composable
+private fun Counter(count: Int, onDecrement: () -> Unit, onIncrement: () -> Unit, enabled: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        CounterButton("−", onDecrement, enabled = enabled && count > 0)
+        AnimatedContent(
+            targetState = count,
+            transitionSpec = {
+                val up = targetState > initialState
+                (slideInVertically(tween(180)) { if (up) it else -it } + fadeIn(tween(180))) togetherWith
+                    (slideOutVertically(tween(180)) { if (up) -it else it } + fadeOut(tween(120))) using
+                    SizeTransform(clip = true)
+            },
+            label = "counter",
+        ) { value ->
+            Text(
+                text = "$value",
+                fontSize = 72.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A),
+                modifier = Modifier.widthIn(min = 96.dp),
+                textAlign = TextAlign.Center,
+            )
+        }
+        CounterButton("+", onIncrement, enabled = enabled)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Chips(
+    options: List<String>,
+    selected: String?,
+    label: (String) -> String,
+    onSelect: (String) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = { Text(label(option), fontSize = 14.sp) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ObserversPicker(value: Int?, onChange: (Int?) -> Unit) {
+    Question("How many people are counting here, you included?")
+    Chips(
+        options = listOf("1", "2", "3", "?"),
+        selected = value?.toString() ?: "?",
+        label = { if (it == "?") "Not sure" else it },
+    ) { onChange(it.toIntOrNull()) }
+}
+
+@Composable
+private fun Steps(vararg lines: String) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        lines.forEachIndexed { i, line ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier.size(22.dp).clip(CircleShape).background(Color(0xFFE2E8FD)),
+                    contentAlignment = Alignment.Center,
+                ) { Text("${i + 1}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5B6ECC)) }
+                Text(line, fontSize = 15.sp, color = Color(0xFF0F172A))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Question(text: String) {
+    Text(
+        text = text,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color(0xFF0F172A),
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        color = Color(0xFF64748B),
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun PrimaryButton(text: String, enabled: Boolean = true, color: Color = Color(0xFF5B6ECC), onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = color),
+        shape = RoundedCornerShape(10.dp),
+    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White) }
+}
+
+@Composable
+private fun SecondaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+        shape = RoundedCornerShape(10.dp),
+    ) { Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+}
+
+@Composable
+private fun TextLink(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+    TextButton(onClick = onClick, enabled = enabled) { Text(text, fontSize = 14.sp) }
+}
+
+@Composable
+private fun ReasonField(value: String, onChange: (String) -> Unit, label: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        singleLine = false,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** A short green tick that pops in once, so a saved count looks saved. */
+@Composable
+private fun DoneBadge() {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val scale by animateFloatAsState(
+        targetValue = if (shown) 1f else 0.4f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 300f),
+        label = "done-badge",
+    )
+    Box(
+        modifier = Modifier.size(56.dp).scale(scale).clip(CircleShape).background(Color(0xFFDCFCE7)),
+        contentAlignment = Alignment.Center,
+    ) { Text("✓", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A)) }
 }
 
 @Composable
@@ -774,15 +888,36 @@ private fun CounterButton(glyph: String, onClick: () -> Unit, enabled: Boolean) 
     }
 }
 
+private enum class NoticeTone(val background: Color, val foreground: Color) {
+    ERROR(Color(0xFFFEE2E2), Color(0xFF991B1B)),
+    WARNING(Color(0xFFFEF3C7), Color(0xFF92400E)),
+}
+
 @Composable
-private fun ObserveNotice(text: String, background: Color, foreground: Color) {
-    Surface(modifier = Modifier.fillMaxWidth(), color = background, shape = RoundedCornerShape(8.dp)) {
-        Text(
-            text = text,
-            fontSize = 13.sp,
-            color = foreground,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(12.dp),
-        )
+private fun ObserveNotice(
+    text: String,
+    tone: NoticeTone,
+    action: String? = null,
+    onAction: () -> Unit = {},
+    actionEnabled: Boolean = true,
+) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = tone.background, shape = RoundedCornerShape(8.dp)) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = text,
+                fontSize = 13.sp,
+                color = tone.foreground,
+                lineHeight = 18.sp,
+                modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+            )
+            if (action != null) {
+                TextButton(onClick = onAction, enabled = actionEnabled) {
+                    Text(action, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = tone.foreground)
+                }
+            }
+        }
     }
 }

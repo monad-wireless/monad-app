@@ -110,7 +110,10 @@ class HeadcountSweepController(
     /** Correct the most recent checkpoint (or correction) to [count], with the reason the participant gave. */
     suspend fun correctLast(count: Int, reason: String, onAir: Boolean?): Result<Unit> {
         val target = _state.value.sweep.correctableEventId
-            ?: return Result.failure(IllegalStateException("there is no checkpoint to correct yet"))
+            ?: return refuse(
+                "There is no saved total to correct yet. Lower the counter, then save it.",
+                IllegalStateException("there is no checkpoint to correct yet"),
+            )
         return append(label = count.toString()) { sequence, sweepId ->
             event(sequence, sweepId, HeadcountSweepEvent.CORRECTION, roomOrFail(), onAir)
                 .copy(count = count, supersedesEventId = target, reason = reason.trim())
@@ -205,6 +208,22 @@ class HeadcountSweepController(
         prompt = config.prompt,
     )
 
+    /** Drop a refusal notice the participant has read. A failed write waiting for [retry] stays. */
+    fun dismissError() {
+        if (!_state.value.canRetry) _state.value = _state.value.copy(lastError = null)
+    }
+
+    /**
+     * Every refusal reaches the screen. Before 2026-10-17 only a failed WRITE did: a tap the replay
+     * or the shape check refused returned a failure the buttons discarded, so the participant
+     * pressed "Save final total" and nothing happened, with no word as to why.
+     */
+    private fun refuse(message: String, cause: Throwable): Result<Unit> {
+        Napier.w("[lab] sweep action refused: ${cause.message}")
+        _state.value = _state.value.copy(lastError = message)
+        return Result.failure(cause)
+    }
+
     private suspend fun append(
         label: String,
         build: (sequence: Int, sweepId: String) -> HeadcountSweepEvent,
@@ -213,30 +232,40 @@ class HeadcountSweepController(
             return Result.failure(IllegalStateException("the previous count is still being recorded"))
         }
         if (pendingEvent != null) {
-            return Result.failure(IllegalStateException("a count failed to record; retry it or the sweep cannot continue"))
+            return refuse(
+                "The last tap was not recorded. Press Retry recording before you continue.",
+                IllegalStateException("a count failed to record; retry it or the sweep cannot continue"),
+            )
         }
         val sweep = _state.value.sweep
         val sessionId = instrument.recordingSessionId
             ?: run {
-                _state.value = _state.value.copy(noSession = true, lastError = "The measurement session is not running.")
-                return Result.failure(IllegalStateException("no measurement session"))
+                _state.value = _state.value.copy(noSession = true)
+                return refuse("The measurement session is not running.", IllegalStateException("no measurement session"))
             }
         val sweepId = sweep.sweepId ?: Uuid.random().toString()
         val event = runCatching { build(sweep.nextSequence, sweepId) }
-            .getOrElse { return Result.failure(it) }
+            .getOrElse { return refuse("Not recorded: ${it.message}.", it) }
         val problems = event.problems()
         if (problems.isNotEmpty()) {
-            return Result.failure(IllegalArgumentException(problems.joinToString("; ")))
+            return refuse("Not recorded: ${problems.joinToString("; ")}.", IllegalArgumentException(problems.joinToString("; ")))
         }
         // Refused by the replay before it is written: an event the log would reject is not appended
         // and then explained; it is not appended.
         val preview = HeadcountSweepReplay.replay(events + (null to event))
         if (preview.errors.size > sweep.errors.size) {
             val error = preview.errors.last()
-            return Result.failure(IllegalArgumentException("${error.code}: ${error.detail}"))
+            return refuse(refusalText(error.code, error.detail), IllegalArgumentException("${error.code}: ${error.detail}"))
         }
         check(event.recordingSessionId == sessionId)
         return commit(event, label)
+    }
+
+    private fun refusalText(code: String, detail: String): String = when (code) {
+        "count_decreased_without_correction" ->
+            "A saved total cannot go down by itself ($detail). Use Correct to lower it and say why."
+        "event_after_close" -> "This sweep is already closed. Nothing more can be added to it."
+        else -> "Not recorded ($code): $detail."
     }
 
     private suspend fun commit(event: HeadcountSweepEvent, label: String): Result<Unit> = mutex.withLock {

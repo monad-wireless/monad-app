@@ -91,8 +91,7 @@ class ScanShortcutScreen : Screen {
                     color = Color(0xFF0F172A),
                 )
                 Text(
-                    text = "A card on a wall or a sticker on one of the grey boxes. We will work " +
-                        "out what it is.",
+                    text = "A card on the wall or a sticker on a grey box.",
                     fontSize = 14.sp,
                     color = Color(0xFF64748B),
                     textAlign = TextAlign.Center,

@@ -1,6 +1,8 @@
 package sk.martinvanco.monad.home.presentation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -39,11 +41,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import sk.martinvanco.monad.core.presentation.components.EggLine
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -144,6 +150,8 @@ class HomeScreen : Screen {
                     onOpenStatus = { navigator.push(SessionStatusScreen()) },
                 )
             }
+
+            EggLine(modifier = Modifier.padding(top = 8.dp))
         }
     }
 
@@ -200,8 +208,7 @@ class HomeScreen : Screen {
                     color = Ink,
                 )
                 Text(
-                    "Scan any card where you are sitting and the phone counts how long you stay. " +
-                        "This is the one thing here that counts people rather than phones.",
+                    "Scan the card where you sit. We count how long you stay.",
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = Color(0xFF334155),
@@ -272,7 +279,7 @@ class HomeScreen : Screen {
                         textAlign = TextAlign.Center
                     )
                     TextButton(onClick = onRefresh) {
-                        Text("Try Again", color = Accent, fontWeight = FontWeight.SemiBold)
+                        Text("Try again", color = Accent, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -281,7 +288,7 @@ class HomeScreen : Screen {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No quests available at the moment.\nCheck back later!",
+                        text = "No quests right now.\nCheck back later.",
                         fontSize = 14.sp,
                         color = Muted,
                         textAlign = TextAlign.Center,
@@ -291,11 +298,25 @@ class HomeScreen : Screen {
 
                 else -> {
                     state.participantQuests.forEachIndexed { position, quest ->
-                        QuestCard(
-                            quest = quest,
-                            position = position,
-                            onClick = { onOpenQuest(quest.id) },
-                        )
+                        // Cards rise in one after another on first show. Keyed by id, so a refresh
+                        // that changes nothing does not replay the entrance.
+                        key(quest.id) {
+                            var shown by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                delay(60L * position)
+                                shown = true
+                            }
+                            AnimatedVisibility(
+                                visible = shown,
+                                enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { it / 4 },
+                            ) {
+                                QuestCard(
+                                    quest = quest,
+                                    position = position,
+                                    onClick = { onOpenQuest(quest.id) },
+                                )
+                            }
+                        }
                     }
                     if (state.isOperator && state.operatorQuests.isNotEmpty()) {
                         OperatorTakes(
@@ -431,14 +452,13 @@ class HomeScreen : Screen {
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Start a quest by scanning",
+                        text = "Scan to start",
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                     )
                     Text(
-                        text = "Point at a card or a grey box and the right quest starts itself. " +
-                            "The shortest takes thirty seconds.",
+                        text = "Point the camera at a card or a grey box.",
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                         color = Color(0xFFDBE1FA),
@@ -723,11 +743,14 @@ class HomeScreen : Screen {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                HeroFigure(state.participantQuests.size.toString(), "quests open")
+                HeroFigure(state.participantQuests.size.toString(), "quests")
                 HeroDivider()
-                HeroFigure(formatPoints(state.pointsOnOffer), "points on offer")
-                HeroDivider()
-                HeroFigure(state.beaconCount.toString(), "beacons heard")
+                HeroFigure(formatPoints(state.pointsOnOffer), "points to earn")
+                // Beacons heard means something to the person running the lab, not to a student.
+                if (state.isOperator) {
+                    HeroDivider()
+                    HeroFigure(state.beaconCount.toString(), "beacons heard")
+                }
             }
         }
     }

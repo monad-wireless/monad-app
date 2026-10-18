@@ -46,6 +46,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
@@ -57,6 +58,8 @@ import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigatio
 import sk.martinvanco.monad.quests.data.dto.QuestDetailDto
 import sk.martinvanco.monad.quests.data.dto.TaskDto
 import sk.martinvanco.monad.quests.presentation.active_quest.ActiveQuestScreen
+
+private const val PREVIEW_STEPS = 5
 
 data class QuestDetailScreen(val questId: String) : Screen {
 
@@ -83,7 +86,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
                 onDismissRequest = { screenModel.onEvent(QuestDetailEvent.DismissStartQuestError) },
                 title = {
                     Text(
-                        text = "Cannot Start Quest",
+                        text = "Can't start this quest",
                         fontWeight = FontWeight.SemiBold
                     )
                 },
@@ -105,7 +108,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
         }
 
         ScreenWithBackNavigation(
-            title = "Quest Detail",
+            title = "Quest",
             onBackClick = { navigator.pop() }
         ) {
             when {
@@ -138,7 +141,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
                                 onClick = { screenModel.onEvent(QuestDetailEvent.RetryLoad) }
                             ) {
                                 Text(
-                                    text = "Try Again",
+                                    text = "Try again",
                                     color = Color(0xFF5B6ECC),
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -238,7 +241,7 @@ data class QuestDetailScreen(val questId: String) : Screen {
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "Task List (${quest.tasks.size} tasks)",
+                text = if (quest.tasks.size == 1) "1 step" else "${quest.tasks.size} steps",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F142F)
@@ -279,10 +282,22 @@ data class QuestDetailScreen(val questId: String) : Screen {
                                 },
                             verticalArrangement = Arrangement.spacedBy(24.dp)
                         ) {
-                            quest.tasks.forEachIndexed { index, task ->
+                            // A treasure hunt has seventy stops. The preview shows the first few and
+                            // a count: the run itself shows each stop when you reach it.
+                            quest.tasks.take(PREVIEW_STEPS).forEachIndexed { index, task ->
                                 TaskItem(
                                     taskNumber = index + 1,
                                     task = task
+                                )
+                            }
+                            val more = quest.tasks.size - PREVIEW_STEPS
+                            if (more > 0) {
+                                Text(
+                                    text = "+ $more more",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF5B6ECC),
+                                    modifier = Modifier.padding(start = 36.dp)
                                 )
                             }
                         }
@@ -338,14 +353,14 @@ data class QuestDetailScreen(val questId: String) : Screen {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Starting...",
+                            text = "Starting…",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
                         )
                     } else {
                         Text(
-                            text = "Start Quest",
+                            text = "Start",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
@@ -392,13 +407,17 @@ data class QuestDetailScreen(val questId: String) : Screen {
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFF0F142F)
                 )
-                Text(
-                    text = task.description,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.Black,
-                    lineHeight = 18.sp
-                )
+                if (task.description.isNotBlank()) {
+                    Text(
+                        text = task.description,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color(0xFF475569),
+                        lineHeight = 18.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

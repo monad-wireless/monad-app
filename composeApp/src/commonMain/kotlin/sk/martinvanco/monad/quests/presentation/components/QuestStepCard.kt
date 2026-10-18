@@ -8,8 +8,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -174,6 +179,8 @@ fun QuestStepCard(
     }
 }
 
+private const val COLLAPSED_LINES = 8
+
 /**
  * Step header with number badge, title, and description
  * Description is hidden for completed steps
@@ -222,13 +229,30 @@ private fun StepHeader(
             )
         }
 
-        // Only show description for non-completed steps
-        if (status != TaskStatus.COMPLETED) {
+        // Only show description for non-completed steps. A long briefing shows its first lines
+        // and a "More" toggle: the steps people need are at the top, and a wall of text pushed
+        // the step's own buttons off the screen (2026-10-17).
+        if (status != TaskStatus.COMPLETED && description.isNotBlank()) {
+            var expanded by remember(description) { mutableStateOf(false) }
+            var overflows by remember(description) { mutableStateOf(false) }
             Text(
                 text = description,
                 fontSize = 14.sp,
-                color = descriptionColor.copy(alpha = opacity)
+                lineHeight = 20.sp,
+                color = descriptionColor.copy(alpha = opacity),
+                maxLines = if (expanded) Int.MAX_VALUE else COLLAPSED_LINES,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
             )
+            if (overflows || expanded) {
+                Text(
+                    text = if (expanded) "Less" else "More",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF5B6ECC),
+                    modifier = Modifier.clickable { expanded = !expanded },
+                )
+            }
         }
     }
 }

@@ -37,6 +37,11 @@ class HomeScreenModel(
 
     private var scanJob: Job? = null
 
+    private companion object {
+        /** The quest the board shows first (researcher's choice, 2026-10-17). */
+        const val PINNED_FIRST = "Counting"
+    }
+
     init {
         // Recovery first: it is the one thing here that must happen before a new session can be
         // started, and Home is the first screen every launch passes through.
@@ -164,7 +169,10 @@ class HomeScreenModel(
                 // reads the authenticated user, so an anonymous call silently loses them.
                 val token = runCatching { userRepository.getCurrentUser()?.token }.getOrNull()
                 val response = questsService.getActiveQuests(token)
+                // The server lists by creation date. Counting is the quest people run most, so it
+                // goes on top; the rest keep the server's order (sortedBy is stable).
                 val quests = response.quests.map { QuestCardDt.fromDto(it) }
+                    .sortedBy { if (it.name.trim().equals(PINNED_FIRST, ignoreCase = true)) 0 else 1 }
                 mutableState.value = mutableState.value.copy(
                     quests = quests,
                     isLoadingQuests = false,
@@ -172,11 +180,8 @@ class HomeScreenModel(
                 )
             } catch (e: ClientRequestException) {
                 val errorMessage = when (e.response.status.value) {
-                    400 -> "Invalid request"
-                    401 -> "Authentication required"
-                    403 -> "Access denied"
-                    404 -> "Quests not found"
-                    else -> "Failed to load quests"
+                    401 -> "Please log in again."
+                    else -> "Could not load quests."
                 }
                 mutableState.value = mutableState.value.copy(
                     isLoadingQuests = false,
@@ -185,12 +190,12 @@ class HomeScreenModel(
             } catch (e: ServerResponseException) {
                 mutableState.value = mutableState.value.copy(
                     isLoadingQuests = false,
-                    questsError = "Server error. Please try again later."
+                    questsError = "The server has a problem. Try again in a minute."
                 )
             } catch (e: Exception) {
                 mutableState.value = mutableState.value.copy(
                     isLoadingQuests = false,
-                    questsError = "Network error. Please check your connection."
+                    questsError = "No connection. Check your internet."
                 )
             }
         }

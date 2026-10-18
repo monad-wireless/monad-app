@@ -49,7 +49,7 @@ class ActiveQuestScreenModel(
                 // Get enrollment ID from user record
                 val user = userRepository.getCurrentUser()
                 if (user == null) {
-                    showErrorWithoutCleanup("User not logged in")
+                    showErrorWithoutCleanup("Please log in again.")
                     return@launch
                 }
 
@@ -57,7 +57,7 @@ class ActiveQuestScreenModel(
                 if (enrollmentId.isNullOrEmpty()) {
                     // No enrollment - this shouldn't happen if activeQuestId is set
                     // Don't cleanup, let user retry or manually fix
-                    showErrorWithoutCleanup("No active enrollment found. Please restart the quest.")
+                    showErrorWithoutCleanup("This quest is not running any more. Go back and start it again.")
                     return@launch
                 }
 
@@ -102,7 +102,7 @@ class ActiveQuestScreenModel(
 
                 mutableState.value = mutableState.value.copy(
                     enrollmentId = enrollmentId,
-                    questName = "Quest in Progress",
+                    questName = "Quest",
                     userName = user.name ?: "",
                     tasks = tasks,
                     isLoading = false,
@@ -114,10 +114,10 @@ class ActiveQuestScreenModel(
                 startLabSession()
             } catch (e: CancellationException) {
                 // Coroutine was cancelled - show error so user can retry
-                showErrorWithoutCleanup("Quest loading was interrupted. Please try again.")
+                showErrorWithoutCleanup("Loading stopped. Try again.")
             } catch (e: Exception) {
                 // Don't cleanup on general errors - might be temporary issue
-                showErrorWithoutCleanup("Failed to load quest: ${e.message}")
+                showErrorWithoutCleanup("Could not open the quest. Try again. (${e.message})")
             }
         }
     }
@@ -216,7 +216,7 @@ class ActiveQuestScreenModel(
                     // the reason is recorded rather than swallowed. Routed to the warning channel
                     // so it does not take the step list down with it.
                     mutableState.value = mutableState.value.copy(
-                        instrumentWarning = "Instrument did not start: ${it.message}"
+                        instrumentWarning = it.message ?: "unknown reason"
                     )
                 }
         }
@@ -429,7 +429,7 @@ class ActiveQuestScreenModel(
 
         mutableState.value = mutableState.value.copy(
             isUploading = true,
-            uploadProgress = "Closing session..."
+            uploadProgress = "This takes a few seconds."
         )
 
         val outcome = sessionCoordinator.finishSession(
@@ -449,8 +449,8 @@ class ActiveQuestScreenModel(
             mutableState.value.copy(
                 isUploading = false,
                 // Data is retained locally; the lab console shows it as unsynced and can retry.
-                completionError = "Not submitted (${outcome.completionError ?: "unknown"}). " +
-                    "${outcome.sessionsUnsynced} session(s) kept on device.",
+                completionError = "Your data is safe on this phone. Check your internet and try again. " +
+                    "(${outcome.completionError ?: "unknown"})",
             )
         }
     }

@@ -21,6 +21,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import io.ktor.http.encodeURLParameter
+import sk.martinvanco.monad.core.presentation.components.EggLine
 import sk.martinvanco.monad.main.presentation.MainContainerScreen
 
 data class QuestEndedEarlyScreen(
@@ -64,7 +65,7 @@ data class QuestEndedEarlyScreen(
                             modifier = Modifier.size(48.dp)
                         )
                         Text(
-                            text = "Uploading Data",
+                            text = "Sending your data",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF0F142F)
@@ -99,7 +100,7 @@ data class QuestEndedEarlyScreen(
                             )
                         }
                         Text(
-                            text = "Upload Failed",
+                            text = "Not sent yet",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF0F142F)
@@ -116,7 +117,7 @@ data class QuestEndedEarlyScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Return Home", color = Color.White)
+                            Text("Home", color = Color.White)
                         }
                     }
                 }
@@ -142,14 +143,14 @@ data class QuestEndedEarlyScreen(
                             )
                         }
                         Text(
-                            text = "We're sorry to hear that",
+                            text = "Quest ended",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF0F142F),
                             textAlign = TextAlign.Center
                         )
                         Text(
-                            text = "Your data has been uploaded. If you experienced any issues, please let us know.",
+                            text = "What you did is saved. Something went wrong? Tell us.",
                             fontSize = 14.sp,
                             color = Color(0xFF6B7280),
                             textAlign = TextAlign.Center
@@ -168,7 +169,7 @@ data class QuestEndedEarlyScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "Report an Issue",
+                                text = "Report a problem",
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White
                             )
@@ -177,10 +178,11 @@ data class QuestEndedEarlyScreen(
                             onClick = { navigator.replaceAll(MainContainerScreen()) }
                         ) {
                             Text(
-                                text = "Return Home",
+                                text = "Home",
                                 color = Color(0xFF6B7280)
                             )
                         }
+                        EggLine()
                     }
                 }
             }

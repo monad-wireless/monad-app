@@ -35,6 +35,7 @@ import sk.martinvanco.monad.facts.domain.DwellState
 import sk.martinvanco.monad.facts.domain.FactDeck
 import sk.martinvanco.monad.facts.presentation.DwellFactPanel
 import sk.martinvanco.monad.lab.domain.LabInstrument
+import sk.martinvanco.monad.lab.domain.Phase
 import sk.martinvanco.monad.lab.domain.SessionMarker
 import sk.martinvanco.monad.quests.data.dto.ActiveTaskDto
 import sk.martinvanco.monad.quests.data.dto.ProbeConfig
@@ -257,6 +258,7 @@ fun ProbeStep(
                 stepNumber = stepNumber,
                 config = config,
                 sessionRunning = instrumentState.isRunning,
+                sessionStarting = instrumentState.phase != Phase.IDLE && !instrumentState.isRunning,
                 broadcasting = broadcasting,
                 matched = matched,
                 remainingSeconds = remainingSeconds,
@@ -282,8 +284,8 @@ fun ProbeStep(
 
 /** What to say when a scan matched nothing, phrased by how many things could have matched. */
 private fun wrongCodeMessage(config: ProbeConfig): String = when (config.targets.size) {
-    1 -> "That is not the one. Look for ${config.targets.first().label.ifBlank { "the marked point" }}."
-    else -> "That code is not part of this run. Find a marked point or a node sticker."
+    1 -> "Wrong code. Look for ${config.targets.first().label.ifBlank { "the marked spot" }}."
+    else -> "This code is not part of the quest. Find a marked spot or a sensor box."
 }
 
 @Composable
@@ -291,6 +293,7 @@ private fun ProbeContent(
     stepNumber: Int,
     config: ProbeConfig?,
     sessionRunning: Boolean,
+    sessionStarting: Boolean,
     broadcasting: Boolean,
     matched: ProbeTarget?,
     remainingSeconds: Int,
@@ -307,14 +310,20 @@ private fun ProbeContent(
     ) {
         when {
             config == null || config.targets.isEmpty() -> ProbeNotice(
-                text = "This step has nothing to scan for. It cannot run — tell the operator.",
+                text = "This step is set up wrong. Tell the organiser.",
                 background = Color(0xFFFEE2E2),
                 foreground = Color(0xFF991B1B),
             )
 
+            // The first seconds of a run are start-up, not a failure.
+            sessionStarting -> ProbeNotice(
+                text = "Getting ready… a few seconds.",
+                background = Color(0xFFE2E8FD),
+                foreground = Color(0xFF3730A3),
+            )
+
             !sessionRunning -> ProbeNotice(
-                text = "The measurement session is not running, so nothing would record this " +
-                    "point. Retry the instrument from the warning banner, or tell the operator.",
+                text = "Recording is off, so this spot cannot be saved. Tap Retry in the banner at the top.",
                 background = Color(0xFFFEE2E2),
                 foreground = Color(0xFF991B1B),
             )
@@ -322,8 +331,7 @@ private fun ProbeContent(
             // A dwell with the frame off is a participant standing still for no reason. The quest
             // asked for a broadcast or it did not, and either way the person deserves to know.
             matched != null && !broadcasting -> ProbeNotice(
-                text = "Your phone is NOT on air, so the receivers cannot hear you standing here. " +
-                    "Keep the app open, and tell the operator if this does not clear.",
+                text = "Your phone is not broadcasting. Keep the app open and the screen on.",
                 background = Color(0xFFFEF3C7),
                 foreground = Color(0xFF92400E),
             )
@@ -444,7 +452,7 @@ private fun ProbeContent(
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "seconds of you standing still",
+                        text = "seconds. Stand still.",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF334155),
@@ -453,8 +461,7 @@ private fun ProbeContent(
                     // night, not of the app, and the app cannot see it — a printed "nine" would
                     // be wrong on any night six were up.
                     Text(
-                        text = "The receivers are recording this window. Read something while " +
-                            "they do.",
+                        text = "The sensors are listening. Read the card below meanwhile.",
                         fontSize = 12.sp,
                         lineHeight = 17.sp,
                         color = Color(0xFF64748B),

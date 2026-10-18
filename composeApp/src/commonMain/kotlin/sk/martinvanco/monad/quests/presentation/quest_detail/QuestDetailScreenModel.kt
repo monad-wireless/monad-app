@@ -5,7 +5,12 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.ServerResponseException
+import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import sk.martinvanco.monad.auth.data.repository.UserRepository
 import sk.martinvanco.monad.core.util.currentTimeMillis
 import sk.martinvanco.monad.home.data.api.QuestsService
@@ -53,11 +58,9 @@ class QuestDetailScreenModel(
                 )
             } catch (e: ClientRequestException) {
                 val errorMessage = when (e.response.status.value) {
-                    400 -> "Invalid quest ID format"
-                    401 -> "Authentication required"
-                    403 -> "Access denied"
-                    404 -> "Quest not found"
-                    else -> "Failed to load quest"
+                    401 -> "Please log in again."
+                    404 -> "This quest no longer exists."
+                    else -> "Could not load this quest."
                 }
                 mutableState.value = mutableState.value.copy(
                     isLoading = false,
@@ -66,14 +69,39 @@ class QuestDetailScreenModel(
             } catch (e: ServerResponseException) {
                 mutableState.value = mutableState.value.copy(
                     isLoading = false,
-                    error = "Server error. Please try again later."
+                    error = "The server has a problem. Try again in a minute."
                 )
             } catch (e: Exception) {
                 mutableState.value = mutableState.value.copy(
                     isLoading = false,
-                    error = "Network error. Please check your connection."
+                    error = "No connection. Check your internet."
                 )
             }
+        }
+    }
+
+    /**
+     * Why the server refused a start, in words a participant can act on.
+     *
+     * Every 409 used to read "Already enrolled in this quest", including a phone that lacks a
+     * capability and a node that is resting. The server says which in `reason` (a closed set,
+     * `App\Quest\QuestAvailability`), so the screen reads that instead of guessing from the status.
+     */
+    private fun startRefusal(status: Int, body: String): String {
+        val json = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull()
+        val reason = json?.get("reason")?.jsonPrimitive?.contentOrNull
+        val serverText = json?.get("error")?.jsonPrimitive?.contentOrNull
+        return when {
+            status == 401 -> "Please log in again."
+            reason == "capability_missing" -> "This phone cannot run this quest. Update the app and try again."
+            reason == "in_progress" -> "You already have this quest running. Open it from the home screen, or wait a few minutes."
+            reason == "cooldown" -> "You ran this recently. Try again a bit later."
+            reason == "node_idle" -> "The sensors are resting right now. Try again during a recording session."
+            reason == "window_closed" -> "This quest is not open right now."
+            reason == "device_inactive" -> "This sensor box is out of service."
+            reason == "not_armed" -> "The sensors are not ready yet. Try again later."
+            serverText != null -> "$serverText."
+            else -> "Could not start the quest (error $status)."
         }
     }
 
@@ -121,20 +149,20 @@ class QuestDetailScreenModel(
                 )
 
             } catch (e: ClientRequestException) {
-                val errorMessage = when (e.response.status.value) {
-                    400 -> "Cannot start quest"
-                    401 -> "Authentication required"
-                    409 -> "Already enrolled in this quest"
-                    else -> "Failed to start quest"
-                }
+                val body = runCatching { e.response.bodyAsText() }.getOrDefault("")
                 mutableState.value = mutableState.value.copy(
                     isStartingQuest = false,
-                    startQuestError = errorMessage
+                    startQuestError = startRefusal(e.response.status.value, body)
+                )
+            } catch (e: ServerResponseException) {
+                mutableState.value = mutableState.value.copy(
+                    isStartingQuest = false,
+                    startQuestError = "The server has a problem. Try again in a minute."
                 )
             } catch (e: Exception) {
                 mutableState.value = mutableState.value.copy(
                     isStartingQuest = false,
-                    startQuestError = e.message ?: "Failed to start quest"
+                    startQuestError = "No connection. Check your internet and try again."
                 )
             }
         }

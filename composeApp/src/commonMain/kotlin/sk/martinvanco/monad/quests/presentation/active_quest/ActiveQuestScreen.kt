@@ -136,7 +136,7 @@ data class ActiveQuestScreen(
                             modifier = Modifier.size(48.dp)
                         )
                         Text(
-                            text = "Uploading Data",
+                            text = "Sending your data",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF0F142F)
@@ -158,7 +158,7 @@ data class ActiveQuestScreen(
                 onDismissRequest = { screenModel.onEvent(ActiveQuestEvent.DismissCompletionError) },
                 title = {
                     Text(
-                        text = "Upload Failed",
+                        text = "Not sent yet",
                         fontWeight = FontWeight.SemiBold
                     )
                 },
@@ -170,14 +170,14 @@ data class ActiveQuestScreen(
                         onClick = { screenModel.onEvent(ActiveQuestEvent.RetryUpload) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC))
                     ) {
-                        Text("Retry", color = Color.White)
+                        Text("Try again", color = Color.White)
                     }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { screenModel.onEvent(ActiveQuestEvent.DismissCompletionError) }
                     ) {
-                        Text("Cancel", color = Color(0xFF6B7280))
+                        Text("Later", color = Color(0xFF6B7280))
                     }
                 }
             )
@@ -197,14 +197,14 @@ data class ActiveQuestScreen(
                 },
                 title = {
                     Text(
-                        text = "End Quest?",
+                        text = "End the quest?",
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center
                     )
                 },
                 text = {
                     Text(
-                        text = "Are you sure you want to end the quest? Your progress will be uploaded but you won't receive full points.",
+                        text = "What you did so far is kept. You get fewer points.",
                         textAlign = TextAlign.Center
                     )
                 },
@@ -213,14 +213,14 @@ data class ActiveQuestScreen(
                         onClick = { screenModel.onEvent(ActiveQuestEvent.ConfirmEndQuest) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
                     ) {
-                        Text("Yes, End Quest", color = Color.White)
+                        Text("End", color = Color.White)
                     }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { screenModel.onEvent(ActiveQuestEvent.DismissEndQuestConfirmation) }
                     ) {
-                        Text("Continue Quest", color = Color(0xFF5B6ECC))
+                        Text("Keep going", color = Color(0xFF5B6ECC))
                     }
                 }
             )
@@ -265,13 +265,13 @@ data class ActiveQuestScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 TextButton(onClick = { navigator.pop() }) {
-                                    Text("Go Back", color = Color(0xFF6B7280))
+                                    Text("Back", color = Color(0xFF6B7280))
                                 }
                                 Button(
                                     onClick = { screenModel.onEvent(ActiveQuestEvent.RetryLoad) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC))
                                 ) {
-                                    Text("Retry", color = Color.White)
+                                    Text("Try again", color = Color.White)
                                 }
                             }
                         }
@@ -299,26 +299,27 @@ data class ActiveQuestScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = warning,
+                                    text = "Recording did not start.",
                                     color = Color(0xFF92400E),
-                                    fontSize = 14.sp
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "You can still complete the steps — the radio " +
-                                        "measurement will be missing from this run.",
+                                    text = "Check that Bluetooth is on, then tap Retry. ($warning)",
                                     color = Color(0xFF92400E),
                                     fontSize = 13.sp
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Button(
+                                        onClick = { screenModel.onEvent(ActiveQuestEvent.RetryInstrument) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF92400E))
+                                    ) {
+                                        Text("Retry", color = Color.White)
+                                    }
                                     TextButton(onClick = {
                                         screenModel.onEvent(ActiveQuestEvent.DismissInstrumentWarning)
                                     }) {
-                                        Text("Dismiss", color = Color(0xFF92400E))
-                                    }
-                                    TextButton(onClick = {
-                                        screenModel.onEvent(ActiveQuestEvent.RetryInstrument)
-                                    }) {
-                                        Text("Retry instrument", color = Color(0xFF92400E))
+                                        Text("Hide", color = Color(0xFF92400E))
                                     }
                                 }
                             }
@@ -405,7 +406,7 @@ data class ActiveQuestScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Upload Data & Complete Quest",
+                            text = "Finish and send",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
@@ -416,7 +417,7 @@ data class ActiveQuestScreen(
                         screenModel.onEvent(ActiveQuestEvent.ShowEndQuestConfirmation)
                     }) {
                         Text(
-                            text = "End Quest",
+                            text = "End quest",
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.error,
                             textDecoration = TextDecoration.Underline
