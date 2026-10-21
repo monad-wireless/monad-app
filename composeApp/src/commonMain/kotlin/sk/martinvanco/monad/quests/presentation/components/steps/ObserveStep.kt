@@ -216,6 +216,11 @@ private fun SweepContent(
     // The replay refuses a total below the last saved one unless a correction says why. The screen
     // asks for the correction before the participant presses anything that would be refused.
     val belowSaved = saved != null && counter < saved
+    // The room the sweep runs in, from the replayed log first (it survives a restored session),
+    // shown on every later screen when the quest offers a choice: a mis-tapped room was
+    // otherwise invisible after Start (2026-10-20, a silent-room count filed as the open room).
+    val sweepRoom = config.rooms.firstOrNull { it.roomId == ui.sweep.identity?.roomId } ?: selectedRoom
+    val roomLabel = sweepRoom?.label?.takeIf { config.rooms.size > 1 }
 
     Column(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
@@ -309,6 +314,7 @@ private fun SweepContent(
                     }
 
                     SweepPhase.ACTIVE -> {
+                        roomLabel?.let { Question("Counting: $it") }
                         Hint(if (singleSpot) "People you can see from here" else config.prompt)
                         Counter(
                             count = counter,
@@ -366,6 +372,7 @@ private fun SweepContent(
                                         counter = counter,
                                         saved = saved,
                                         singleSpot = singleSpot,
+                                        roomLabel = roomLabel,
                                         coverage = coverage,
                                         onCoverage = { coverage = it },
                                         reason = reason,
@@ -421,11 +428,11 @@ private fun SweepContent(
                         val sweep = ui.sweep
                         DoneBadge()
                         Text(
-                            text = if (shownPhase == SweepPhase.FINALISED) {
+                            text = (if (shownPhase == SweepPhase.FINALISED) {
                                 "Saved: ${sweep.finalCount} ${if (sweep.finalCount == 1) "person" else "people"}"
                             } else {
                                 "Saved as partial: ${sweep.runningTotal ?: 0}"
-                            },
+                            }) + (roomLabel?.let { "\n$it" } ?: ""),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0F172A),
@@ -491,6 +498,7 @@ private fun FinishForm(
     counter: Int,
     saved: Int?,
     singleSpot: Boolean,
+    roomLabel: String?,
     coverage: String,
     onCoverage: (String) -> Unit,
     reason: String,
@@ -516,7 +524,7 @@ private fun FinishForm(
     }
     Question(if (singleSpot) "Set the number, then answer three quick questions." else "Almost done. Three quick questions.")
 
-    Question("Did you count the whole room?")
+    Question(roomLabel?.let { "Did you count the whole $it?" } ?: "Did you count the whole room?")
     Chips(HeadcountSweepEvent.COVERAGES, coverage, ::coverageLabel, onCoverage)
     AnimatedVisibility(coverage != HeadcountSweepEvent.COVERAGE_COMPLETE) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
