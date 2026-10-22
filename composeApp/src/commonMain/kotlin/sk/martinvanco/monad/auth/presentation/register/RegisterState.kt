@@ -10,5 +10,7 @@ data class RegisterState(
     val error: String? = null,
     val emailError: String? = null,
     val passwordError: String? = null,
-    val repeatPasswordError: String? = null
+    val repeatPasswordError: String? = null,
+    /** The server created the account as `pending`: it waits for an operator to approve it. */
+    val pendingApproval: Boolean = false
 )

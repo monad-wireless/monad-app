@@ -107,6 +107,21 @@ class AuthManager(
         operatorAccess.clear()
     }
 
+    /**
+     * Replace the password on the server. The bearer token stays valid (the API is stateless), so
+     * nothing on this handset changes and the participant stays signed in.
+     */
+    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
+        return try {
+            val user = userRepository.getCurrentUser() ?: return Result.failure(Exception("No user found"))
+            val token = user.token ?: return Result.failure(Exception("No token found"))
+            authService.changePassword(token, currentPassword, newPassword)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteAccount(): Result<Unit> {
         return try {
             val user = userRepository.getCurrentUser() ?: return Result.failure(Exception("No user found"))

@@ -7,6 +7,7 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.HttpHeaders
+import sk.martinvanco.monad.auth.data.dto.ChangePasswordRequestDto
 import sk.martinvanco.monad.auth.data.dto.LoginRequestDto
 import sk.martinvanco.monad.auth.data.dto.LoginResponseDto
 import sk.martinvanco.monad.auth.data.dto.MeResponseDto
@@ -39,6 +40,16 @@ class AuthService(private val ktorClient: KtorClient) {
             }
         }
         return response.body<MeResponseDto>()
+    }
+
+    /** 400 `AUTH_010` for a wrong current password, never 401, so a refusal cannot read as a lost session. */
+    suspend fun changePassword(token: String, currentPassword: String, newPassword: String) {
+        ktorClient.client.post("/api/auth/password") {
+            headers {
+                append(HttpHeaders.Authorization, "Bearer $token")
+            }
+            setBody(ChangePasswordRequestDto(currentPassword = currentPassword, newPassword = newPassword))
+        }
     }
 
     suspend fun deleteAccount(token: String) {

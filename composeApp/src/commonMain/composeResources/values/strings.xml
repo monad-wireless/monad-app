@@ -39,12 +39,16 @@
             %1$s is AppConfig.SUPPORT_EMAIL, so the address lives in one place.
         -->
         <string name="login_screen_password_help_title">Forgot your password?</string>
-        <string name="login_screen_password_help_body">This app cannot reset a password yet. Write to %1$s and your account will be sorted out by hand.</string>
+        <string name="login_screen_password_help_body">Write to %1$s from the email address you registered with. The researcher sets a new temporary password and replies to that address. Sign in with it, then change it.</string>
         <string name="login_screen_password_help_write">Write an email</string>
         <string name="login_screen_password_help_close">Close</string>
 
     <string name="create_account_screen">Create Account</string>
         <string name="create_account_screen_already_have_acc">Already have an account?</string>
+        <string name="create_account_screen_invite_hint">The beta is invitation only. Use the email address your invitation was sent to, and your account is ready at once.</string>
+        <string name="create_account_screen_pending_title">Waiting for approval</string>
+        <string name="create_account_screen_pending_body">Your account %1$s exists, but this address was not invited. The researcher must approve it before you can sign in. Write to %2$s if you expected an invitation.</string>
+        <string name="create_account_screen_pending_back">Back to sign in</string>
 
     <!-- Top Bar -->
     <string name="profile">Profile</string>

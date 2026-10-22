@@ -73,6 +73,13 @@ class RegisterScreenModel(
             return
         }
 
+        // The server's rule (AuthController::assertPasswordPolicy), checked here first so the
+        // common mistake costs no round trip.
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            mutableState.value = state.value.copy(passwordError = "Password must have at least $MIN_PASSWORD_LENGTH characters")
+            return
+        }
+
         if (password != repeatPassword) {
             mutableState.value = state.value.copy(repeatPasswordError = "Passwords do not match")
             return
@@ -88,14 +95,22 @@ class RegisterScreenModel(
 
             try {
                 val response = authService.register(email, password, name)
+                // The account now exists on the server either way, so the manager may save the
+                // new pair: a pending account signs in with exactly this pair once approved.
+                CredentialSave.request()
+                val token = response.token
+                if (token == null) {
+                    // Not invited from the onboarding desk: the account waits for approval and
+                    // there is no session to start. Nothing is saved on the handset.
+                    mutableState.value = state.value.copy(isLoading = false, pendingApproval = true)
+                    return@launch
+                }
                 authManager.saveUserFromRegister(
                     email = response.email,
                     name = response.name,
-                    token = response.token
+                    token = token
                 )
                 mutableState.value = state.value.copy(isLoading = false)
-                // The account now exists on the server, so the manager may save the new pair.
-                CredentialSave.request()
                 navigationManager.replaceAll(MainContainerScreen())
             } catch (e: Exception) {
                 val errorMessage = parseErrorMessage(e)
@@ -121,5 +136,9 @@ class RegisterScreenModel(
         }
 
         return message
+    }
+
+    private companion object {
+        const val MIN_PASSWORD_LENGTH = 8
     }
 }

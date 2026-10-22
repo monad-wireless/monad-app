@@ -27,12 +27,16 @@
         from (`/join`) is Slovak. %1$s is AppConfig.SUPPORT_EMAIL.
     -->
     <string name="login_screen_password_help_title">Zabudli ste heslo?</string>
-    <string name="login_screen_password_help_body">Aplikácia zatiaľ nevie obnoviť heslo. Napíšte na %1$s a váš účet vybavíme ručne.</string>
+    <string name="login_screen_password_help_body">Napíšte na %1$s z e-mailovej adresy, ktorou ste sa registrovali. Nastavíme vám nové dočasné heslo a pošleme ho na túto adresu. Prihláste sa ním a potom si ho zmeňte.</string>
     <string name="login_screen_password_help_write">Napísať e-mail</string>
     <string name="login_screen_password_help_close">Zavrieť</string>
 
     <string name="create_account_screen">Create Account</string>
     <string name="create_account_screen_already_have_acc">Already have an account?</string>
+    <string name="create_account_screen_invite_hint">Beta je len na pozvánku. Použite e-mailovú adresu, na ktorú prišla pozvánka, a účet bude hneď pripravený.</string>
+    <string name="create_account_screen_pending_title">Čaká na schválenie</string>
+    <string name="create_account_screen_pending_body">Účet %1$s existuje, ale táto adresa nebola pozvaná. Pred prihlásením ho musí schváliť výskumník. Ak ste pozvánku čakali, napíšte na %2$s.</string>
+    <string name="create_account_screen_pending_back">Späť na prihlásenie</string>
 
     <!-- Top Bar -->
     <string name="profile">Profil</string>

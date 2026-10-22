@@ -45,6 +45,10 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import monad.composeapp.generated.resources.Res
 import monad.composeapp.generated.resources.create_account_screen
 import monad.composeapp.generated.resources.create_account_screen_already_have_acc
+import monad.composeapp.generated.resources.create_account_screen_invite_hint
+import monad.composeapp.generated.resources.create_account_screen_pending_back
+import monad.composeapp.generated.resources.create_account_screen_pending_body
+import monad.composeapp.generated.resources.create_account_screen_pending_title
 import monad.composeapp.generated.resources.field_label_email
 import monad.composeapp.generated.resources.field_label_name
 import monad.composeapp.generated.resources.field_label_password
@@ -90,9 +94,43 @@ class RegisterScreen : Screen, PreSessionScreen {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
+                if (state.pendingApproval) {
+                    // The server created the account as pending (no invitation for this email).
+                    // There is no session to start, so the form gives way to the explanation.
+                    Text(
+                        text = stringResource(Res.string.create_account_screen_pending_title),
+                        style = MaterialTheme.typography.h1,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(
+                            Res.string.create_account_screen_pending_body,
+                            state.email.trim(),
+                            AppConfig.SUPPORT_EMAIL,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    ButtonPrimary(
+                        text = stringResource(Res.string.create_account_screen_pending_back),
+                        onClick = { screenModel.onEvent(RegisterEvent.LoginButtonClick) },
+                    )
+                    return@Column
+                }
+
                 Text(
                     text = stringResource(Res.string.create_account_screen),
                     style = MaterialTheme.typography.h1,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = stringResource(Res.string.create_account_screen_invite_hint),
+                    style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center
                 )
 

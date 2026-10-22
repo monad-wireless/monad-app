@@ -44,8 +44,18 @@ import sk.martinvanco.monad.profile.presentation.ProfileScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import sk.martinvanco.monad.core.presentation.components.filled_input.FilledInput
 import sk.martinvanco.monad.core.presentation.components.AppVersionLine
 import sk.martinvanco.monad.core.presentation.components.ScreenWithBackNavigation
 import sk.martinvanco.monad.notifications.presentation.NotificationSettingsScreen
@@ -172,6 +182,51 @@ class MyAccountScreen : Screen {
                         Text("›", fontSize = 22.sp, color = Color(0xFF94A3B8))
                     }
 
+                    // The account's credential, in the same row shape as Notifications: a place
+                    // to go, not a destructive action.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White)
+                                .clickable { screenModel.onEvent(MyAccountEvent.ChangePasswordClick) }
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF5B6ECC)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Change password",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF0F142F)
+                                )
+                                Text(
+                                    text = "You stay signed in on this phone",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF64748B)
+                                )
+                            }
+                            Text("›", fontSize = 22.sp, color = Color(0xFF94A3B8))
+                        }
+                        if (state.passwordChanged) {
+                            Text(
+                                text = "Password changed.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+                    }
+
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -224,6 +279,17 @@ class MyAccountScreen : Screen {
                         AppVersionLine()
                     }
                 }
+            }
+
+            if (state.showChangePasswordDialog) {
+                ChangePasswordDialog(
+                    isChanging = state.isChangingPassword,
+                    error = state.changePasswordError,
+                    onConfirm = { current, new, repeat ->
+                        screenModel.onEvent(MyAccountEvent.ConfirmChangePassword(current, new, repeat))
+                    },
+                    onDismiss = { screenModel.onEvent(MyAccountEvent.DismissChangePassword) },
+                )
             }
 
             if (state.showDeleteDialog) {
@@ -282,4 +348,75 @@ class MyAccountScreen : Screen {
             }
         }
     }
+}
+
+/**
+ * Current, new, repeat. The field values live here and not in the screen model's state, so a
+ * password is never held in a data class that outlives the dialog.
+ *
+ * Every field takes BOTH hints, one per platform: Android reads [ContentType], iOS derives its
+ * text-content type from the keyboard type alone (CMP 1.8.2), so `KeyboardType.Password` is what
+ * keeps iOS from offering to save the current password as a new one.
+ */
+@Composable
+private fun ChangePasswordDialog(
+    isChanging: Boolean,
+    error: String?,
+    onConfirm: (String, String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var current by remember { mutableStateOf("") }
+    var new by remember { mutableStateOf("") }
+    var repeat by remember { mutableStateOf("") }
+    val passwordKeyboard = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next)
+
+    AlertDialog(
+        onDismissRequest = { if (!isChanging) onDismiss() },
+        title = { Text(text = "Change password", fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledInput(
+                    value = current,
+                    onValueChange = { current = it },
+                    label = "Current password",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = passwordKeyboard,
+                    contentType = ContentType.Password,
+                )
+                FilledInput(
+                    value = new,
+                    onValueChange = { new = it },
+                    label = "New password (at least 8 characters)",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = passwordKeyboard,
+                    contentType = ContentType.NewPassword,
+                )
+                FilledInput(
+                    value = repeat,
+                    onValueChange = { repeat = it },
+                    label = "Repeat new password",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = passwordKeyboard.copy(imeAction = ImeAction.Done),
+                    contentType = ContentType.NewPassword,
+                )
+                error?.let {
+                    Text(text = it, color = Color(0xFFDC2626), fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(current, new, repeat) }, enabled = !isChanging) {
+                if (isChanging) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(text = "Change", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isChanging) {
+                Text("Cancel")
+            }
+        }
+    )
 }

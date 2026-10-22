@@ -177,10 +177,16 @@ External testing needs all of this before Beta App Review will look at the build
 
 | Field | Value |
 |---|---|
-| Beta app description | What the app is for and what a tester is expected to do. |
+| Beta app description | Paste `app-store/beta-app-description.md`. |
 | Feedback email | `jakub.dubec@stuba.sk` — the same address the app, the site and `/join` show. |
 | Privacy policy URL | `https://monad.dubec.dev/privacy/` |
 | Sign-in required | Yes, with a working demo account. See below. |
+| Review notes | Paste `app-store/review-notes.md`. It holds no credentials; those go in the Sign-In fields. |
+| License agreement | Paste `app-store/license-agreement.md` (App Information, License Agreement, Custom). |
+
+The three files under `app-store/` are plain text in a `.md` name, because every one of those
+fields is a plain text box. Keep them in step with `public/privacy-policy.html` and
+`public/terms.html` in monad-backend, which say the same things at greater length.
 
 ### 4.3 The reviewer account, and the honest note beside it
 
@@ -189,6 +195,10 @@ The app requires a login, so App Review needs an account. Make one on the deploy
 ```bash
 docker exec -it monad_api php bin/console app:user:create appreview@dubec.dev
 ```
+
+A console-made account is active at once. Do NOT ask the reviewer to register in the app instead:
+registration is invitation only (section 5.1), so a reviewer's own account lands on "Waiting for
+approval" and the review stalls.
 
 This is the part most likely to go wrong. **A reviewer cannot complete a quest.** The measurement
 tasks scan printed markers in one building at FIIT STU in Bratislava, and there is nothing for a
@@ -203,7 +213,8 @@ Two more things on that page invite questions you should be ready for.
   for research data collection". That describes the collector, and there is no collector any more:
   `access_points` and `collector.host` in the lab bundle are empty because the AX210 cannot be an
   access point. The string now promises behaviour the build does not have. Either correct it or be
-  ready to explain it.
+  ready to explain it. `app-store/review-notes.md` explains it in one line (2026-10-22); the string
+  itself is unchanged.
 - The app asks for Bluetooth always, camera and local network. Each purpose string is written and
   specific, which is the right shape. Keep the privacy policy consistent with them.
 
@@ -211,7 +222,7 @@ Two more things on that page invite questions you should be ready for.
 
 Not needed for a beta, needed before any public release, and the answers are the same either way.
 Fill it while the facts are in front of you rather than on submission day. The app collects crash
-data (Crashlytics, opt-in), diagnostics (the IP-133 handset gauges) and an account email. It
+data (Crashlytics, on by default with an opt-out, section 6.1), diagnostics (the IP-133 handset gauges) and an account email. It
 collects no advertising identifier, no precise location and no video.
 
 ---
@@ -230,18 +241,40 @@ The sequence for one student:
 1. They submit `https://monad.dubec.dev/join`. A row appears with status new.
 2. On the onboarding desk, download the Slovak invitation as `.eml`. Open it in Apple Mail, then
    Message and Send Again to edit and send. The download never changes the signup's status.
-3. They reply that they want to take part.
-4. Add their address to the TestFlight external group in App Store Connect. Apple emails them the
+3. **Mark the signup invited on the desk now**, before they install anything. This is the approval
+   (section 5.1). A student who registers while the row is still new gets a pending account.
+4. They reply that they want to take part.
+5. Add their address to the TestFlight external group in App Store Connect. Apple emails them the
    TestFlight invitation.
-5. Mark the signup invited on the desk.
+6. They register in the app with the address the invitation went to. The account is active at
+   once and the desk row moves to registered.
 
-Tell them one thing Apple does not: **the address must be the one their Apple ID uses**, or the
-TestFlight invitation will not open. The signup form does not ask for it and it is the most common
-way a student gets stuck at step 4.
+Tell them one thing Apple does not: **the TestFlight address must be the one their Apple ID uses**,
+or the TestFlight invitation will not open. The signup form does not ask for it and it is the most
+common way a student gets stuck at step 5. The app registration address is a separate thing: it
+must be the signup address, whatever the Apple ID is.
 
-The current invitation text already promises the install link as a second message
-("Po potvrdení účasti ti pošlem odkaz na inštaláciu"), so no wording changes are needed for this
-flow.
+The invitation text promises the install link as a second message and, since 2026-10-22, tells the
+student to register with the invited address (`templates/join/invitation.txt.twig`).
+
+### 5.1 Accounts: approval, password change, recovery
+
+Built 2026-10-22 across monad-backend and monad-app.
+
+| Process | How it works |
+|---|---|
+| Registration, invited | `POST /api/auth/register` with an email whose signup is `invited`: 201, token, account `active`, signup moves to `registered`. |
+| Registration, anyone else | 202, no token, account `pending`, signup (if any) left as it was. The app shows "Waiting for approval". |
+| Login while pending | 403 `AUTH_009` "Account is waiting for approval". |
+| Approval | Admin, Users, filter Status = Pending, edit, set Status Active. The desk row does not move; mark it invited or registered by hand. |
+| Password change | App, My Account, Change password. `POST /api/auth/password` with the current and the new password. A wrong current password is 400 `AUTH_010`, never 401. |
+| Password policy | 8 to 255 characters, checked on register and on change (`AuthController::assertPasswordPolicy`). Before 2026-10-22 nothing checked it. |
+| Forgotten password | Manual. The student writes from the registered address. Admin, Users, edit, type a temporary password in New password. They sign in and change it in the app. |
+| Account deletion | App, My Account, Delete my account. Soft delete: identity scrubbed, pseudonymous scans stay. |
+
+There is no email transport, so nothing above sends mail. Two known limits: tokens issued before a
+password change stay valid until they expire, and `POST /api/auth/register` has no rate limiter,
+so pending rows can be created in bulk.
 
 Beta App Review approves the first build of each version train, not each build. Expect a wait on
 the first upload only.
