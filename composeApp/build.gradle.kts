@@ -106,11 +106,11 @@ val generateBuildIdentity = tasks.register("generateBuildIdentity") {
     inputs.property("worktree", worktree ?: "")
     outputs.dir(outputDir)
     doLast {
-        val packageDir = outputDir.get().asFile.resolve("sk/martinvanco/monad/core/config")
+        val packageDir = outputDir.get().asFile.resolve("dev/dubec/monad/core/config")
         packageDir.mkdirs()
         packageDir.resolve("BuildIdentity.kt").writeText(
             """
-            package sk.martinvanco.monad.core.config
+            package dev.dubec.monad.core.config
 
             /**
              * GENERATED — do not edit. Source of truth: `monad.version` / `monad.versionCode` in
@@ -328,21 +328,20 @@ kotlin {
 }
 
 android {
-    namespace = "sk.martinvanco.monad"
+    namespace = "dev.dubec.monad"
     compileSdk = 36
 
     defaultConfig {
         // The store identity, and deliberately not `namespace` above. `namespace` names the
         // generated R and BuildConfig classes and tracks the Kotlin source package, which no
         // store ever sees. `applicationId` is what Google Play registers and what a logcat
-        // package filter matches. It moved off `sk.martinvanco.monad`, which is Martin's
-        // namespace. Changing it again orphans every existing install.
+        // package filter matches. It moved off `sk.martinvanco.monad` (Martin Vanco's original
+        // namespace) on 2026-08-31, and the source package followed on 2026-10-22, so today
+        // both read `dev.dubec.monad`. Changing `applicationId` again orphans every existing install.
         //
-        // NOT the same string as the iOS bundle id, which is `dev.dubec.monadlocal`
-        // (iosApp/Configuration/Config.xcconfig). The two stores are separate registries and
-        // neither constrains the other; they differ because the iOS side had to take a name the
-        // personal signing team could hold. Firebase therefore needs one app per platform, which
-        // it would anyway.
+        // The iOS bundle id (`PRODUCT_BUNDLE_IDENTIFIER` in iosApp.xcodeproj) is also
+        // `dev.dubec.monad`. The two stores are separate registries and neither constrains the
+        // other. Firebase needs one app per platform anyway.
         applicationId = "dev.dubec.monad"
         // 29: WifiNetworkSpecifier + Network.bindSocket are the app-scoped association and
         // socket-pinning primitives the lab instrument is built on, and WifiConnectionServiceV2 is
@@ -403,7 +402,7 @@ dependencies {
 sqldelight {
     databases {
         create("Database") {
-            packageName.set("sk.martinvanco.monad")
+            packageName.set("dev.dubec.monad")
             schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
             // `version` is the schema version the app ships, and SQLDelight runs migration `N.sqm`
             // only when `version > N`. It had drifted to 5 while 5.sqm and 6.sqm existed, so those
@@ -575,7 +574,7 @@ abstract class PushApkTask @Inject constructor(private val execOps: ExecOperatio
             An adb install cannot do this step — MIUI's "Install via USB" is off and needs a SIM.
 
             Then, to launch it from here:
-              ${adb.get()} shell am start -n ${applicationId.get()}/sk.martinvanco.monad.MainActivity
+              ${adb.get()} shell am start -n ${applicationId.get()}/dev.dubec.monad.MainActivity
             """.trimIndent()
         )
     }

@@ -1,0 +1,83 @@
+package dev.dubec.monad.home.presentation
+
+import dev.dubec.monad.ble.domain.BleAdvertisement
+import dev.dubec.monad.home.presentation.model.QuestCardDt
+import dev.dubec.monad.lab.domain.CheckInState
+import dev.dubec.monad.lab.domain.health.InstrumentHealth
+import dev.dubec.monad.lab.domain.health.StreamState
+
+data class HomeState(
+    val isScanning: Boolean = false,
+    val advertisements: List<BleAdvertisement> = emptyList(),
+    val filterText: String = "",
+    val filteredAdvertisements: List<BleAdvertisement> = emptyList(),
+    val quests: List<QuestCardDt> = emptyList(),
+    val isLoadingQuests: Boolean = false,
+    val questsError: String? = null,
+    val beaconCount: Long = 0,
+    val isInstrumentRunning: Boolean = false,
+    val unsyncedSessions: Long = 0,
+    val isUploading: Boolean = false,
+    val uploadSuccess: Boolean? = null,
+    val uploadError: String? = null,
+    val userName: String? = null,
+    /** Live per-stream liveness, so the first screen can say more than "running". */
+    val health: InstrumentHealth = InstrumentHealth.IDLE,
+    /** Sessions rescued from a crash or reboot on this launch. */
+    val recoveredSessions: Int = 0,
+    /**
+     * Whether this account may see the operator half of the app.
+     *
+     * The home screen used to show every student a console badge, an instrument card and a beacon
+     * counter — three surfaces about an instrument a participant is not holding and cannot act on.
+     * They are now behind this flag. It is a cache of a server fact and never the authorization;
+     * see `OperatorAccess`.
+     */
+    val isOperator: Boolean = false,
+    /** The running check-in, if any. Drives the card a participant actually uses. */
+    val checkIn: CheckInState = CheckInState.Idle,
+    /** Ticks once a second so the check-in card's elapsed time moves. Display only. */
+    val nowMillis: Long = 0,
+) {
+    /**
+     * The one sentence the home screen owes an OPERATOR who just unlocked their phone.
+     *
+     * "Recording" on its own would be a lie the moment a stream quietly stops, which is the failure
+     * this whole surface exists to catch — so a dead stream changes the headline, not a footnote.
+     */
+    val instrumentHeadline: String
+        get() = when {
+            !isInstrumentRunning -> "Not recording"
+            health.overall == StreamState.DEAD -> "Recording — something has stopped"
+            health.overall == StreamState.STALE || health.overall == StreamState.DEGRADED ->
+                "Recording — one stream is struggling"
+
+            else -> "Recording"
+        }
+
+    val instrumentIsNominal: Boolean get() = isInstrumentRunning && health.overall.isHealthy
+
+    /** Age of the freshest event across every stream, in milliseconds, or null if nothing yet. */
+    val lastEventAgeMillis: Long?
+        get() = health.streams.filter { it.everProduced }.minOfOrNull { it.silenceMillis }
+
+    /** The running check-in, or null. */
+    val activeCheckIn: CheckInState.Active? get() = checkIn as? CheckInState.Active
+
+    /**
+     * The quests a student is meant to walk.
+     *
+     * Split from the operator takes rather than badged among them. An operator quest is a
+     * different KIND of thing — it is the person running the session measuring the room, not a
+     * participant contributing to it — and the two read as alternatives when they share a list.
+     * A participant never receives one at all (the backend withholds them), so this split is
+     * visible only on the operator's own phone, which is exactly where it was needed.
+     */
+    val participantQuests: List<QuestCardDt> get() = quests.filterNot { it.isOperatorOnly }
+
+    /** Operator takes. Empty for everybody but a superadmin. */
+    val operatorQuests: List<QuestCardDt> get() = quests.filter { it.isOperatorOnly }
+
+    /** Points on offer across the quests a student can see — the board's headline figure. */
+    val pointsOnOffer: Float get() = participantQuests.sumOf { it.points.toDouble() }.toFloat()
+}

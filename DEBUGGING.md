@@ -5,7 +5,7 @@
 ### Using the Logger Utility (Recommended)
 
 ```kotlin
-import sk.martinvanco.monad.core.util.Logger
+import dev.dubec.monad.core.util.Logger
 
 class LoginScreenModel : StateScreenModel<LoginState>(LoginState()) {
 

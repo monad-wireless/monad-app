@@ -1,0 +1,186 @@
+package dev.dubec.monad.quests.data.adapter
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import dev.dubec.monad.auth.data.repository.UserRepository
+import dev.dubec.monad.lab.domain.CanonicalJson
+import dev.dubec.monad.lab.domain.SnapshotDigestSource
+import dev.dubec.monad.home.data.api.QuestsService
+import dev.dubec.monad.lab.data.LabConfigService
+import dev.dubec.monad.lab.data.LabSessionRepository
+import dev.dubec.monad.lab.data.LabSessionUploader
+import dev.dubec.monad.lab.domain.LabConfig
+import dev.dubec.monad.quests.data.dto.QuestCompleteRequestDto
+import dev.dubec.monad.quests.data.dto.SkipRecordDto
+import dev.dubec.monad.quests.data.dto.StepCompletionRequestDto
+import dev.dubec.monad.quests.data.repository.QuestStepCompletionRepository
+import dev.dubec.monad.quests.domain.port.LabBundleSource
+import dev.dubec.monad.quests.domain.port.LabSessionArchive
+import dev.dubec.monad.quests.domain.port.ParticipantDirectory
+import dev.dubec.monad.quests.domain.port.QuestCompletion
+import dev.dubec.monad.quests.domain.port.QuestCompletionGateway
+import dev.dubec.monad.quests.domain.port.QuestParticipant
+import dev.dubec.monad.quests.domain.port.QuestStepJournal
+import dev.dubec.monad.quests.domain.port.QuestStepRecord
+
+/**
+ * The adapters behind `quests/domain/port`.
+ *
+ * They live here, in the *quests* feature's data layer, rather than on the services they wrap. A
+ * `LabConfigService` that implemented a `quests.domain` interface would make the lab feature depend
+ * on the quest feature to satisfy the quest feature's own boundary — the dependency would still
+ * cross, only backwards and less visibly. Each adapter is the whole translation: nothing above them
+ * names a DTO, a SQLDelight row or a Ktor service, and nothing below them knows a quest exists.
+ *
+ * They are deliberately thin. Every one of them is a rename plus, where the wire demands it, a
+ * parse — no decisions. The decisions are in `QuestSessionCoordinator`, which is the point.
+ */
+
+/** [LabConfigService] as the quest path needs it: loaded?, current, load, refresh. */
+class LabBundleSourceAdapter(
+    private val service: LabConfigService,
+) : LabBundleSource {
+
+    override val isLoaded: Boolean
+        get() = service.source.value != LabConfigService.Source.NONE
+
+    override val current: LabConfig get() = service.config.value
+
+    override suspend fun loadCached() {
+        service.loadCached()
+    }
+
+    override suspend fun refresh(token: String?) {
+        // The service already logs its own failure and falls back to whatever is loaded; a phone
+        // about to join an experiment AP frequently has no route to the backend, and that must not
+        // stop a session from starting.
+        service.refresh(token)
+    }
+}
+
+/**
+ * The local session backlog, drained through [LabSessionUploader].
+ *
+ * `purgeAfter = true` is applied here rather than being a parameter of the port: the rule is
+ * *upload, then purge only what the server acknowledged*, and it is the uploader that enforces it.
+ * A port that let the caller choose would be a port that let the caller get it wrong.
+ */
+class LabSessionArchiveAdapter(
+    private val uploader: LabSessionUploader,
+    private val sessions: LabSessionRepository,
+) : LabSessionArchive {
+
+    override suspend fun uploadPending(): Int = uploader.uploadPending(purgeAfter = true)
+
+    override suspend fun unsyncedCount(): Long = sessions.unsyncedCount()
+}
+
+/** [UserRepository] narrowed to the two facts a quest run needs. */
+class ParticipantDirectoryAdapter(
+    private val users: UserRepository,
+) : ParticipantDirectory {
+
+    override suspend fun current(): QuestParticipant? = users.getCurrentUser()?.let { user ->
+        QuestParticipant(
+            userId = user.id,
+            // The backend id when the account has one, else the local row id. The dataset never
+            // carries the e-mail.
+            participantId = user.backendId ?: user.id.toString(),
+            token = user.token,
+        )
+    }
+
+    override suspend fun clearActiveQuest(userId: Long) = users.clearActiveQuestId(userId)
+}
+
+/** Domain completion → the backend's `QuestCompleteRequestDto`. */
+class QuestCompletionGatewayAdapter(
+    private val service: QuestsService,
+) : QuestCompletionGateway {
+
+    override suspend fun submitCompletion(questId: String, completion: QuestCompletion, token: String) {
+        service.completeQuest(
+            questId = questId,
+            request = QuestCompleteRequestDto(
+                enrollmentId = completion.enrollmentId,
+                completedAt = completion.completedAtIso,
+                steps = completion.steps.map { step ->
+                    StepCompletionRequestDto(
+                        stepCompletionId = step.stepCompletionId,
+                        status = step.status,
+                        startedAt = step.startedAtIso,
+                        completedAt = step.completedAtIso,
+                        // Unparseable step data is dropped rather than allowed to fail the whole
+                        // completion: the radio measurement is the expensive artefact, and a step's
+                        // free-form payload must never be able to strand it.
+                        stepData = step.stepDataJson
+                            ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() },
+                        skipRecord = step.skip?.let {
+                            SkipRecordDto(message = it.message, errorCode = it.errorCode)
+                        },
+                    )
+                },
+            ),
+            token = token,
+        )
+    }
+}
+
+/** [QuestStepCompletionRepository] narrowed to read-and-clear. */
+class QuestStepJournalAdapter(
+    private val steps: QuestStepCompletionRepository,
+) : QuestStepJournal {
+
+    override suspend fun stepsFor(enrollmentId: String): List<QuestStepRecord> =
+        steps.getByEnrollmentId(enrollmentId).map { row ->
+            QuestStepRecord(
+                stepCompletionId = row.backendId,
+                status = row.status,
+                startedAtMillis = row.startedAt,
+                completedAtMillis = row.completedAt,
+                stepDataJson = row.stepData,
+                skipMessage = row.skipMessage,
+                skipErrorCode = row.skipErrorCode,
+            )
+        }
+
+    override suspend fun clear(enrollmentId: String) = steps.deleteByEnrollmentId(enrollmentId)
+}
+
+/**
+ * The frozen step snapshot's digest for the IP-162 evidence manifest.
+ *
+ * Hashes the canonical JSON of `[{order, type, name, config}, …]` over the enrollment's step rows
+ * as the start response froze them. The same rows the completion submission reads, so the digest
+ * names exactly the configuration the participant ran and nothing the quest was edited to since.
+ */
+class EnrollmentSnapshotDigestAdapter(
+    private val steps: QuestStepCompletionRepository,
+) : SnapshotDigestSource {
+
+    override suspend fun snapshotSha256(enrollmentId: String): String? {
+        val rows = steps.getByEnrollmentId(enrollmentId).sortedBy { it.stepOrder }
+        if (rows.isEmpty()) return null
+        val snapshot = JsonArray(
+            rows.map { row ->
+                JsonObject(
+                    mapOf(
+                        "order" to JsonPrimitive(row.stepOrder),
+                        "type" to JsonPrimitive(row.stepType),
+                        "name" to JsonPrimitive(row.stepName),
+                        "config" to (
+                            row.stepConfig?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }
+                                ?: JsonNull
+                            ),
+                    ),
+                )
+            },
+        )
+        // A config that carries a floating-point number cannot be canonicalised; the manifest then
+        // has no snapshot digest rather than a made-up one.
+        return runCatching { CanonicalJson.sha256(snapshot) }.getOrNull()
+    }
+}

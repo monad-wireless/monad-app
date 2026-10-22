@@ -1,0 +1,10 @@
+package dev.dubec.monad.auth.presentation.login
+
+sealed interface LoginEvent {
+    data object LoginButtonClick : LoginEvent
+    data object CreateAccountButtonClick : LoginEvent
+    data object ForgotPasswordClick : LoginEvent
+    data object DismissPasswordHelp : LoginEvent
+    data class OnEmailFieldChange(val value: String) : LoginEvent
+    data class OnPasswordFieldChange(val value: String) : LoginEvent
+}

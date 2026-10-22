@@ -1,0 +1,422 @@
+package dev.dubec.monad.my_account.presentation
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.koin.koinScreenModel
+import dev.dubec.monad.core.config.AppConfig
+import dev.dubec.monad.profile.presentation.ContributionSection
+import dev.dubec.monad.profile.presentation.ProfileScreenModel
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import dev.dubec.monad.core.presentation.components.filled_input.FilledInput
+import dev.dubec.monad.core.presentation.components.AppVersionLine
+import dev.dubec.monad.core.presentation.components.ScreenWithBackNavigation
+import dev.dubec.monad.notifications.presentation.NotificationSettingsScreen
+
+class MyAccountScreen : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        val screenModel = koinScreenModel<MyAccountScreenModel>()
+        val profileModel = koinScreenModel<ProfileScreenModel>()
+        val profileState by profileModel.state.collectAsState()
+        val state by screenModel.state.collectAsState()
+
+        ScreenWithBackNavigation(
+            title = "My account",
+            onBackClick = { navigator.pop() }
+        ) {
+            if (state.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                // Scrolls, and no longer SpaceBetween. The screen used to hold an identity
+                // block and two buttons, so pinning them to the ends was fine; it now carries
+                // the contribution section between them and SpaceBetween would push the
+                // destructive actions off the fold on a small handset.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // A slightly grey ground, so the white dashboard panels read as
+                        // panels. Same relationship monad-defense's StatsView has with
+                        // `.background.secondary`; without it the cards vanish into the page
+                        // and the whole thing reads as one long list.
+                        .background(Color(0xFFF1F5F9))
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(32.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .background(Color(0xFFE0E7FF), shape = CircleShape)
+                                .border(2.dp, Color(0xFF5B6ECC), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = state.userName?.firstOrNull()?.uppercase() ?: "U",
+                                fontSize = 40.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF5B6ECC)
+                            )
+                        }
+
+                        state.userName?.let { userName ->
+                            Text(
+                                text = userName,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF0F142F),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        Text(
+                            text = state.userEmail,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // IP-145. The thing somebody opens this tab to look at, placed above the
+                    // thing they open it to avoid.
+                    ContributionSection(
+                        stats = profileState.stats,
+                        isLoading = profileState.isLoading,
+                        error = profileState.error,
+                        siteUrl = AppConfig.SITE_URL,
+                        onRetry = profileModel::load,
+                    )
+
+                    // IP-157. The two consent toggles and the OS permission. A row, not a button:
+                    // it is a place to go, and the destructive actions below are the buttons.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White)
+                            .clickable { navigator.push(NotificationSettingsScreen()) }
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notifications,
+                            contentDescription = null,
+                            tint = Color(0xFF5B6ECC)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Notifications",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF0F142F)
+                            )
+                            Text(
+                                text = "Project messages, quest callouts, phone permission",
+                                fontSize = 12.sp,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                        Text("›", fontSize = 22.sp, color = Color(0xFF94A3B8))
+                    }
+
+                    // The account's credential, in the same row shape as Notifications: a place
+                    // to go, not a destructive action.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White)
+                                .clickable { screenModel.onEvent(MyAccountEvent.ChangePasswordClick) }
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF5B6ECC)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Change password",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF0F142F)
+                                )
+                                Text(
+                                    text = "You stay signed in on this phone",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF64748B)
+                                )
+                            }
+                            Text("›", fontSize = 22.sp, color = Color(0xFF94A3B8))
+                        }
+                        if (state.passwordChanged) {
+                            Text(
+                                text = "Password changed.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Button(
+                            onClick = { screenModel.onEvent(MyAccountEvent.LogoutClick) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFDC2626)
+                            ),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = "Log out",
+                                    tint = Color.White
+                                )
+                                Text(
+                                    text = "Log out",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        TextButton(
+                            onClick = { screenModel.onEvent(MyAccountEvent.DeleteAccountClick) }
+                        ) {
+                            Text(
+                                text = "Delete my account",
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
+                        }
+
+                        // Which build this is. At the foot, where a version conventionally lives
+                        // and where somebody looks when they are about to report something. Tap it
+                        // for the full build id — the same string the session sidecar records, so a
+                        // report can be joined to the recordings this build produced.
+                        Spacer(modifier = Modifier.height(20.dp))
+                        AppVersionLine()
+                    }
+                }
+            }
+
+            if (state.showChangePasswordDialog) {
+                ChangePasswordDialog(
+                    isChanging = state.isChangingPassword,
+                    error = state.changePasswordError,
+                    onConfirm = { current, new, repeat ->
+                        screenModel.onEvent(MyAccountEvent.ConfirmChangePassword(current, new, repeat))
+                    },
+                    onDismiss = { screenModel.onEvent(MyAccountEvent.DismissChangePassword) },
+                )
+            }
+
+            if (state.showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        if (!state.isDeleting) {
+                            screenModel.onEvent(MyAccountEvent.DismissDeleteDialog)
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = "Delete Account",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Are you sure you want to delete your account? All your data will be permanently removed.")
+                            state.deleteError?.let { error ->
+                                Text(
+                                    text = error,
+                                    color = Color(0xFFDC2626),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = { screenModel.onEvent(MyAccountEvent.ConfirmDeleteAccount) },
+                            enabled = !state.isDeleting
+                        ) {
+                            if (state.isDeleting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = "Delete",
+                                    color = Color(0xFFDC2626),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { screenModel.onEvent(MyAccountEvent.DismissDeleteDialog) },
+                            enabled = !state.isDeleting
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Current, new, repeat. The field values live here and not in the screen model's state, so a
+ * password is never held in a data class that outlives the dialog.
+ *
+ * Every field takes BOTH hints, one per platform: Android reads [ContentType], iOS derives its
+ * text-content type from the keyboard type alone (CMP 1.8.2), so `KeyboardType.Password` is what
+ * keeps iOS from offering to save the current password as a new one.
+ */
+@Composable
+private fun ChangePasswordDialog(
+    isChanging: Boolean,
+    error: String?,
+    onConfirm: (String, String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var current by remember { mutableStateOf("") }
+    var new by remember { mutableStateOf("") }
+    var repeat by remember { mutableStateOf("") }
+    val passwordKeyboard = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next)
+
+    AlertDialog(
+        onDismissRequest = { if (!isChanging) onDismiss() },
+        title = { Text(text = "Change password", fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledInput(
+                    value = current,
+                    onValueChange = { current = it },
+                    label = "Current password",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = passwordKeyboard,
+                    contentType = ContentType.Password,
+                )
+                FilledInput(
+                    value = new,
+                    onValueChange = { new = it },
+                    label = "New password (at least 8 characters)",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = passwordKeyboard,
+                    contentType = ContentType.NewPassword,
+                )
+                FilledInput(
+                    value = repeat,
+                    onValueChange = { repeat = it },
+                    label = "Repeat new password",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = passwordKeyboard.copy(imeAction = ImeAction.Done),
+                    contentType = ContentType.NewPassword,
+                )
+                error?.let {
+                    Text(text = it, color = Color(0xFFDC2626), fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(current, new, repeat) }, enabled = !isChanging) {
+                if (isChanging) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(text = "Change", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isChanging) {
+                Text("Cancel")
+            }
+        }
+    )
+}

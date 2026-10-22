@@ -1,0 +1,13 @@
+package dev.dubec.monad.quests.presentation.quest_detail
+
+import dev.dubec.monad.quests.data.dto.QuestDetailDto
+
+data class QuestDetailState(
+    val questId: String = "",
+    val quest: QuestDetailDto? = null,
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val isStartingQuest: Boolean = false,
+    val startQuestError: String? = null,
+    val enrollmentId: String? = null
+)

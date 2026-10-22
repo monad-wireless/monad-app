@@ -96,7 +96,7 @@
                 Verification requires assetlinks.json to carry the SHA-256 of the
                 certificate the installed build was signed with. Debug-signed
                 builds will NOT verify against a Play App Signing fingerprint;
-                check with `adb shell pm get-app-links sk.martinvanco.monad`.
+                check with `adb shell pm get-app-links dev.dubec.monad`.
             -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
