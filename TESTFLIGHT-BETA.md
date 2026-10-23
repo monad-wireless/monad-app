@@ -179,7 +179,7 @@ External testing needs all of this before Beta App Review will look at the build
 |---|---|
 | Beta app description | Paste `app-store/beta-app-description.md`. |
 | Feedback email | `jakub.dubec@stuba.sk` — the same address the app, the site and `/join` show. |
-| Privacy policy URL | `https://monad.dubec.dev/privacy/` |
+| Privacy policy URL | `https://api.monad.dubec.dev/privacy-policy` — the page the onboarding links to. Not `monad.dubec.dev/privacy/`, which covers the library sensors only. |
 | Sign-in required | Yes, with a working demo account. See below. |
 | Review notes | Paste `app-store/review-notes.md`. It holds no credentials; those go in the Sign-In fields. |
 | License agreement | Paste `app-store/license-agreement.md` (App Information, License Agreement, Custom). |

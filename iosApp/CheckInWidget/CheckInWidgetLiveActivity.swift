@@ -96,3 +96,24 @@ struct CheckInWidgetLiveActivity: Widget {
         .padding(16)
     }
 }
+
+// Previews for the App Store screenshots and the Xcode canvas. The place is a real card label from
+// the Treasure hunt quest; the start is 47 minutes before the preview renders.
+private extension CheckInActivityAttributes {
+    static var preview: CheckInActivityAttributes {
+        let start = Date().addingTimeInterval(-47 * 60)
+        return CheckInActivityAttributes(startedAt: start, endsAt: start.addingTimeInterval(8 * 3600))
+    }
+}
+
+#Preview("Lock screen", as: .content, using: CheckInActivityAttributes.preview) {
+    CheckInWidgetLiveActivity()
+} contentStates: {
+    CheckInActivityAttributes.ContentState(place: "Fingerprint point 12")
+}
+
+#Preview("Dynamic Island", as: .dynamicIsland(.expanded), using: CheckInActivityAttributes.preview) {
+    CheckInWidgetLiveActivity()
+} contentStates: {
+    CheckInActivityAttributes.ContentState(place: "Fingerprint point 12")
+}

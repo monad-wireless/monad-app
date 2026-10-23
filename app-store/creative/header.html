@@ -1,0 +1,75 @@
+<!doctype html>
+<!--
+  Universal creative asset for App Store Connect "Header and Search Results" (iOS 27+).
+  Rendered at 2622 x 1475 CSS px with device scale 2 -> 5244 x 2950 (16:9):
+
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu \
+      --hide-scrollbars --allow-file-access-from-files --window-size=2622,1475 \
+      --force-device-scale-factor=2 --screenshot=/tmp/header-raw.png file://$PWD/app-store/creative/header.html
+    uv run --no-project --with pillow python app-store/creative/finish_png.py \
+      /tmp/header-raw.png app-store/asset-library/creative/header-universal-5244x2950.png
+
+  Pitch "You are the noise", signal art, deadpan (chosen 2026-10-23). Tone is the public site's
+  (monad_knowledge/web/static/js/eggs.js): the facts are real and the framing is absurd.
+
+  The background is real data, not a pattern: doppler-monad05-20260911.png, made by
+  doppler_texture.py from a csi_plot Doppler spectrogram of a survey walk (see that script).
+  Each hard-edged block is one time x Doppler bin. "PROBABLY YOU" stays a "probably": Doppler
+  shows channel dynamics, and attributing them to a person needs ground truth.
+
+  Safe area is an ASSUMPTION (Apple publishes it only inside its templates): copy, caption and
+  the marker stay inside 16..84% on both axes, which survives a 3:2 crop (keeps 8..92% of the
+  width) and a 21:9 crop (keeps 12..88% of the height). The texture is full-bleed and may crop.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Monad Scan header</title>
+<style>
+  @font-face { font-family: Onest; font-weight: 900;
+    src: url("../../composeApp/src/commonMain/composeResources/font/Onest-Black.ttf"); }
+  @font-face { font-family: Onest; font-weight: 500;
+    src: url("../../composeApp/src/commonMain/composeResources/font/Onest-Medium.ttf"); }
+
+  :root { --black: #0B0B0C; --paper: #F2EEE3; --hazard: #FF5A1F; }
+  html, body { margin: 0; width: 2622px; height: 1475px; overflow: hidden; }
+  body { background: var(--black); color: var(--paper); font-family: Onest, sans-serif; position: relative; }
+
+  .signal { position: absolute; inset: 0;
+    background: url("doppler-monad05-20260911.png") center / cover no-repeat;
+    image-rendering: pixelated; }
+  .shade { position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(11,11,12,0.94) 0%, rgba(11,11,12,0.86) 30%,
+                                rgba(11,11,12,0.35) 58%, rgba(11,11,12,0.10) 100%); }
+
+  .safe { position: absolute; left: 16%; top: 16%; width: 68%; height: 68%; }
+  .wordmark { position: absolute; left: 0; top: 0; height: 64px; }
+  h1 { position: absolute; left: 0; top: 50%; transform: translateY(-58%); margin: 0;
+       font-weight: 900; text-transform: uppercase; letter-spacing: -4px;
+       font-size: 150px; line-height: 0.94; white-space: nowrap; }
+  h1 .dim { color: rgba(242,238,227,0.55); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .caption { position: absolute; left: 0; bottom: 0; font-size: 24px; line-height: 1.55;
+             letter-spacing: 1px; color: rgba(242,238,227,0.72); white-space: nowrap; }
+  .caption b { color: var(--paper); font-weight: 700; }
+
+  .marker { position: absolute; border: 4px solid var(--hazard); }
+  .marker span { position: absolute; right: -4px; top: -52px; background: var(--hazard); color: var(--black);
+                 font-size: 26px; font-weight: 700; letter-spacing: 3px; padding: 6px 12px; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <div class="signal"></div>
+  <div class="shade"></div>
+
+  <div class="safe">
+    <img class="wordmark" src="wordmark-paper.svg" alt="">
+    <h1><span class="dim">We measure noise.</span><br>You are the noise.</h1>
+    <div class="caption mono">
+      <b>FIG. 1</b> Doppler spectrogram. Node monad05, FIIT library, 11 Sep 2026, 07:20–07:30 UTC.<br>
+      Somewhere in here a person is walking. We are working on where.
+    </div>
+    <div class="marker" style="left: 1600px; top: 200px; width: 116px; height: 620px;"><span class="mono">PROBABLY YOU</span></div>
+  </div>
+</body>
+</html>
