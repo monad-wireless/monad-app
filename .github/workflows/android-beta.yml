@@ -1,0 +1,113 @@
+name: Android beta
+
+# Publishes the student APK to one fixed URL that never changes:
+#
+#   https://github.com/monad-wireless/monad-app/releases/download/android-latest/monad-app.apk
+#
+# An Actions artifact cannot be that link: downloading one needs a GitHub login with access to the
+# repository, and it expires. A release asset on this public repository is anonymous and stays.
+# The `android-latest` release is deleted and recreated on every run, so the URL always serves the
+# newest build of feature/refactor. Runbook and the one-time secret setup: ANDROID-BETA.md.
+
+on:
+  push:
+    branches: [feature/refactor]
+  workflow_dispatch:
+
+# A newer push makes an older publish pointless.
+concurrency:
+  group: android-beta
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build and publish APK
+    # workflow_dispatch from another branch must not overwrite the students' link.
+    if: github.ref == 'refs/heads/feature/refactor'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The keystore goes to RUNNER_TEMP, never into the checkout: BUILD_ID hashes
+      # `git status --porcelain`, and an untracked .jks would stamp every build `.dirty…`.
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.MONAD_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::MONAD_KEYSTORE_B64 is not set — see ANDROID-BETA.md"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/monad-release.jks"
+          echo "MONAD_KEYSTORE_PATH=$RUNNER_TEMP/monad-release.jks" >> "$GITHUB_ENV"
+
+      # Written only when the secret is non-empty: an empty file still passes `file.exists()` in
+      # build.gradle.kts and then fails :processReleaseGoogleServices. google-services.json is
+      # gitignored, so it does not dirty BUILD_ID.
+      - name: Restore google-services.json
+        env:
+          GOOGLE_SERVICES_B64: ${{ secrets.MONAD_GOOGLE_SERVICES_B64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_B64" ]; then
+            echo "$GOOGLE_SERVICES_B64" | base64 --decode > composeApp/google-services.json
+          else
+            echo "::warning::MONAD_GOOGLE_SERVICES_B64 is not set — APK built without Crashlytics and push"
+          fi
+
+      - name: Assemble release APK
+        env:
+          MONAD_KEYSTORE_PASSWORD: ${{ secrets.MONAD_KEYSTORE_PASSWORD }}
+          MONAD_KEY_ALIAS: ${{ secrets.MONAD_KEY_ALIAS }}
+          MONAD_KEY_PASSWORD: ${{ secrets.MONAD_KEY_PASSWORD }}
+        run: ./gradlew :composeApp:assembleRelease --stacktrace
+
+      # AGP names an APK `-unsigned` when no signing config applied. Checking the signature itself
+      # as well catches a config that applied the wrong key file.
+      - name: Verify signature
+        run: |
+          apk=composeApp/build/outputs/apk/release/composeApp-release.apk
+          if [ ! -f "$apk" ]; then
+            ls -l composeApp/build/outputs/apk/release/
+            echo "::error::no signed release APK — signing config did not apply"
+            exit 1
+          fi
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          "$apksigner" verify --print-certs "$apk"
+          cp "$apk" monad-app.apk
+          sha256sum monad-app.apk > monad-app.apk.sha256
+
+      - name: Publish android-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          build_id=$(grep -o 'BUILD_ID: String = "[^"]*"' \
+            composeApp/build/generated/monad/commonMain/kotlin/dev/dubec/monad/core/config/BuildIdentity.kt \
+            | cut -d'"' -f2)
+          cat > notes.md <<EOF
+          Rolling Android beta of monad-app, rebuilt on every push to \`feature/refactor\`.
+
+          - Build: \`${build_id}\`
+          - Commit: ${GITHUB_SHA}
+          - Built: $(date -u +%Y-%m-%dT%H:%MZ)
+
+          Install: open the link on the phone, download \`monad-app.apk\`, allow the browser to
+          install unknown apps when Android asks, then tap Install. A newer APK from the same
+          link installs over the old one and keeps the app's data.
+          EOF
+          gh release delete android-latest --cleanup-tag --yes || true
+          gh release create android-latest \
+            --target "$GITHUB_SHA" \
+            --title "Android beta (latest)" \
+            --notes-file notes.md \
+            --prerelease \
+            --latest=false \
+            monad-app.apk monad-app.apk.sha256

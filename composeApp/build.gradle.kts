@@ -371,9 +371,29 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    // Release signing — the key the student APK is signed with (ANDROID-BETA.md).
+    //
+    // Android installs an update over an existing app only when both carry the same signature. A
+    // debug build is signed with a key each machine generates for itself, so every CI runner would
+    // sign with a different one and every update would force an uninstall that deletes the app's
+    // unsent sessions. One keystore, held in the repository secrets, is what makes the shared link
+    // an update channel. Like google-services.json it is opt-in on its presence: without
+    // MONAD_KEYSTORE_PATH, `assembleRelease` still builds and leaves the APK unsigned.
+    val releaseKeystore = providers.environmentVariable("MONAD_KEYSTORE_PATH").orNull
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("MONAD_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("MONAD_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("MONAD_KEY_PASSWORD").get()
+            }
+        }
+    }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
     buildFeatures {

@@ -103,6 +103,9 @@ fun ObserveStep(
         description = task.description,
         status = task.status,
         modifier = modifier,
+        // The Zone count quest (2026-10-26) shows each step's area on the floor plan, the same
+        // `config.image` the walk and probe steps use. A step without one renders as before.
+        imageUrl = TaskConfigParser.stepImageUrl(task),
         content = {
             when {
                 config == null -> ObserveNotice(
@@ -273,8 +276,9 @@ private fun SweepContent(
             ) {
                 when (shownPhase) {
                     SweepPhase.NOT_STARTED -> {
+                        // "Area", not "room": a step may name one zone of a room (Zone count).
                         Steps(
-                            "Count everyone in the room once.",
+                            "Count everyone in the area once.",
                             "Do not count yourself.",
                             "Walk around, or count from one spot.",
                         )
@@ -296,14 +300,14 @@ private fun SweepContent(
                             singleSpot = false
                             scope.launch { controller.start(room, observers, onAir) }
                         }
-                        SecondaryButton("I see the room from here", enabled = canStart) {
+                        SecondaryButton("I see the whole area from here", enabled = canStart) {
                             val room = selectedRoom ?: return@SecondaryButton
                             scope.launch {
                                 controller.start(room, observers, onAir).onSuccess {
                                     singleSpot = true
                                     // One spot is a partial reference by default (his rule,
                                     // 2026-09-23): the participant names the part, or picks
-                                    // "Whole room" when the spot really sees all of it.
+                                    // "All of it" when the spot really sees the whole area.
                                     coverage = HeadcountSweepEvent.COVERAGE_PARTIAL
                                     reason = ""
                                     mode = SweepMode.FINISHING
@@ -524,7 +528,7 @@ private fun FinishForm(
     }
     Question(if (singleSpot) "Set the number, then answer three quick questions." else "Almost done. Three quick questions.")
 
-    Question(roomLabel?.let { "Did you count the whole $it?" } ?: "Did you count the whole room?")
+    Question(roomLabel?.let { "Did you count the whole $it?" } ?: "Did you count the whole area?")
     Chips(HeadcountSweepEvent.COVERAGES, coverage, ::coverageLabel, onCoverage)
     AnimatedVisibility(coverage != HeadcountSweepEvent.COVERAGE_COMPLETE) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -553,14 +557,14 @@ private fun FinishForm(
         enabled = !busy && (coverage == HeadcountSweepEvent.COVERAGE_COMPLETE || reason.isNotBlank()),
         onClick = onSave,
     )
-    TextLink(if (singleSpot) "Walk the room instead" else "Back to counting", onClick = onBack)
+    TextLink(if (singleSpot) "Walk the area instead" else "Back to counting", onClick = onBack)
 }
 
 private enum class SweepMode { COUNTING, CORRECTING, FINISHING, ABORTING }
 
 /** The wire value stays `complete | partial | unknown`; the screen says what each means. */
 private fun coverageLabel(coverage: String): String = when (coverage) {
-    HeadcountSweepEvent.COVERAGE_COMPLETE -> "Whole room"
+    HeadcountSweepEvent.COVERAGE_COMPLETE -> "All of it"
     HeadcountSweepEvent.COVERAGE_PARTIAL -> "Part of it"
     HeadcountSweepEvent.COVERAGE_UNKNOWN -> "Not sure"
     else -> coverage
