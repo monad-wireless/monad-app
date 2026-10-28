@@ -160,6 +160,28 @@ class Ip162FixtureConformanceTest {
     }
 
     @Test
+    fun aRecordingWithTwoSweepStepsListsBothStepCompletionsInAV2Manifest() {
+        val first = json.parseToJsonElement(File(ROOT, "events/valid/sweep-complete.json").readText())
+            .jsonObject.getValue("events").jsonArray
+            .mapNotNull { HeadcountSweepEvent.fromJson(it.jsonObject.getValue("payload").jsonObject) }
+        val second = first.map {
+            it.copy(sweepId = "5e000000-0000-4000-8000-000000000002", stepCompletionId = "0c000000-0000-4000-8000-00000000000e")
+        }
+        val reference = json.parseToJsonElement(File(ROOT, "manifest/valid/sealed-v2-multi-sweep.json").readText())
+            .jsonObject.getValue("manifest").jsonObject
+        val sidecar = """{"identity":{"session_id":"0f000000-0000-4000-8000-00000000000a","quest_id":"0d000000-0000-4000-8000-00000000000d"},""" +
+            """"environment":{"build_id":"fixture-build-1"},"lifecycle":{"boot_id":"fixture-boot-1"}}"""
+
+        val manifest = EvidenceManifest.build(sidecar, first + second, setOf(HeadcountSweepEvent.SCHEMA), emptyList(), "b".repeat(64))
+
+        assertEquals(EvidenceManifest.SCHEMA, manifest?.getValue("schema")?.jsonPrimitive?.content)
+        assertEquals(reference.getValue("schema"), manifest?.getValue("schema"))
+        assertEquals(reference.getValue("step_completion_ids"), manifest?.getValue("step_completion_ids"))
+        assertEquals(reference.getValue("sweep_ids"), manifest?.getValue("sweep_ids"))
+        assertNull(manifest?.get("step_completion_id"), "v2 carries no scalar step completion")
+    }
+
+    @Test
     fun theStudyFixtureIsFrozenOverItsOwnCanonicalBody() {
         val study = json.parseToJsonElement(File(ROOT, "study/valid/exp-f2-fixture.json").readText()).jsonObject.getValue("study").jsonObject
         val body = JsonObject(study.filterKeys { it != "frozen_sha256" })

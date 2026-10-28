@@ -32,12 +32,16 @@ data class SealedArtefact(
 }
 
 /**
- * `monad-lab/evidence-manifest/v1` — the sealed inventory of one recording's evidence (IP-162).
+ * `monad-lab/evidence-manifest/v2` — the sealed inventory of one recording's evidence (IP-162).
+ *
+ * v2 lists every step completion the recording's sweeps belong to (`step_completion_ids`). v1
+ * named only the first, so a quest with several sweep steps (Zone count) verified one receipt per
+ * recording and refused the rest as `step_completion_not_in_manifest`.
  *
  * Built by the uploader after every stream and blob has gone up and before the sidecar, from
  * three sources that already exist: the sidecar JSON the instrument closed the session with
  * (identity, build, clock domain, end stamps), the v3 events in the marker log (sweep ids, step
- * completion, payload schemas) and the digests of the artefact bytes it just uploaded. Its own
+ * completions, payload schemas) and the digests of the artefact bytes it just uploaded. Its own
  * identity is the SHA-256 of its canonical JSON, which is what the backend's receipt and the
  * count-reference projection cite as `manifest_sha256`.
  *
@@ -46,7 +50,7 @@ data class SealedArtefact(
  */
 object EvidenceManifest {
 
-    const val SCHEMA = "monad-lab/evidence-manifest/v1"
+    const val SCHEMA = "monad-lab/evidence-manifest/v2"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -70,7 +74,7 @@ object EvidenceManifest {
         val recordingSessionId = identity.string("session_id") ?: return null
         val enrollmentId = identity.string("enrollment_id")?.takeIf { it.isNotBlank() } ?: events.first().enrollmentId
         val questId = identity.string("quest_id")?.takeIf { it.isNotBlank() } ?: return null
-        val stepCompletionId = events.first().stepCompletionId
+        val stepCompletionIds = events.map { it.stepCompletionId }.distinct()
         val sweepIds = events.map { it.sweepId }.distinct()
 
         val artefactArray = JsonArray(artefacts.sortedBy { it.name }.map { it.toJson() })
@@ -79,7 +83,7 @@ object EvidenceManifest {
             "recording_session_id" to JsonPrimitive(recordingSessionId),
             "enrollment_id" to JsonPrimitive(enrollmentId),
             "quest_id" to JsonPrimitive(questId),
-            "step_completion_id" to JsonPrimitive(stepCompletionId),
+            "step_completion_ids" to JsonArray(stepCompletionIds.map { JsonPrimitive(it) }),
             "sweep_ids" to JsonArray(sweepIds.map { JsonPrimitive(it) }),
             "app_build_id" to JsonPrimitive(environment.string("build_id")?.takeIf { it.isNotBlank() } ?: "unknown"),
             "payload_schemas" to JsonArray(payloadSchemas.sorted().map { JsonPrimitive(it) }),
