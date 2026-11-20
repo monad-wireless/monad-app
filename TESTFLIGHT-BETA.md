@@ -254,8 +254,11 @@ or the TestFlight invitation will not open. The signup form does not ask for it 
 common way a student gets stuck at step 5. The app registration address is a separate thing: it
 must be the signup address, whatever the Apple ID is.
 
-The invitation text promises the install link as a second message and, since 2026-10-22, tells the
-student to register with the invited address (`templates/join/invitation.txt.twig`).
+The invitation text (`templates/join/invitation.txt.twig`, rewritten 2026-11-01) lists the four
+steps: reply, install, register with the invited address, the session. Its install section follows
+the signup's platform. iPhone explains the TestFlight invitation and asks for the Apple ID address
+when it differs. Android carries the APK link from `ANDROID-BETA.md`, so an Android student needs
+no second message. An unsure signup gets both sections.
 
 ### 5.1 Accounts: approval, password change, recovery
 
