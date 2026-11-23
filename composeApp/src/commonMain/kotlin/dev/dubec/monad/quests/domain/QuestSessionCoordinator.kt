@@ -145,7 +145,6 @@ class QuestSessionCoordinator(
     suspend fun finishSession(
         questId: String,
         enrollmentId: String,
-        startedWallMillis: Long,
         completed: Boolean,
         skip: QuestSkip? = null,
     ): FinishOutcome {
@@ -153,7 +152,6 @@ class QuestSessionCoordinator(
 
         val token = participants.current()?.token
         val endedWallMillis = currentTimeMillis()
-        val startIso = Instant.fromEpochMilliseconds(startedWallMillis).toString()
         val endIso = Instant.fromEpochMilliseconds(endedWallMillis).toString()
 
         var submitted = false
@@ -192,13 +190,12 @@ class QuestSessionCoordinator(
 
                         else -> null
                     }
+                    val (stepStartMillis, stepEndMillis) = stepWindowMillis(step, endedWallMillis)
                     QuestStepOutcome(
                         stepCompletionId = step.stepCompletionId,
                         status = mappedStatus,
-                        startedAtIso = step.startedAtMillis
-                            ?.let { Instant.fromEpochMilliseconds(it).toString() } ?: startIso,
-                        completedAtIso = step.completedAtMillis
-                            ?.let { Instant.fromEpochMilliseconds(it).toString() } ?: endIso,
+                        startedAtIso = Instant.fromEpochMilliseconds(stepStartMillis).toString(),
+                        completedAtIso = Instant.fromEpochMilliseconds(stepEndMillis).toString(),
                         stepDataJson = step.stepDataJson,
                         skip = skipRecord,
                     )

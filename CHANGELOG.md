@@ -17,6 +17,17 @@ To cut a build:
 4. Run `./gradlew :composeApp:verifyIosAppVersion`.
 5. Add the entry below.
 
+## 1.2.0+14 — 2026-11-23
+
+- Quest completion after an app restart (monad-app#2). A run resumed after the app was closed or
+  crashed could never be submitted: the first step has no recorded start, its start fell back to
+  the moment the screen reopened, which was after that step had finished, and the backend refused
+  every try with 400 `steps[0].started_at`. A step with no recorded start now starts at its row's
+  creation time, which is written once at quest start (`quests/domain/StepTimes.kt`, test
+  `StepWindowTest`). In an uninterrupted run only the first step's start moves, and only earlier, by
+  the time between tapping Start and the quest screen opening. Every other recorded time is
+  unchanged. `mono_ns` and the recording are not affected.
+
 ## 1.2.0+10 — 2026-10-21
 
 Participant-facing wording and error handling, after the first field runs of the Counting quest

@@ -1,25 +1,27 @@
 Thank you for testing. You are the noise we measure, so please be noisy.
 
-ON SITE (FIIT STU library)
-Quests and check-in need the printed QR cards in the building. Away from it the quests still open, but they wait at the first scan.
-- Walk at least one quest from start to finish. At each step: is it clear where to go and what to do next?
-- Scan a card and hold still when asked. Did the scan register the first time?
-- Check in at a desk card, stay a while, then check out. Does the Lock Screen show the place and the time? Does Check out on the Lock Screen work?
-- Scan a second card while checked in. The app should move you, not start a second check-in.
-- If a quest asks you to count people, count them. Was the question clear?
+THIS WEEK: COUNTING AND ZONE COUNT
+These two quests are the main focus. Run them in the FIIT STU library as often as you can, every 1-2 hours if possible.
+- Counting: count the people in one room, then save the total.
+- Zone count: count the people in each of the 11 small areas on the plan, one after another.
+- Count each person once. Do not count yourself.
+- Keep the app open and the screen on until the end of the quest.
+- After the last step, check that the app says your result was sent.
 
-ANYWHERE
-- Registration and sign-in. If your email was not invited, you see "Waiting for approval". That is intended.
-- Onboarding: are the permission screens clear about why each permission exists?
-- My Account: points, the coverage map, the activity chart, password change.
-- Notifications: the inbox and the settings. If you get a push, does tapping it open the right quest?
+FIXED IN THIS BUILD (ZONE COUNT)
+If the app closed or crashed during a quest and you opened it again, the quest could not be sent. The app showed an error and every retry failed. This is fixed: a quest that continues after a restart is now sent normally.
+Please still try to keep the app open for the whole quest. If it closes, open it again, finish the quest and tell us what happened.
+
+ALSO WORTH A LOOK
+- Check in at a desk card and check out again. Does the Lock Screen show the place and the time?
+- Registration, sign-in, My Account and notifications.
 
 KNOWN ISSUES
 - Typing in the password field has, at least once, closed the screen we were typing on. If it happens to you, tell us which character you typed and what you saw.
 - Push notifications may not reach every phone yet. The inbox in the app shows every message, so check it there.
-- Crash reports cannot be turned off in this build. The onboarding calls them anonymous; they carry your participant code, never your name or email.
+- Crash reports cannot be turned off in this build. The onboarding calls them anonymous. They carry your participant code, never your name or email.
 
 TELL US
 - Anything that crashes, freezes, or leaves you unsure what to do next.
-- The step, the time and the card you scanned help most.
+- The quest, the step and the time help most.
 Use the TestFlight screenshot feedback, or write to jakub.dubec@stuba.sk.

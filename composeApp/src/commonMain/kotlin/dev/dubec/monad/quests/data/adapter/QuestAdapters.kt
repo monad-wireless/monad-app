@@ -141,6 +141,7 @@ class QuestStepJournalAdapter(
                 status = row.status,
                 startedAtMillis = row.startedAt,
                 completedAtMillis = row.completedAt,
+                createdAtMillis = row.createdAt,
                 stepDataJson = row.stepData,
                 skipMessage = row.skipMessage,
                 skipErrorCode = row.skipErrorCode,

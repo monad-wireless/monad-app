@@ -435,7 +435,6 @@ class ActiveQuestScreenModel(
         val outcome = sessionCoordinator.finishSession(
             questId = questId,
             enrollmentId = enrollmentId,
-            startedWallMillis = mutableState.value.startTime,
             completed = success,
         )
 

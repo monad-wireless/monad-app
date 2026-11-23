@@ -126,6 +126,11 @@ data class QuestStepRecord(
     val status: String,
     val startedAtMillis: Long?,
     val completedAtMillis: Long?,
+    /**
+     * When the row was written at quest start. Persisted, so unlike the active-quest screen's
+     * `startTime` it does not move when the app is restarted and the run resumed.
+     */
+    val createdAtMillis: Long,
     val stepDataJson: String?,
     val skipMessage: String?,
     val skipErrorCode: String?,
