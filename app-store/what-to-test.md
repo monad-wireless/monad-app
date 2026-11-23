@@ -8,9 +8,11 @@ These two quests are the main focus. Run them in the FIIT STU library as often a
 - Keep the app open and the screen on until the end of the quest.
 - After the last step, check that the app says your result was sent.
 
-FIXED IN THIS BUILD (ZONE COUNT)
-If the app closed or crashed during a quest and you opened it again, the quest could not be sent. The app showed an error and every retry failed. This is fixed: a quest that continues after a restart is now sent normally.
-Please still try to keep the app open for the whole quest. If it closes, open it again, finish the quest and tell us what happened.
+NEW IN THIS BUILD
+- If the app ever shows "Could not be sent", the quest is closed and you can start the next one. Please tell us the time it happened.
+- Home now shows your points and how many quests you completed. You also see your points after each quest, and in My account with your runs. Do the numbers match what you did?
+- "What were people doing?" now starts at "Sitting". Change it if people were moving.
+- Counting and Zone count are now at the top of the quest list.
 
 ALSO WORTH A LOOK
 - Check in at a desk card and check out again. Does the Lock Screen show the place and the time?

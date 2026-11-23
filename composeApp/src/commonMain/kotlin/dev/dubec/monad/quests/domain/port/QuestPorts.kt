@@ -116,8 +116,31 @@ data class QuestCompletion(
  * transport.
  */
 interface QuestCompletionGateway {
-    suspend fun submitCompletion(questId: String, completion: QuestCompletion, token: String)
+    /** Returns the points the server froze for this run (`points_earned`). */
+    suspend fun submitCompletion(questId: String, completion: QuestCompletion, token: String): Float
 }
+
+/**
+ * The server answered the completion with a 4xx. [status] is the HTTP status, [detail] the
+ * response body as far as it could be read (the backend's `error` / `details`).
+ */
+class CompletionRefusedException(
+    val status: Int,
+    val detail: String?,
+) : Exception("HTTP $status${detail?.let { ": $it" } ?: ""}")
+
+/**
+ * Whether a refusal will be repeated for every retry of the same run (monad-app#2).
+ *
+ * A completion is built from the same local rows each time, so a refusal of its CONTENT or of the
+ * enrollment cannot change on retry: 400 validation, 403 not this account's run, 404 unknown run,
+ * 409 the run was already closed (by the server's own reaper or by an operator), 422 a sweep
+ * summary that contradicts the quest. Retrying those used to loop forever and keep the quest open
+ * on the phone. 401 is NOT final: a new sign-in issues a new token and the same payload succeeds.
+ */
+fun isFinalRefusal(status: Int): Boolean = status in FINAL_REFUSAL_STATUSES
+
+private val FINAL_REFUSAL_STATUSES = setOf(400, 403, 404, 409, 422)
 
 /** One locally recorded step, as the coordinator needs to read it. */
 data class QuestStepRecord(

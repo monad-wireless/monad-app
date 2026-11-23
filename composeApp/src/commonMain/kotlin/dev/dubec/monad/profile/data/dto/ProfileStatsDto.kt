@@ -14,6 +14,8 @@ import kotlinx.serialization.Serializable
 data class ProfileStatsDto(
     @SerialName("points_total") val pointsTotal: Float = 0f,
     @SerialName("quests_completed") val questsCompleted: Int = 0,
+    /** Every run started, completed or not. Null from a backend that predates the field. */
+    @SerialName("runs_total") val runsTotal: Int? = null,
     val contribution: ContributionDto = ContributionDto(),
     val history: List<HistoryEntryDto> = emptyList(),
     /** Six weeks of daily dwell counts, oldest first, every day present including zeros. */

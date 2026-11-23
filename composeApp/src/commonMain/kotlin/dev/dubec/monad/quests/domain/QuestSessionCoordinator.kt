@@ -8,7 +8,9 @@ import dev.dubec.monad.lab.domain.LabConfig
 import dev.dubec.monad.lab.domain.LabInstrument
 import dev.dubec.monad.lab.domain.QuestFeatures
 import dev.dubec.monad.lab.domain.SessionRequest
+import dev.dubec.monad.quests.domain.port.CompletionRefusedException
 import dev.dubec.monad.quests.domain.port.LabBundleSource
+import dev.dubec.monad.quests.domain.port.isFinalRefusal
 import dev.dubec.monad.quests.domain.port.LabSessionArchive
 import dev.dubec.monad.quests.domain.port.ParticipantDirectory
 import dev.dubec.monad.quests.domain.port.QuestCompletion
@@ -155,6 +157,8 @@ class QuestSessionCoordinator(
         val endIso = Instant.fromEpochMilliseconds(endedWallMillis).toString()
 
         var submitted = false
+        var pointsEarned: Float? = null
+        var refusedStatus: Int? = null
         var submitError: String? = null
         if (token != null) {
             runCatching {
@@ -209,9 +213,15 @@ class QuestSessionCoordinator(
                     ),
                     token = token,
                 )
-            }.onSuccess { submitted = true }
+            }.onSuccess {
+                submitted = true
+                pointsEarned = it
+            }
                 .onFailure {
                     submitError = it.message
+                    if (it is CompletionRefusedException && isFinalRefusal(it.status)) {
+                        refusedStatus = it.status
+                    }
                     Napier.w("[quest] completion submit failed: ${it.message}")
                 }
         } else {
@@ -223,8 +233,11 @@ class QuestSessionCoordinator(
         // backlog.
         val uploaded = archive.uploadPending()
 
-        // Local step rows are only dropped once the completion actually reached the server.
-        if (submitted) {
+        // Local step rows are dropped once the server has answered for good: it accepted the
+        // completion, or it refused it in a way every retry would repeat (monad-app#2). Only a
+        // transport failure, a 5xx or a 401 keeps them for another try. The recording is not
+        // affected either way: it was queued above and uploads like any other.
+        if (submitted || refusedStatus != null) {
             stepJournal.clear(enrollmentId)
             participants.current()?.let { participants.clearActiveQuest(it.userId) }
         }
@@ -233,6 +246,8 @@ class QuestSessionCoordinator(
         return FinishOutcome(
             sessionId = sessionId,
             completionSubmitted = submitted,
+            pointsEarned = pointsEarned,
+            completionRefusedStatus = refusedStatus,
             completionError = submitError,
             sessionsUploaded = uploaded,
             sessionsUnsynced = unsynced,
@@ -267,6 +282,13 @@ class QuestSessionCoordinator(
 data class FinishOutcome(
     val sessionId: String?,
     val completionSubmitted: Boolean,
+    /** The points the server froze for this run, when the completion was accepted. */
+    val pointsEarned: Float?,
+    /**
+     * The HTTP status when the server refused the completion for good ([isFinalRefusal]). The run
+     * is closed on the phone and must not be offered for retry. Null otherwise.
+     */
+    val completionRefusedStatus: Int?,
     val completionError: String?,
     val sessionsUploaded: Int,
     val sessionsUnsynced: Long,

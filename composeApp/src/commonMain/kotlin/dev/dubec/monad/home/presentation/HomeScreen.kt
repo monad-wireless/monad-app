@@ -117,6 +117,10 @@ class HomeScreen : Screen {
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Runs each time Home enters composition, including the return from a finished quest,
+            // so the earned total in the header is never the one from before that quest.
+            LaunchedEffect(Unit) { screenModel.onEvent(HomeEvent.RefreshPoints) }
+
             Greeting(
                 state = state,
                 onOpenLabConsole = { navigator.push(LabConsoleScreen()) },
@@ -745,7 +749,9 @@ class HomeScreen : Screen {
             ) {
                 HeroFigure(state.participantQuests.size.toString(), "quests")
                 HeroDivider()
-                HeroFigure(formatPoints(state.pointsOnOffer), "points to earn")
+                HeroFigure(state.pointsEarned?.let { formatPoints(it) } ?: "–", "your points")
+                HeroDivider()
+                HeroFigure(state.runsCompleted?.toString() ?: "–", "runs completed")
                 // Beacons heard means something to the person running the lab, not to a student.
                 if (state.isOperator) {
                     HeroDivider()

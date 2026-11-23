@@ -105,7 +105,8 @@ data class ActiveQuestScreen(
                         enrollmentId = state.enrollmentId,
                         userName = state.userName,
                         startTime = state.startTime,
-                        uploadAlreadyCompleted = true
+                        uploadAlreadyCompleted = true,
+                        pointsEarned = state.pointsEarned,
                     )
                 )
             }
@@ -178,6 +179,30 @@ data class ActiveQuestScreen(
                         onClick = { screenModel.onEvent(ActiveQuestEvent.DismissCompletionError) }
                     ) {
                         Text("Later", color = Color(0xFF6B7280))
+                    }
+                }
+            )
+        }
+
+        // Final refusal: the run is closed on the phone, so there is nothing to retry.
+        if (state.completionRefusal != null) {
+            AlertDialog(
+                onDismissRequest = { screenModel.onEvent(ActiveQuestEvent.AcknowledgeCompletionRefusal) },
+                title = {
+                    Text(
+                        text = "Could not be sent",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                text = {
+                    Text(text = state.completionRefusal ?: "")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { screenModel.onEvent(ActiveQuestEvent.AcknowledgeCompletionRefusal) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC))
+                    ) {
+                        Text("OK", color = Color.White)
                     }
                 }
             )

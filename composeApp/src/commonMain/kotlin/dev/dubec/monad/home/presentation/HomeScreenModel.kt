@@ -15,6 +15,7 @@ import dev.dubec.monad.core.domain.toast.ToastManager
 import dev.dubec.monad.auth.data.repository.UserRepository
 import dev.dubec.monad.auth.domain.OperatorAccess
 import dev.dubec.monad.home.data.api.QuestsService
+import dev.dubec.monad.profile.data.api.ProfileService
 import dev.dubec.monad.home.presentation.model.QuestCardDt
 import io.github.aakira.napier.Napier
 import dev.dubec.monad.lab.data.LabSessionRecovery
@@ -33,13 +34,23 @@ class HomeScreenModel(
     private val recovery: LabSessionRecovery,
     private val operatorAccess: OperatorAccess,
     private val checkIn: CheckInService,
+    private val profileService: ProfileService,
 ) : StateScreenModel<HomeState>(HomeState()) {
 
     private var scanJob: Job? = null
 
     private companion object {
-        /** The quest the board shows first (researcher's choice, 2026-10-17). */
-        const val PINNED_FIRST = "Counting"
+        /**
+         * The quests the board shows first, in this order (researcher's choice: Counting
+         * 2026-10-17, Zone count and Fingerprint 2026-11-23). Everything else follows in the
+         * server's order.
+         */
+        val PINNED = listOf("Counting", "Zone count", "Fingerprint")
+
+        /** Position on the board: a pinned quest by its place in [PINNED], the rest after them. */
+        fun boardRank(name: String): Int =
+            PINNED.indexOfFirst { it.equals(name.trim(), ignoreCase = true) }
+                .let { if (it < 0) PINNED.size else it }
     }
 
     init {
@@ -152,8 +163,30 @@ class HomeScreenModel(
             is HomeEvent.OpenQuestDetailScreen -> {
                 // Navigation handled in UI
             }
-            is HomeEvent.LoadQuests -> loadQuests()
+            is HomeEvent.LoadQuests -> {
+                loadQuests()
+                loadPoints()
+            }
+            is HomeEvent.RefreshPoints -> loadPoints()
             is HomeEvent.RetryUploads -> retryUploads()
+        }
+    }
+
+    /**
+     * The earned total for the header. A failure keeps the last known value rather than showing
+     * a zero the participant did not earn; the header prints a dash until a value arrives.
+     */
+    private fun loadPoints() {
+        screenModelScope.launch {
+            val token = runCatching { userRepository.getCurrentUser()?.token }.getOrNull()
+            if (token.isNullOrBlank()) return@launch
+            runCatching { profileService.getStats(token) }
+                .onSuccess { stats ->
+                    mutableState.value = mutableState.value.copy(
+                        pointsEarned = stats.pointsTotal,
+                        runsCompleted = stats.questsCompleted,
+                    )
+                }
         }
     }
 
@@ -169,10 +202,10 @@ class HomeScreenModel(
                 // reads the authenticated user, so an anonymous call silently loses them.
                 val token = runCatching { userRepository.getCurrentUser()?.token }.getOrNull()
                 val response = questsService.getActiveQuests(token)
-                // The server lists by creation date. Counting is the quest people run most, so it
-                // goes on top; the rest keep the server's order (sortedBy is stable).
+                // The server lists by creation date. The pinned quests go on top in their own
+                // order; the rest keep the server's order (sortedBy is stable).
                 val quests = response.quests.map { QuestCardDt.fromDto(it) }
-                    .sortedBy { if (it.name.trim().equals(PINNED_FIRST, ignoreCase = true)) 0 else 1 }
+                    .sortedBy { boardRank(it.name) }
                 mutableState.value = mutableState.value.copy(
                     quests = quests,
                     isLoadingQuests = false,

@@ -16,8 +16,54 @@ To cut a build:
    Beta App Review again (`TESTFLIGHT-BETA.md`, section 5).
 4. Run `./gradlew :composeApp:verifyIosAppVersion`.
 5. Add the entry below.
+6. In Xcode's Distribute App dialog, turn OFF "Manage Version and Build Number". With it on, Xcode
+   uploads the next free App Store Connect number while the app keeps recording the number from
+   `gradle.properties`, and the two drift apart (see "Build numbers on App Store Connect" below).
+
+### Build numbers on App Store Connect (sorted out 2026-11-23)
+
+Xcode's automatic build-number management renumbered uploads, so App Store Connect numbers and the
+`build_id` the app records in every session sidecar disagreed until 1.2.0+18. Mapping, from the
+sidecars on S3 and the upload times in App Store Connect:
+
+| App Store Connect | Recorded `build_id` | Note |
+|---|---|---|
+| 14, 15 (2026-10-28) | `1.2.0+13.g5e543a70.dirty8fbdeab7` | every tester recording up to 2026-11-23 13:43 UTC carries this id; which of 14 or 15 testers ran is not recorded |
+| 16 (2026-11-23 13:40) | `1.2.0+14.g124a1298` | the entry 1.2.0+14 below |
+| 17 (2026-11-23 14:52) | `1.2.0+15.g124a1298.dirty…` | uncommitted tree, internal testers only; contents not recorded |
+
+From 1.2.0+18 on, the two numbers must be equal.
+
+## 1.2.0+18 — 2026-11-23
+
+Needs the backend deploy of the same day for the "runs" figure (`runs_total`) and for points on
+runs an operator completes by hand.
+
+- A refused completion is no longer offered for retry forever (monad-app#2). A 400, 403, 404, 409
+  or 422 from `/complete` is final: the same local rows always rebuild the same payload, and a 409
+  means the run was already closed by the server or an operator. The run is now closed on the
+  phone (step rows and the active quest cleared), the recording stays queued and uploads, and the
+  participant sees "Could not be sent" with the status and one OK button. A network error, a 5xx
+  or a 401 keeps the old "Not sent yet / Try again" path. The 4xx body is now logged on the phone
+  (`CompletionRefusedException`, rule `isFinalRefusal`, test `CompletionRefusalTest`).
+- Room and zone sweeps: "What were people doing?" now starts at "Sitting" (`seated`) instead of
+  "Not sure" (`unknown`). Applies to Counting and Zone count, which share the observe step. An
+  answer the participant did not touch is `seated` in recordings with `build_id` 1.2.0+15 and
+  later (the +15 Xcode runs of 2026-11-23 and App Store Connect 17 already have it) and `unknown`
+  up to 1.2.0+14: do not compare the `activity` field across that boundary.
+- Home: the quest list starts with Counting, Zone count, Fingerprint in that order; the rest keep
+  the server's order (`HomeScreenModel.PINNED`).
+- Points are shown where a participant looks. Home's header shows the earned total and the runs
+  completed (`/api/me/stats` `points_total`, `quests_completed`, re-read whenever Home is shown)
+  instead of the points on offer.
+  The finished screen shows "+N points" from the completion's `points_earned`, which the app used
+  to discard. My account shows a Points card (points, runs started, runs completed) and the quest
+  history for everyone; both used to sit behind the "has a measurement" check. "Runs" reads the
+  new backend field `runs_total` and is left out against a backend that does not send it.
 
 ## 1.2.0+14 — 2026-11-23
+
+Distributed to testers as App Store Connect build 16 (commits `8a65c93`, `124a129`).
 
 - Quest completion after an app restart (monad-app#2). A run resumed after the app was closed or
   crashed could never be submitted: the first step has no recorded start, its start fell back to

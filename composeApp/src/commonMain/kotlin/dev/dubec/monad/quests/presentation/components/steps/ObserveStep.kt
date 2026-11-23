@@ -205,7 +205,8 @@ private fun SweepContent(
     var reason by remember(stepCompletionId) { mutableStateOf("") }
     var coverage by remember(stepCompletionId) { mutableStateOf(HeadcountSweepEvent.COVERAGE_COMPLETE) }
     var stability by remember(stepCompletionId) { mutableStateOf("stable") }
-    var activity by remember(stepCompletionId) { mutableStateOf("unknown") }
+    // "Sitting" preselected (researcher, 2026-11-23); up to build 14 this started at "unknown".
+    var activity by remember(stepCompletionId) { mutableStateOf("seated") }
     var duplicateRisk by remember(stepCompletionId) { mutableStateOf("none_observed") }
     var completed by remember(stepCompletionId) { mutableStateOf(false) }
     // The participant chose to count from where they stand. The sweep is the same two events

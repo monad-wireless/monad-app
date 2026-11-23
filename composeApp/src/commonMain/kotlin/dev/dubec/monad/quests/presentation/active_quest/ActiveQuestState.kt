@@ -30,6 +30,13 @@ data class ActiveQuestState(
     val uploadProgress: String = "",
     val isCompleted: Boolean = false,
     val completionError: String? = null,
+    /**
+     * The server refused the completion for good (monad-app#2). The run is already closed on the
+     * phone, so the dialog offers no retry, only a way home.
+     */
+    val completionRefusal: String? = null,
+    /** What the server awarded for this run, shown on the finished screen. */
+    val pointsEarned: Float? = null,
     val startTime: Long = 0L,
     val shouldNavigateHome: Boolean = false,
     // End quest early fields

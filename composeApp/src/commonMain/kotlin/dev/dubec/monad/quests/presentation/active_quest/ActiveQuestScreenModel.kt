@@ -247,6 +247,11 @@ class ActiveQuestScreenModel(
                 startLabSession()
             }
             is ActiveQuestEvent.DismissCompletionError -> dismissCompletionError()
+            is ActiveQuestEvent.AcknowledgeCompletionRefusal ->
+                mutableState.value = mutableState.value.copy(
+                    completionRefusal = null,
+                    shouldNavigateHome = true,
+                )
             is ActiveQuestEvent.DismissSuccessAndNavigateHome -> navigateHomeAfterSuccess()
             // End quest early events
             is ActiveQuestEvent.ShowEndQuestConfirmation -> showEndQuestConfirmation()
@@ -438,12 +443,26 @@ class ActiveQuestScreenModel(
             completed = success,
         )
 
+        val refusedStatus = outcome.completionRefusedStatus
         mutableState.value = if (outcome.completionSubmitted) {
             if (success) {
-                mutableState.value.copy(isUploading = false, navigateToCompletedScreen = true)
+                mutableState.value.copy(
+                    isUploading = false,
+                    pointsEarned = outcome.pointsEarned,
+                    navigateToCompletedScreen = true,
+                )
             } else {
                 mutableState.value.copy(isUploading = false, navigateToEndedEarlyScreen = true)
             }
+        } else if (refusedStatus != null) {
+            // The coordinator has already closed the run on the phone. Offering "Try again" here
+            // is what looped forever (monad-app#2): the same payload gets the same answer.
+            mutableState.value.copy(
+                isUploading = false,
+                completionRefusal = "The server did not accept the result of this quest, so it cannot " +
+                    "be sent again. The recording from your phone is kept and uploads as usual. " +
+                    "Please tell us the time of this quest. (HTTP $refusedStatus)",
+            )
         } else {
             mutableState.value.copy(
                 isUploading = false,

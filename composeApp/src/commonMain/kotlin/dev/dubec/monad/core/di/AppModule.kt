@@ -255,7 +255,7 @@ val appModule = module {
     factory { OnboardingScreenModel(get(), get()) }
     factory { LoginScreenModel(get(), get(), get()) }
     factory { RegisterScreenModel(get(), get(), get()) }
-    factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    factory { HomeScreenModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), get(), questId) }
     // IP-128 — device landing. questId is the optional `?q=` from the deep link.
     factory { (slug: String, questId: String?) -> DeviceScreenModel(get(), get(), slug, questId) }

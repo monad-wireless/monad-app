@@ -38,6 +38,14 @@ data class HomeState(
     val checkIn: CheckInState = CheckInState.Idle,
     /** Ticks once a second so the check-in card's elapsed time moves. Display only. */
     val nowMillis: Long = 0,
+    /**
+     * The participant's EARNED points (`GET /api/me/stats` `points_total`), or null until loaded
+     * or when it could not be loaded. The header used to show only the points on offer, so a
+     * participant never saw what they had earned without opening My account.
+     */
+    val pointsEarned: Float? = null,
+    /** Runs the participant completed (`quests_completed`), or null until loaded. */
+    val runsCompleted: Int? = null,
 ) {
     /**
      * The one sentence the home screen owes an OPERATOR who just unlocked their phone.

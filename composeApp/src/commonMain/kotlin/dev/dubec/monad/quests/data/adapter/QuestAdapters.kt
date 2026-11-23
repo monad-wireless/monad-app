@@ -1,5 +1,7 @@
 package dev.dubec.monad.quests.data.adapter
 
+import io.ktor.client.plugins.ClientRequestException
+import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -14,9 +16,11 @@ import dev.dubec.monad.lab.data.LabSessionRepository
 import dev.dubec.monad.lab.data.LabSessionUploader
 import dev.dubec.monad.lab.domain.LabConfig
 import dev.dubec.monad.quests.data.dto.QuestCompleteRequestDto
+import dev.dubec.monad.quests.data.dto.QuestCompleteResponseDto
 import dev.dubec.monad.quests.data.dto.SkipRecordDto
 import dev.dubec.monad.quests.data.dto.StepCompletionRequestDto
 import dev.dubec.monad.quests.data.repository.QuestStepCompletionRepository
+import dev.dubec.monad.quests.domain.port.CompletionRefusedException
 import dev.dubec.monad.quests.domain.port.LabBundleSource
 import dev.dubec.monad.quests.domain.port.LabSessionArchive
 import dev.dubec.monad.quests.domain.port.ParticipantDirectory
@@ -101,7 +105,18 @@ class QuestCompletionGatewayAdapter(
     private val service: QuestsService,
 ) : QuestCompletionGateway {
 
-    override suspend fun submitCompletion(questId: String, completion: QuestCompletion, token: String) {
+    override suspend fun submitCompletion(questId: String, completion: QuestCompletion, token: String): Float {
+        try {
+            return post(questId, completion, token).pointsEarned
+        } catch (e: ClientRequestException) {
+            // A 4xx is an answer about this payload, not a transport failure. Name it in domain
+            // terms so the coordinator can tell a final refusal from a retryable one.
+            val detail = runCatching { e.response.bodyAsText() }.getOrNull()?.take(MAX_DETAIL_CHARS)
+            throw CompletionRefusedException(status = e.response.status.value, detail = detail)
+        }
+    }
+
+    private suspend fun post(questId: String, completion: QuestCompletion, token: String): QuestCompleteResponseDto =
         service.completeQuest(
             questId = questId,
             request = QuestCompleteRequestDto(
@@ -126,6 +141,10 @@ class QuestCompletionGatewayAdapter(
             ),
             token = token,
         )
+
+    private companion object {
+        /** Enough for the backend's `error` and `details`, short enough for a dialog and a log line. */
+        const val MAX_DETAIL_CHARS = 400
     }
 }
 

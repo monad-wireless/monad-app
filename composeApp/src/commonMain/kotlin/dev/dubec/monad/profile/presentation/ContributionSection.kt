@@ -64,7 +64,21 @@ fun ContributionSection(
                 }
             }
 
-            stats.contribution.dwells == 0 -> DashboardCard("Nothing measured yet") {
+            else -> {
+            // Points first and always. They used to sit only in the Totals card, which is not
+            // drawn until the participant has a completed measurement, so earned points could be
+            // on the server and nowhere on this screen.
+            DashboardCard("Points") {
+                Row(horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+                    Figure(formatPoints(stats.pointsTotal), "points")
+                    // Runs started beside runs completed. A backend that does not yet send
+                    // `runs_total` gets the completed count alone rather than a made-up zero.
+                    stats.runsTotal?.let { Figure(it.toString(), "runs") }
+                    Figure(stats.questsCompleted.toString(), "completed")
+                }
+            }
+
+            if (stats.contribution.dwells == 0) DashboardCard("Nothing measured yet") {
                 // An empty screen is an invitation to act, not a wall of zeros.
                 Text(
                     text = "Scan any marked point in the library and stand still for thirty " +
@@ -74,9 +88,7 @@ fun ContributionSection(
                     lineHeight = 19.sp,
                     color = Color(0xFF64748B),
                 )
-            }
-
-            else -> {
+            } else {
                 DashboardCard("Coverage") {
                     AsyncImage(
                         model = "$siteUrl/lab/coverage.svg?visited=" +
@@ -101,7 +113,6 @@ fun ContributionSection(
                     Row(horizontalArrangement = Arrangement.spacedBy(26.dp)) {
                         Figure(formatDuration(stats.contribution.dwellSeconds), "standing still")
                         Figure(stats.contribution.dwells.toString(), "measurements")
-                        Figure(formatPoints(stats.pointsTotal), "points")
                     }
                     Text(
                         text = "Each measurement is a moment when the radio was recorded and " +
@@ -112,11 +123,15 @@ fun ContributionSection(
                     )
                 }
 
-                if (stats.history.isNotEmpty()) {
-                    DashboardCard("Recent quests") {
-                        stats.history.take(8).forEach { HistoryRow(it) }
-                    }
+            }
+
+            // Outside the measurement branch: a quest earns points whether or not it produced
+            // a dwell, so the history belongs beside the points, not behind the dwell check.
+            if (stats.history.isNotEmpty()) {
+                DashboardCard("Recent quests") {
+                    stats.history.take(8).forEach { HistoryRow(it) }
                 }
+            }
             }
         }
     }

@@ -7,4 +7,6 @@ sealed interface HomeEvent {
     data class UpdateFilter(val filterText: String) : HomeEvent
     data object LoadQuests : HomeEvent
     data object RetryUploads : HomeEvent
+    /** Re-read the earned total, e.g. when Home is shown again after a quest. */
+    data object RefreshPoints : HomeEvent
 }

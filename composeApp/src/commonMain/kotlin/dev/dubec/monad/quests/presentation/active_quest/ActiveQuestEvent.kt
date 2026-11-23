@@ -18,6 +18,7 @@ sealed interface ActiveQuestEvent {
     data object DismissInstrumentWarning : ActiveQuestEvent
     data object RetryInstrument : ActiveQuestEvent
     data object DismissCompletionError : ActiveQuestEvent
+    data object AcknowledgeCompletionRefusal : ActiveQuestEvent
     data object DismissSuccessAndNavigateHome : ActiveQuestEvent
     // End quest early events
     data object ShowEndQuestConfirmation : ActiveQuestEvent

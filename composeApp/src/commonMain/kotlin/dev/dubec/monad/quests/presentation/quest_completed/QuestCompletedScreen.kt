@@ -31,7 +31,9 @@ data class QuestCompletedScreen(
     val enrollmentId: String,
     val userName: String,
     val startTime: Long,
-    val uploadAlreadyCompleted: Boolean = false
+    val uploadAlreadyCompleted: Boolean = false,
+    /** The server's `points_earned` for this run; null when it is not known. */
+    val pointsEarned: Float? = null,
 ) : Screen {
 
     @Composable
@@ -165,6 +167,15 @@ data class QuestCompletedScreen(
                             color = Color(0xFF0F142F),
                             textAlign = TextAlign.Center
                         )
+                        pointsEarned?.takeIf { it > 0f }?.let { points ->
+                            Text(
+                                text = "+${if (points % 1f == 0f) points.toInt().toString() else points.toString()} points",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF5B6ECC),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                         Text(
                             text = "Your data is sent.",
                             fontSize = 15.sp,
