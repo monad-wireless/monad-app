@@ -19,14 +19,14 @@ jobs:
     name: Android
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       # google-services.json carries per-deployment Firebase secrets and is not in the repository.
       # The build applies the Firebase plugins only when it is present, so CI builds without crash
@@ -38,7 +38,7 @@ jobs:
       - name: Compute artifact name
         run: echo "ARTIFACT_REF=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           # Branch-scoped so two feature builds do not overwrite each other's APK.
           name: monad-app-debug-apk-${{ env.ARTIFACT_REF }}
@@ -52,14 +52,14 @@ jobs:
     # than be discovered on a bench.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       - name: Compile Kotlin/Native (device + simulator)
         run: |
