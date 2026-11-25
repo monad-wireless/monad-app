@@ -56,13 +56,14 @@ enum class OnboardingStep(
     val skipCost: String? = null,
 ) {
     WELCOME(
-        title = "Your phone is the measurement",
-        description = "A body standing in the way of a Wi-Fi signal changes it. Boxes around the " +
-            "room measure that hundreds of times a second, and we are finding out whether it is " +
-            "enough to count people without a camera.\n\nYour part: be somewhere we measure, and " +
-            "let your phone say \"someone is here\" while you are.",
+        title = "Welcome to the study",
+        description = "A person in the path of a Wi-Fi signal changes it a little. Small sensor " +
+            "boxes in the library record these changes. We study whether they are enough to " +
+            "estimate how many people are in a room, without a camera.\n\n" +
+            "Your part is to complete short quests. They give us the known values that we " +
+            "compare the estimate with.",
         permission = null,
-        buttonText = "Get started",
+        buttonText = "Continue",
     ),
     BLUETOOTH(
         title = LabPermission.BLUETOOTH.title,
@@ -86,25 +87,30 @@ enum class OnboardingStep(
     ),
     TERMS(
         title = "What leaves this phone",
-        description = "Everything is stored under a random code, never your name or e-mail.\n\n" +
-            "LEAVES THIS PHONE\nWhich marked points you scanned, when, how long you stayed, and " +
-            "any headcounts you typed in. That is the whole list.\n\n" +
-            "NEVER LEAVES\nYour location. This app has no code that can read a position — no " +
-            "GPS, no coordinates, nothing. No audio, no video, and no Wi-Fi data; no phone can " +
-            "record that.\n\nContinuing also turns on anonymous crash reports.",
+        description = "During a quest the app sends what you scan, count and answer, with the times, " +
+            "a description of your phone, and technical readings about the recording. A tracked " +
+            "walk also sends the movement of the phone and, with LiDAR, an outline of the room " +
+            "(no images).\n\n" +
+            "The sensor boxes record the Bluetooth signal of your phone. The study uses it to " +
+            "estimate where in the library the phone was.\n\n" +
+            "Measurements are stored under a participant code that the server links to your " +
+            "account.\n\n" +
+            "NEVER\nNo GPS position, no photos, video or audio, no Wi-Fi data, no advertising " +
+            "identifier.\n\n" +
+            "Crash reports go to Google Firebase and cannot be turned off in this version. The " +
+            "privacy policy lists everything.",
         permission = null,
         buttonText = "I agree",
     ),
     COMPLETE(
-        title = "You're all set",
-        description = "Two things you can do, whenever you are in the library.\n\n" +
-            "CHECK IN\nScan any card where you sit. The phone counts how long you stay, and " +
-            "closes it on its own after three hours.\n\n" +
-            "WALK A QUEST\nThe shortest takes thirty seconds. Keep the app on screen while one " +
-            "runs — on an iPhone the broadcast stops the moment you switch away, and nothing " +
-            "tells you.",
+        title = "You are ready",
+        description = "When you are in the library, choose a quest and follow its steps. You can " +
+            "read what a quest involves before you start it.\n\n" +
+            "ONE THING TO REMEMBER\nPlease keep the app open and the screen on until the quest " +
+            "ends. On an iPhone the Bluetooth signal stops when you leave the app, and the app " +
+            "cannot warn you.",
         permission = null,
-        buttonText = "Start",
+        buttonText = "See the quests",
     ),
     ;
 

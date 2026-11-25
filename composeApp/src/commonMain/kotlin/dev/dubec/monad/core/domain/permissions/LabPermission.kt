@@ -42,18 +42,18 @@ enum class LabPermission(
     BLUETOOTH(
         permission = Permission.BLUETOOTH_LE,
         title = "Bluetooth",
-        why = "Your phone broadcasts a short anonymous beep that the boxes around the room can " +
-            "hear. That is how a measurement gets attached to the right run.",
-        ifMissing = "Your phone cannot be heard at all, so nothing you do can be recorded.",
+        why = "During a quest your phone sends a short signal with a changing number. The sensor " +
+            "boxes receive it, and so we know which measurement belongs to which quest.",
+        ifMissing = "The sensor boxes cannot receive your phone, so your quests cannot be used.",
         required = true,
     ),
 
     CAMERA(
         permission = Permission.CAMERA,
         title = "Camera",
-        why = "To scan the codes on the walls and on the grey boxes. A scan is what tells us " +
-            "which surveyed point you were standing at.",
-        ifMissing = "You cannot scan a point, so most quests cannot record where you were.",
+        why = "Some quests ask you to scan a printed code. The code tells us at which measured " +
+            "point you stand.",
+        ifMissing = "Quests that use codes cannot record where you were. You can still count people.",
         required = true,
     ),
     ;

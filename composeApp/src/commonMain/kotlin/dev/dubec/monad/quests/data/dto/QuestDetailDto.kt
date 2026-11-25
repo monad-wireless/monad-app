@@ -128,6 +128,10 @@ enum class TaskType {
     @SerialName("observe")
     OBSERVE,
 
+    /** The server drives the screen; see `quests/domain/live`. Gated by `quest.live.v1`. */
+    @SerialName("live")
+    LIVE,
+
     @SerialName("finish")
     FINISH,
 
@@ -149,6 +153,7 @@ enum class TaskType {
             BLE_ADVERTISE -> "ble_advertise"
             PROBE -> "probe"
             OBSERVE -> "observe"
+            LIVE -> "live"
             FINISH -> "finish"
             INFO -> "info"
         }
@@ -166,6 +171,7 @@ enum class TaskType {
                 StepType.BLE_ADVERTISE -> BLE_ADVERTISE
                 StepType.PROBE -> PROBE
                 StepType.OBSERVE -> OBSERVE
+                StepType.LIVE -> LIVE
                 StepType.FINISH -> FINISH
                 // A step type this build predates: shown as a plain instruction card so the
                 // participant can still walk the quest.

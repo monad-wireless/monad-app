@@ -1,4 +1,4 @@
-Thank you for testing. You are the noise we measure, so please be noisy.
+Thank you for testing. Your measurements help us to check how well the sensors count people.
 
 THIS WEEK: COUNTING AND ZONE COUNT
 These two quests are the main focus. Run them in the FIIT STU library as often as you can, every 1-2 hours if possible.
@@ -16,7 +16,9 @@ NEW IN THIS BUILD
 - Counting and Zone count are now at the top of the quest list.
 
 ALSO WORTH A LOOK
-- Check in at a desk card and check out again. Does the Lock Screen show the place and the time?
+- Home is simpler. "Scan to start" and "Check in" are gone, and everything starts from a quest page. Do you find your way?
+- Open "About this study" on Home. Is it clear what we measure?
+- Scan a card with the camera of the phone. The app should show the quests at that card and start nothing by itself.
 - Registration, sign-in, My Account and notifications.
 
 KNOWN ISSUES

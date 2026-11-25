@@ -57,7 +57,8 @@ It also carries the lab's **ground-truth** channel: a participant scans a printe
 on the way in and again on the way out. That is the only thing in the app that records a *person*
 rather than a phone, which is exactly why it is an explicit human act and not a beacon heuristic —
 phone-vs-person bias is a quantity the programme measures, so the truth channel must not be derived
-from phone presence. The QR icon on the home screen is the participant's check-in.
+from phone presence. The check-in screen has not been reachable since 1.2.0+21: a check-in and a quest
+share one `IdentityBroadcaster`, and each could take the other's frame off the air.
 
 A check-in and a **waypoint** are deliberately different things. A check-in says "a person crossed
 into this zone" and feeds the occupancy count. A waypoint says "the phone was at this printed point at

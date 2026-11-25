@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import dev.dubec.monad.auth.data.repository.UserRepository
+import dev.dubec.monad.auth.domain.participantCode
 import dev.dubec.monad.lab.data.GroundTruthRepository
 import dev.dubec.monad.lab.data.LabSessionUploader
 import dev.dubec.monad.lab.domain.CheckInOutcome
@@ -132,10 +133,7 @@ class CheckInScreenModel(
         )
     }
 
-    private suspend fun participantToken(): String {
-        val user = users.getCurrentUser()
-        return user?.backendId ?: user?.id?.toString().orEmpty()
-    }
+    private suspend fun participantToken(): String = users.getCurrentUser()?.participantCode.orEmpty()
 
     private fun refreshPending() {
         screenModelScope.launch {

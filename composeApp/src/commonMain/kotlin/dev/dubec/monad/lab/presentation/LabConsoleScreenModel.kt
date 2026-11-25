@@ -10,6 +10,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import dev.dubec.monad.auth.data.repository.UserRepository
+import dev.dubec.monad.auth.domain.participantCode
 import dev.dubec.monad.lab.data.LabConfigService
 import dev.dubec.monad.lab.data.LabSessionRepository
 import dev.dubec.monad.lab.data.LabSessionUploader
@@ -485,7 +486,7 @@ class LabConsoleScreenModel(
             busy {
                 val user = users.getCurrentUser()
                 val request = SessionRequest(
-                    participantId = user?.backendId ?: user?.id?.toString() ?: "bench",
+                    participantId = user?.participantCode ?: "bench",
                     collector = config.collector,
                     beacons = config.beacons,
                     clockSync = config.clockSync,

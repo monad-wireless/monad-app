@@ -89,6 +89,14 @@ object Capability {
      */
     const val OBSERVE_ROOM_SWEEP = "observe.room_sweep.v1"
 
+    /**
+     * Can run a live step: protocol `monad-live/v1` and every widget it names. A SOFTWARE
+     * capability like [OBSERVE_ROOM_SWEEP], enforced by the backend on listing and on start,
+     * because an older build draws the step as an instruction card and lets the participant tap
+     * through the whole run. A new widget is a new token.
+     */
+    const val QUEST_LIVE = "quest.live.v1"
+
     /** Scene-reconstruction-grade depth: ARKit LiDAR mesh, or ARCore depth on capable hardware. */
     const val LIDAR_MESH = "lidar.mesh"
 

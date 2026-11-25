@@ -9,58 +9,49 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import coil3.compose.AsyncImage
 import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform.getKoin
 import dev.dubec.monad.core.presentation.components.ScreenWithBackNavigation
 import dev.dubec.monad.quests.data.dto.QuestDetailDto
-import dev.dubec.monad.quests.data.dto.TaskDto
 import dev.dubec.monad.quests.presentation.active_quest.ActiveQuestScreen
 
-private const val PREVIEW_STEPS = 5
-
+/**
+ * One quest, before it starts: what you do, why it helps, what to remember, and one button.
+ *
+ * This is the only place a run starts. The page used to list the raw steps, which for a route is
+ * forty names that answer none of those questions. [QuestOutline] says the same in two lines.
+ */
 data class QuestDetailScreen(val questId: String) : Screen {
 
     @Composable
@@ -70,8 +61,6 @@ data class QuestDetailScreen(val questId: String) : Screen {
             getKoin().get<QuestDetailScreenModel> { parametersOf(questId) }
         }
         val state by screenModel.state.collectAsState()
-        val density = LocalDensity.current
-        var tasksHeight by remember { mutableStateOf(0.dp) }
 
         // Navigate to ActiveQuestScreen when enrollment is created
         LaunchedEffect(state.enrollmentId) {
@@ -84,24 +73,13 @@ data class QuestDetailScreen(val questId: String) : Screen {
         if (state.startQuestError != null) {
             AlertDialog(
                 onDismissRequest = { screenModel.onEvent(QuestDetailEvent.DismissStartQuestError) },
-                title = {
-                    Text(
-                        text = "Can't start this quest",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                text = {
-                    Text(text = state.startQuestError ?: "An error occurred")
-                },
+                title = { Text(text = "This quest cannot start now", fontWeight = FontWeight.SemiBold) },
+                text = { Text(text = state.startQuestError ?: "An error occurred") },
                 confirmButton = {
                     TextButton(
                         onClick = { screenModel.onEvent(QuestDetailEvent.DismissStartQuestError) }
                     ) {
-                        Text(
-                            text = "OK",
-                            color = Color(0xFF5B6ECC),
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text(text = "OK", color = Accent, fontWeight = FontWeight.SemiBold)
                     }
                 }
             )
@@ -112,50 +90,36 @@ data class QuestDetailScreen(val questId: String) : Screen {
             onBackClick = { navigator.pop() }
         ) {
             when {
-                state.isLoading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            color = Color(0xFF5B6ECC)
-                        )
-                    }
+                state.isLoading -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Accent)
                 }
-                state.error != null -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+
+                state.error != null -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = state.error ?: "Unknown error",
-                                fontSize = 16.sp,
-                                color = Color(0xFF666666),
-                                textAlign = TextAlign.Center
-                            )
-                            TextButton(
-                                onClick = { screenModel.onEvent(QuestDetailEvent.RetryLoad) }
-                            ) {
-                                Text(
-                                    text = "Try again",
-                                    color = Color(0xFF5B6ECC),
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
+                        Text(
+                            text = state.error ?: "Unknown error",
+                            fontSize = 16.sp,
+                            color = Muted,
+                            textAlign = TextAlign.Center
+                        )
+                        TextButton(onClick = { screenModel.onEvent(QuestDetailEvent.RetryLoad) }) {
+                            Text(text = "Try again", color = Accent, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
-                state.quest != null -> {
-                    val quest = state.quest!!
+
+                else -> state.quest?.let { quest ->
                     QuestDetailContent(
                         quest = quest,
-                        tasksHeight = tasksHeight,
-                        onTasksHeightChange = { tasksHeight = it },
-                        density = density,
                         isStartingQuest = state.isStartingQuest,
                         onStartClick = { screenModel.onEvent(QuestDetailEvent.StartQuest) }
                     )
@@ -167,170 +131,80 @@ data class QuestDetailScreen(val questId: String) : Screen {
     @Composable
     private fun QuestDetailContent(
         quest: QuestDetailDto,
-        tasksHeight: androidx.compose.ui.unit.Dp,
-        onTasksHeightChange: (androidx.compose.ui.unit.Dp) -> Unit,
-        density: androidx.compose.ui.unit.Density,
         isStartingQuest: Boolean,
         onStartClick: () -> Unit
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Scrollable content
+        val outline = remember(quest) { QuestOutline.of(quest.tasks.map { it.type }) }
+
+        Column(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(24.dp, 32.dp, 24.dp, 80.dp), // Extra bottom padding for fixed button
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-            // Quest Type Badge
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF0F142F))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.QrCodeScanner,
-                    contentDescription = "Quest Type",
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp)
-                )
                 Text(
-                    text = quest.questType,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.White
+                    text = quest.name,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Ink,
+                    letterSpacing = (-0.8).sp,
+                    lineHeight = 36.sp
                 )
-            }
 
-            // Quest Title
-            Text(
-                text = quest.name,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF0F142F),
-                letterSpacing = (-0.8).sp,
-                lineHeight = 36.sp
-            )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    quest.duration?.let { Figure("about $it min") }
+                    if (quest.points > 0f) Figure("${quest.points.toInt()} points", emphasis = true)
+                }
 
-            // Quest image - right after title, before description
-            quest.imageUrl?.let { imageUrl ->
-                Spacer(modifier = Modifier.height(12.dp))
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = "Quest image",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(16.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            }
+                quest.imageUrl?.let { imageUrl ->
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = "Quest image",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                if (quest.description.isNotBlank()) {
+                    Text(
+                        text = quest.description,
+                        fontSize = 17.sp,
+                        lineHeight = 25.sp,
+                        color = Ink,
+                    )
+                }
 
-            Text(
-                text = quest.description,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Normal,
-                color = Color.Black,
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = if (quest.tasks.size == 1) "1 step" else "${quest.tasks.size} steps",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF0F142F)
-            )
-
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (tasksHeight > 0.dp) {
-                            Box(
-                                modifier = Modifier
-                                    .width(2.dp)
-                                    .height(tasksHeight + 24.dp - 12.dp)
-                                    .offset(x = 12.dp, y = 12.dp)
-                                    .drawBehind {
-                                        val pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                                        drawLine(
-                                            color = Color(0xFF52525B),
-                                            start = Offset(0f, 0f),
-                                            end = Offset(0f, size.height),
-                                            strokeWidth = 3f,
-                                            pathEffect = pathEffect
-                                        )
-                                    }
-                            )
+                if (outline.actions.isNotEmpty()) {
+                    Section("What you will do") {
+                        outline.actions.forEachIndexed { index, action ->
+                            ActionRow(number = index + 1, text = action)
                         }
-
-                        Column(
-                            modifier = Modifier
-                                .onGloballyPositioned { coordinates ->
-                                    onTasksHeightChange(with(density) { coordinates.size.height.toDp() })
-                                },
-                            verticalArrangement = Arrangement.spacedBy(24.dp)
-                        ) {
-                            // A treasure hunt has seventy stops. The preview shows the first few and
-                            // a count: the run itself shows each stop when you reach it.
-                            quest.tasks.take(PREVIEW_STEPS).forEachIndexed { index, task ->
-                                TaskItem(
-                                    taskNumber = index + 1,
-                                    task = task
-                                )
-                            }
-                            val more = quest.tasks.size - PREVIEW_STEPS
-                            if (more > 0) {
-                                Text(
-                                    text = "+ $more more",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF5B6ECC),
-                                    modifier = Modifier.padding(start = 36.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Stars,
-                            contentDescription = "Points",
-                            tint = Color(0xFFEAB308),
-                            modifier = Modifier.size(24.dp)
-                        )
-
-                        Text(
-                            text = "+ ${quest.points.toInt()} points",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFEAB308)
-                        )
                     }
                 }
-            }
+
+                outline.purpose?.let { purpose ->
+                    Section("Why it helps") { Body(purpose) }
+                }
+
+                Section("Please remember") {
+                    Body(
+                        "Keep the app open and the screen on until the quest ends. You can stop at " +
+                            "any time with \"End quest\"."
+                    )
+                }
             }
 
-            // Fixed button section at bottom with white background
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(Color.White)
+                    .navigationBarsPadding()
                     .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
                 Button(
@@ -338,12 +212,12 @@ data class QuestDetailScreen(val questId: String) : Screen {
                     enabled = !isStartingQuest,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .height(52.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF5B6ECC),
-                        disabledContainerColor = Color(0xFF5B6ECC).copy(alpha = 0.6f)
+                        containerColor = Accent,
+                        disabledContainerColor = Accent.copy(alpha = 0.6f)
                     ),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     if (isStartingQuest) {
                         CircularProgressIndicator(
@@ -352,35 +226,45 @@ data class QuestDetailScreen(val questId: String) : Screen {
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Starting…",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                    } else {
-                        Text(
-                            text = "Start",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
                     }
+                    Text(
+                        text = if (isStartingQuest) "Starting…" else "Start",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
                 }
             }
         }
     }
 
     @Composable
-    private fun TaskItem(
-        taskNumber: Int,
-        task: TaskDto
-    ) {
+    private fun Section(title: String, content: @Composable () -> Unit) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFF1F5F9))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Ink)
+            content()
+        }
+    }
+
+    @Composable
+    private fun Body(text: String) {
+        Text(text = text, fontSize = 14.sp, lineHeight = 20.sp, color = Color(0xFF334155))
+    }
+
+    @Composable
+    private fun ActionRow(number: Int, text: String) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Task Number - Indigo background square
             Box(
                 modifier = Modifier
                     .size(24.dp)
@@ -388,37 +272,27 @@ data class QuestDetailScreen(val questId: String) : Screen {
                     .background(Color(0xFFE0E7FF)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "$taskNumber",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF5B6ECC)
-                )
+                Text(text = "$number", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Accent)
             }
-
-            // Task Content
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = task.name,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF0F142F)
-                )
-                if (task.description.isNotBlank()) {
-                    Text(
-                        text = task.description,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = Color(0xFF475569),
-                        lineHeight = 18.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            Text(text = text, fontSize = 15.sp, lineHeight = 21.sp, color = Ink)
         }
     }
+
+    @Composable
+    private fun Figure(text: String, emphasis: Boolean = false) {
+        Text(
+            text = text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (emphasis) Color(0xFF2A1A00) else Color(0xFF334155),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (emphasis) Color(0xFFFFC24D) else Color(0xFFE2E8F0))
+                .padding(horizontal = 10.dp, vertical = 5.dp)
+        )
+    }
 }
+
+private val Accent = Color(0xFF5B6ECC)
+private val Ink = Color(0xFF0F142F)
+private val Muted = Color(0xFF64748B)

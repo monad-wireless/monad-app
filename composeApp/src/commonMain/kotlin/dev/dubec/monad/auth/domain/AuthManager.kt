@@ -37,6 +37,7 @@ class AuthManager(
         return try {
             val me = authService.getMe(token)
             operatorAccess.remember(me.isOperator)
+            rememberParticipantCode(me.participantCode)
             true
         } catch (e: Exception) {
             false
@@ -54,8 +55,24 @@ class AuthManager(
         // Sign-in does not itself say what the account may reach, so ask. A failure leaves the
         // participant default in place and the next launch tries again.
         runCatching { authService.getMe(token) }
-            .onSuccess { operatorAccess.remember(it.isOperator) }
+            .onSuccess {
+                operatorAccess.remember(it.isOperator)
+                rememberParticipantCode(it.participantCode)
+            }
         sessionObserver.onSignedIn()
+    }
+
+    /**
+     * Keep the account's pseudonym on the local row (`ParticipantCode`).
+     *
+     * A phone that was signed in before 1.2.0+22 gets it here at its next launch. A null answer,
+     * from a backend that predates the field, leaves a stored code alone.
+     */
+    private suspend fun rememberParticipantCode(code: String?) {
+        if (code.isNullOrBlank()) return
+        val user = userRepository.getCurrentUser() ?: return
+        if (user.backendId == code) return
+        userRepository.updateUser(user.id, code, user.email, user.name)
     }
 
     suspend fun saveUserFromRegister(email: String, name: String?, token: String) {
@@ -69,6 +86,8 @@ class AuthManager(
         // A freshly registered account is always ROLE_USER — `/api/auth/register` cannot mint
         // anything else — so this is the cheap, correct answer rather than a round trip.
         operatorAccess.remember(false)
+        runCatching { authService.getMe(token) }
+            .onSuccess { rememberParticipantCode(it.participantCode) }
         sessionObserver.onSignedIn()
     }
 

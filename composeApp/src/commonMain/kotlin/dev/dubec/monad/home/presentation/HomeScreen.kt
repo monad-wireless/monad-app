@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,14 +31,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,14 +54,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
-import dev.dubec.monad.core.presentation.components.EggLine
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,12 +73,10 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.dubec.monad.home.presentation.model.QuestCardDt
 import dev.dubec.monad.lab.domain.SessionReport
-import dev.dubec.monad.lab.presentation.CheckInScreen
+import dev.dubec.monad.core.config.AppConfig
 import dev.dubec.monad.lab.presentation.LabConsoleScreen
 import dev.dubec.monad.lab.presentation.SessionStatusScreen
-import dev.dubec.monad.lab.presentation.formatElapsed
 import dev.dubec.monad.quests.presentation.quest_detail.QuestDetailScreen
-import dev.dubec.monad.scan.presentation.ScanShortcutScreen
 import dev.dubec.monad.ui.theme.h2
 
 /**
@@ -92,10 +95,14 @@ import dev.dubec.monad.ui.theme.h2
  *
  * | Question | Block |
  * |---|---|
- * | Am I being counted, and for how long? | the check-in card |
- * | I am standing next to a code | the scan card |
  * | What can I do here? | the quest board |
+ * | What is this for? | the foldable card about the study |
  * | Is the instrument healthy? | the instrument card — **operator only** |
+ *
+ * The scan card and the check-in card left on 2026-11-25. A quest step that needs a code opens its
+ * own scanner, so the first duplicated the quests. The second shares one `IdentityBroadcaster` with
+ * them, so a check-in could keep a quest's frame off the air. Both started a record from a card
+ * somebody happened to stand next to; a record now starts from a quest page only.
  *
  * The three operator surfaces — the console badge, the instrument card and the operator takes — are
  * behind [HomeState.isOperator]. A student's home screen now contains nothing they cannot act on.
@@ -126,24 +133,13 @@ class HomeScreen : Screen {
                 onOpenLabConsole = { navigator.push(LabConsoleScreen()) },
             )
 
-            // The participant's own question, above everything else: am I being counted right now?
-            // It is also the only thing in the app that records a PERSON rather than a phone, so it
-            // outranks the quest board.
-            CheckInCard(
-                state = state,
-                onOpenCheckIn = { navigator.push(CheckInScreen()) },
-            )
-
-            // One tap to the camera for a QUEST. Distinct from the card above: that one counts a
-            // visit, this one starts a run. They were previously two buttons that both said "scan"
-            // and did different things without saying so.
-            ScanShortcutCard(onClick = { navigator.push(ScanShortcutScreen()) })
-
             QuestBoard(
                 state = state,
                 onRefresh = { screenModel.onEvent(HomeEvent.LoadQuests) },
                 onOpenQuest = { navigator.push(QuestDetailScreen(it)) },
             )
+
+            AboutStudyCard()
 
             // Operator only. Per-stream liveness is unreadable and unactionable for a participant,
             // and for months it told every student "Not recording" about a session they were never
@@ -154,77 +150,89 @@ class HomeScreen : Screen {
                     onOpenStatus = { navigator.push(SessionStatusScreen()) },
                 )
             }
-
-            EggLine(modifier = Modifier.padding(top = 8.dp))
         }
     }
 
     /**
-     * Checked in: where, how long, and the way out. Not checked in: what to do about it.
+     * What the study is, for whoever wants to know. Folded, so that it explains without standing
+     * between a participant and the quests.
      *
-     * The elapsed time is the whole point. It is the one number that tells a participant the phone
-     * is still counting them, it is what the lock-screen indicator shows, and it is what makes
-     * "check out when you leave" a thing somebody remembers to do.
+     * Every sentence repeats something the onboarding already says. The consent text lives on the
+     * terms page of the onboarding and not here.
      */
     @Composable
-    private fun CheckInCard(state: HomeState, onOpenCheckIn: () -> Unit) {
-        val active = state.activeCheckIn
+    private fun AboutStudyCard() {
+        var expanded by remember { mutableStateOf(false) }
+        val uriHandler = LocalUriHandler.current
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(if (active != null) Color(0xFFDCFCE7) else Color(0xFFF1F5F9))
-                .clickable(onClick = onOpenCheckIn)
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .background(Color(0xFFF1F5F9)),
         ) {
-            if (active != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    LiveDot(running = true, nominal = true)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("About this study", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink)
                     Text(
-                        "Checked in at ${active.place.display}",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Ink,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        "What we measure, and why your help matters",
+                        fontSize = 13.sp,
+                        color = Muted,
                     )
                 }
-                Text(
-                    formatElapsed(active.elapsedMillis(state.nowMillis)),
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF166534),
-                )
-                Text(
-                    "Tap to check out when you leave.",
-                    fontSize = 12.sp,
-                    color = Color(0xFF334155),
-                )
-            } else {
-                Text(
-                    "Not checked in",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Ink,
-                )
-                Text(
-                    "Scan the card where you sit. We count how long you stay.",
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    color = Color(0xFF334155),
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Check in →",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Accent,
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = Muted,
                 )
             }
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    AboutParagraph(
+                        heading = "What we measure",
+                        text = "The library is full of Wi-Fi signals. A person in their path changes " +
+                            "them a little. Small sensor boxes record these changes, and we study " +
+                            "whether they are enough to estimate how many people are in a room. The " +
+                            "boxes have no camera.",
+                    )
+                    AboutParagraph(
+                        heading = "Why we need your help",
+                        text = "An estimate is only useful when it can be checked. In a counting quest " +
+                            "you give us the number we compare it with. In a walking quest you stand " +
+                            "at a place whose position we know.",
+                    )
+                    AboutParagraph(
+                        heading = "What your phone does",
+                        text = "While a quest runs, your phone sends a Bluetooth signal with a changing " +
+                            "number. It carries no name and no location. The privacy policy lists " +
+                            "everything the app records.",
+                    )
+                    TextButton(
+                        onClick = { uriHandler.openUri("${AppConfig.BASE_URL}/privacy-policy") },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text("Privacy policy", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Accent)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun AboutParagraph(heading: String, text: String) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(heading, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Ink)
+            Text(text, fontSize = 13.sp, lineHeight = 19.sp, color = Color(0xFF334155))
         }
     }
 
@@ -245,13 +253,21 @@ class HomeScreen : Screen {
             ) {
                 // The count and the points used to be repeated here, verbatim, from the greeting
                 // eighty pixels above. One statement of a number is enough.
-                Text(
-                    "Quests",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.8).sp,
-                    color = Ink
-                )
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Quests",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.8).sp,
+                        color = Ink
+                    )
+                    Text(
+                        "Choose one to see what it involves. Nothing starts until you tap Start.",
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = Muted
+                    )
+                }
                 if (!state.isLoadingQuests) {
                     IconButton(onClick = onRefresh) {
                         Icon(
@@ -292,7 +308,7 @@ class HomeScreen : Screen {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No quests right now.\nCheck back later.",
+                        text = "No quest is open at the moment.\nPlease come back later.",
                         fontSize = 14.sp,
                         color = Muted,
                         textAlign = TextAlign.Center,
@@ -317,6 +333,9 @@ class HomeScreen : Screen {
                                 QuestCard(
                                     quest = quest,
                                     position = position,
+                                    // Only until the first run. After that the participant knows
+                                    // the board, and a permanent badge is furniture.
+                                    suggested = position == 0 && state.runsCompleted == 0,
                                     onClick = { onOpenQuest(quest.id) },
                                 )
                             }
@@ -432,53 +451,6 @@ class HomeScreen : Screen {
     }
 
     /**
-     * One tap to the camera, for a quest.
-     *
-     * [ScanShortcutScreen] works out which quest accepts the code and starts it with the scan
-     * already counted. Distinct from the check-in card above, and the copy now says which is which:
-     * two buttons that both said "scan a code" were most of why this screen was hard to read.
-     */
-    @Composable
-    private fun ScanShortcutCard(onClick: () -> Unit) {
-        Surface(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = Color.Transparent,
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(ScanBrush)
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Scan to start",
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                    Text(
-                        text = "Point the camera at a card or a grey box.",
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        color = Color(0xFFDBE1FA),
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Filled.QrCodeScanner,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(30.dp),
-                )
-            }
-        }
-    }
-
-    /**
      * The instrument, for an operator. "Is it recording, and is every stream alive?"
      *
      * Colour carries the state so it is readable at arm's length, and the headline changes when a
@@ -540,14 +512,15 @@ class HomeScreen : Screen {
      *
      * The figures are a chip row directly under the name: a participant deciding whether to walk
      * this reads the name and the cost in one glance instead of tracking down a column at the
-     * card's foot.
+     * card's foot. The cost is time. The step count left the card: forty steps read as a burden and
+     * say nothing a duration does not.
      *
      * The card's colour comes from its position in the list. That carries no claim — it is not a
      * difficulty rating and the app does not have one — it exists so a board of five quests looks
      * like five things rather than one thing five times.
      */
     @Composable
-    private fun QuestCard(quest: QuestCardDt, position: Int, onClick: () -> Unit) {
+    private fun QuestCard(quest: QuestCardDt, position: Int, suggested: Boolean, onClick: () -> Unit) {
         val brush = QuestBrushes[position % QuestBrushes.size]
         Column(
             modifier = Modifier
@@ -558,11 +531,32 @@ class HomeScreen : Screen {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (suggested) {
+                Text(
+                    text = "A good first quest",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.9f),
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.Top
             ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .padding(11.dp)
+                ) {
+                    Icon(
+                        imageVector = questIcon(quest.name),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -578,24 +572,18 @@ class HomeScreen : Screen {
                         overflow = TextOverflow.Ellipsis
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StatChip("${quest.numTasks} steps")
-                        quest.timeEstimateMin?.let { StatChip("$it min") }
-                        StatChip("${formatPoints(quest.points)} pts", emphasis = true)
+                        quest.timeEstimateMin?.let { StatChip("about $it min") }
+                        if (quest.points > 0f) {
+                            StatChip("${formatPoints(quest.points)} points", emphasis = true)
+                        }
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.18f))
-                        .padding(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Open quest",
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp).rotate(-45f)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Open quest",
+                    tint = Color.White.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 3.dp).size(20.dp)
+                )
             }
 
             if (quest.description.isNotBlank()) {
@@ -660,9 +648,6 @@ class HomeScreen : Screen {
      * the first screen on purpose — it is where an operator finds out why a session is not
      * measuring, and that question comes up on a bench rather than in a settings menu — but it is
      * shown only to an operator. A student has no session to diagnose and no panel they can act on.
-     *
-     * The check-in QR that used to sit beside it is gone. Check-in is now a card of its own
-     * directly below, which is both larger and says what it does.
      */
     @Composable
     private fun Greeting(
@@ -683,7 +668,7 @@ class HomeScreen : Screen {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (state.userName != null) "Hey ${state.userName}!" else "Hey!",
+                        state.userName?.takeIf { it.isNotBlank() }?.let { "Hello, $it" } ?: "Hello",
                         style = MaterialTheme.typography.h2,
                         fontSize = 27.sp,
                         fontWeight = FontWeight.Bold,
@@ -691,8 +676,9 @@ class HomeScreen : Screen {
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Check in where you sit, or walk a quest.",
+                        "Can Wi-Fi tell how many people are in a room? Your measurements help us find out.",
                         fontSize = 15.sp,
+                        lineHeight = 21.sp,
                         color = Color(0xFFC9D2F7)
                     )
                 }
@@ -747,7 +733,7 @@ class HomeScreen : Screen {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                HeroFigure(state.participantQuests.size.toString(), "quests")
+                HeroFigure(state.participantQuests.size.toString(), "open quests")
                 HeroDivider()
                 HeroFigure(state.pointsEarned?.let { formatPoints(it) } ?: "–", "your points")
                 HeroDivider()
@@ -788,11 +774,21 @@ private val HeroBrush = Brush.linearGradient(
     end = Offset(900f, 600f),
 )
 
-private val ScanBrush = Brush.linearGradient(
-    colors = listOf(Color(0xFF6B7DE0), Color(0xFF4453B4)),
-    start = Offset.Zero,
-    end = Offset(900f, 300f),
-)
+/**
+ * A picture for a quest, by the words in its name. A name this build does not know gets the plain
+ * research icon, so a new quest never waits for an app release.
+ */
+private fun questIcon(name: String): ImageVector {
+    val n = name.lowercase()
+    return when {
+        "zone" in n -> Icons.Filled.GridView
+        "count" in n -> Icons.Filled.Groups
+        "fingerprint" in n -> Icons.Filled.Place
+        "hunt" in n -> Icons.Filled.Explore
+        "route" in n || "walk" in n || "loop" in n -> Icons.Filled.Route
+        else -> Icons.Filled.Science
+    }
+}
 
 /**
  * The quest-card palette, applied by position in the list.

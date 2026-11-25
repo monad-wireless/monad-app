@@ -81,12 +81,16 @@ import dev.dubec.monad.profile.data.api.ProfileService
 import dev.dubec.monad.profile.presentation.ProfileScreenModel
 import dev.dubec.monad.onboarding.presentation.OnboardingScreenModel
 import dev.dubec.monad.quests.data.adapter.LabBundleSourceAdapter
+import dev.dubec.monad.quests.data.adapter.LabLiveRecorder
 import dev.dubec.monad.quests.data.adapter.LabSessionArchiveAdapter
+import dev.dubec.monad.quests.data.adapter.LiveGatewayAdapter
 import dev.dubec.monad.quests.data.adapter.ParticipantDirectoryAdapter
 import dev.dubec.monad.quests.data.adapter.QuestCompletionGatewayAdapter
 import dev.dubec.monad.quests.data.adapter.QuestStepJournalAdapter
 import dev.dubec.monad.quests.data.repository.QuestStepCompletionRepository
 import dev.dubec.monad.quests.domain.QuestSessionCoordinator
+import dev.dubec.monad.quests.domain.live.LiveGateway
+import dev.dubec.monad.quests.domain.live.LiveRecorder
 import dev.dubec.monad.quests.domain.port.LabBundleSource
 import dev.dubec.monad.quests.domain.port.LabSessionArchive
 import dev.dubec.monad.quests.domain.port.ParticipantDirectory
@@ -244,6 +248,9 @@ val appModule = module {
     single<QuestCompletionGateway> { QuestCompletionGatewayAdapter(get()) }
     single<QuestStepJournal> { QuestStepJournalAdapter(get()) }
     single { QuestSessionCoordinator(get(), get(), get(), get(), get(), get(), get()) }
+    // Live steps (`quests/domain/live`): the server drives the screen, the recording keeps the events.
+    single<LiveGateway> { LiveGatewayAdapter(get(), get()) }
+    single<LiveRecorder> { LabLiveRecorder(get()) }
 
     // IP-146 — the Foundation-track reading matter shown during a probe dwell. A singleton
     // because the bundle is parsed once and held: a dwell is thirty seconds of somebody standing
@@ -259,8 +266,8 @@ val appModule = module {
     factory { (questId: String) -> QuestDetailScreenModel(get(), get(), get(), get(), questId) }
     // IP-128 — device landing. questId is the optional `?q=` from the deep link.
     factory { (slug: String, questId: String?) -> DeviceScreenModel(get(), get(), slug, questId) }
-    // IP-140 — resolves a scanned marker card to a runnable quest and starts it.
-    factory { (code: String, scanned: String) -> MarkerScreenModel(get(), get(), get(), get(), code, scanned) }
+    // IP-140 — resolves a scanned marker card to the quests that use it. It never starts one.
+    factory { (scanned: String) -> MarkerScreenModel(get(), get(), scanned) }
     factory { (questId: String) -> ActiveQuestScreenModel(get(), get(), get(), get(), get(), questId) }
     // IP-157 — the permission moment: the pre-prompt card after the first completed quest.
     factory { QuestCompletedScreenModel(get(), get()) }

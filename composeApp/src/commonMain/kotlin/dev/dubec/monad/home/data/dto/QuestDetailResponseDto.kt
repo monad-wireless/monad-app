@@ -90,6 +90,10 @@ enum class StepType {
     @SerialName("observe")
     OBSERVE,
 
+    /** The server drives the screen; gated by `quest.live.v1`. */
+    @SerialName("live")
+    LIVE,
+
     @SerialName("finish")
     FINISH,
 
@@ -109,6 +113,7 @@ enum class StepType {
             BLE_ADVERTISE -> "ble_advertise"
             PROBE -> "probe"
             OBSERVE -> "observe"
+            LIVE -> "live"
             FINISH -> "finish"
             UNKNOWN -> "unknown"
         }

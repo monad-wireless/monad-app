@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import dev.dubec.monad.auth.data.repository.UserRepository
+import dev.dubec.monad.auth.domain.participantCode
 import dev.dubec.monad.lab.data.GroundTruthRepository
 import dev.dubec.monad.lab.data.LabSessionRecovery
 import dev.dubec.monad.lab.data.LabSessionRepository
@@ -82,7 +83,7 @@ class SessionStatusScreenModel(
 
     private suspend fun refresh() {
         val user = users.getCurrentUser()
-        val token = user?.backendId ?: user?.id?.toString().orEmpty()
+        val token = user?.participantCode.orEmpty()
         val labSession = groundTruth.lastScannedSession(token)
         val zone = labSession
             ?.let { ZoneMembership.resolve(groundTruth.eventsForParticipant(it, token)) }

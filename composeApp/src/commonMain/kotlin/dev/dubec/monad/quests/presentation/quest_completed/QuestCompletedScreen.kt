@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import dev.dubec.monad.core.presentation.components.EggLine
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -177,7 +176,8 @@ data class QuestCompletedScreen(
                             )
                         }
                         Text(
-                            text = "Your data is sent.",
+                            text = "Your measurement has reached the study. It helps us to check how well " +
+                                "the sensors work.",
                             fontSize = 15.sp,
                             color = Color(0xFF6B7280),
                             textAlign = TextAlign.Center
@@ -212,7 +212,6 @@ data class QuestCompletedScreen(
                                 color = Color(0xFF5B6ECC)
                             )
                         }
-                        EggLine()
                     }
                 }
             }
@@ -235,13 +234,13 @@ data class QuestCompletedScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Want to know when the lab needs a measurement?",
+                text = "May we tell you when we need a measurement?",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color(0xFF0F142F)
             )
             Text(
-                text = "A short notification when a quest is worth walking. Off any time in My account.",
+                text = "We send a short notification when a new measurement would help. You can turn it off in My account.",
                 fontSize = 13.sp,
                 color = Color(0xFF475569)
             )

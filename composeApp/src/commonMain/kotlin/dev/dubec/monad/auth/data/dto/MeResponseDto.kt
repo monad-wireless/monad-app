@@ -20,10 +20,14 @@ import kotlinx.serialization.Serializable
  *
  * It is NOT the authorization. The server gates every operator surface that touches it on its own;
  * this field only decides which doors the app draws.
+ *
+ * [participantCode] is the pseudonym of this account in every recording (`ParticipantCode`). Null
+ * against a backend that predates it.
  */
 @Serializable
 data class MeResponseDto(
     val email: String,
     val name: String? = null,
     @SerialName("is_operator") val isOperator: Boolean = false,
+    @SerialName("participant_code") val participantCode: String? = null,
 )

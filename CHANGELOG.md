@@ -34,6 +34,54 @@ sidecars on S3 and the upload times in App Store Connect:
 
 From 1.2.0+18 on, the two numbers must be equal.
 
+## 1.2.0+22 — 2026-11-25
+
+Deploy the backend first: `GET /api/auth/me` returns `participant_code`.
+
+- The participant id in a recording is the account's `participant_code` (`p-` and 16 hex digits), the
+  same on every phone and after every sign-in. Up to 1.2.0+21 it was the local row id, a login
+  counter per phone: two people could both be `1`, and one person got a new number at each sign-in.
+  It is in the sidecar, the storage path, the telemetry label and the ground-truth rows. Do not join
+  recordings across this boundary by participant id. Use the account or the enrollment.
+- A phone that never got a code records `local-<row id>`, so a missing code is visible and the
+  recording is not lost. The code is read at sign-in and at each launch.
+- The consent page says what the app sends. The old one promised "a random code" and "That is the
+  whole list", and neither matched the code.
+
+## 1.2.0+21 — 2026-11-25
+
+This batch needs no backend change of its own, but the build carries 1.2.0+20, which does (see there).
+The Study session quest was hidden on the server the same day.
+
+- Home is the quest board. The "Scan to start" card and the "Check in" card are gone: every quest
+  step that needs a code opens its own scanner. A quest card shows its time and points, with an icon
+  by quest name. A foldable "About this study" card explains the measurement.
+- Check in is not reachable. It and a quest share one `IdentityBroadcaster`: an open check-in made a
+  quest's broadcast fail with "already broadcasting", and a check-out during a quest took the quest's
+  frame off air while its markers still said it was on. `CheckInService`, `CheckInScreen`, the stored
+  rows and the widget stay in the code.
+- A card scanned with the phone's own camera (`/m/<CODE>`) opens the quest page instead of starting a
+  run. If a quest is already open on the phone, it leads back to that quest. Before, a second start
+  overwrote the pointer to the open one.
+- Onboarding, quest page, marker page, Bluetooth and camera explanations and the finished screen are
+  reworded. The terms page (the consent text) is unchanged.
+- The joke line (`EggLine`) left Home and the finished screen.
+- Removed: `ScanShortcutScreen`.
+
+## 1.2.0+20 — 2026-11-25
+
+Needs the backend of the same day (`live` step type, `POST /api/quest/live/{step}`).
+
+- Live steps: the server drives the screen. The app sends what happened (a scan, an answer, a tap, a
+  finished hold), polls about once a second, and draws the widgets it gets back (text, meter, stats,
+  scan, number, choice, hold, button, progress). A new mechanic made of these widgets needs no new
+  build. First engine: the radio hunt. Capability `quest.live.v1`; an older build is never offered
+  such a quest. Code: `quests/domain/live`, `LiveAdapters.kt`, `LiveStep.kt`, `LiveWidgets.kt`,
+  `CardScanner.kt`.
+- Every live event is also an `annotation` marker (`live:<kind>`) in the recording. A hold writes the
+  same waypoint and dwell markers as a probe. A number asked with `record: headcount` writes a
+  headcount marker. The existing step types are unchanged.
+
 ## 1.2.0+19 — 2026-11-25
 
 - A plain instruction step (start, walk_to, finish) reads two optional config keys: `button` (the

@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import dev.dubec.monad.auth.data.repository.UserRepository
+import dev.dubec.monad.auth.domain.participantCode
 import dev.dubec.monad.lab.domain.CanonicalJson
 import dev.dubec.monad.lab.domain.SnapshotDigestSource
 import dev.dubec.monad.home.data.api.QuestsService
@@ -90,9 +91,8 @@ class ParticipantDirectoryAdapter(
     override suspend fun current(): QuestParticipant? = users.getCurrentUser()?.let { user ->
         QuestParticipant(
             userId = user.id,
-            // The backend id when the account has one, else the local row id. The dataset never
-            // carries the e-mail.
-            participantId = user.backendId ?: user.id.toString(),
+            // The dataset never carries the e-mail.
+            participantId = user.participantCode,
             token = user.token,
         )
     }

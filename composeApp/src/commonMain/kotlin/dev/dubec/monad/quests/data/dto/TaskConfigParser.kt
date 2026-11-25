@@ -34,6 +34,8 @@ object TaskConfigParser {
             TaskType.BLE_ADVERTISE -> json.decodeFromJsonElement(BleAdvertiseConfig.serializer(), configJson)
             TaskType.PROBE -> json.decodeFromJsonElement(ProbeConfig.serializer(), configJson)
             TaskType.OBSERVE -> json.decodeFromJsonElement(ObserveConfig.serializer(), configJson)
+            // The engine's options are the server's business; the phone draws what it is sent.
+            TaskType.LIVE -> null
             TaskType.INFO -> null
         }
     }
