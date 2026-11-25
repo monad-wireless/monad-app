@@ -20,6 +20,11 @@ data class ActiveTaskDto(
      * Null only for a task built without a step row, which no quest screen does.
      */
     @SerialName("step_completion_id") val stepCompletionId: String? = null,
+    /**
+     * When the step began on the phone's wall clock, from the step row, so a count-up survives an
+     * app restart. Null only for a task built without a step row.
+     */
+    @SerialName("started_at_millis") val startedAtMillis: Long? = null,
 )
 
 /**

@@ -34,6 +34,15 @@ sidecars on S3 and the upload times in App Store Connect:
 
 From 1.2.0+18 on, the two numbers must be equal.
 
+## 1.2.0+19 — 2026-11-25
+
+- A plain instruction step (start, walk_to, finish) reads two optional config keys: `button` (the
+  words on its button, default "Continue") and `elapsed: true` (a count-up since the step began,
+  from the step row, so it survives an app restart). Study session revision 2 uses both. Older
+  builds ignore them and show "Continue".
+- The probe step shows the room in words ("silent reading room") instead of the database key
+  ("library-silent").
+
 ## 1.2.0+18 — 2026-11-23
 
 Needs the backend deploy of the same day for the "runs" figure (`runs_total`) and for points on

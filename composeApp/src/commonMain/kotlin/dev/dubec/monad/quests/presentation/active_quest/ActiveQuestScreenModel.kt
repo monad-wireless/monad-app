@@ -94,6 +94,7 @@ class ActiveQuestScreenModel(
                             }
                         },
                         stepCompletionId = step.backendId,
+                        startedAtMillis = step.startedAt ?: step.createdAt,
                     )
                 }
 
@@ -403,6 +404,7 @@ class ActiveQuestScreenModel(
                         kotlinx.serialization.json.Json.parseToJsonElement(it)
                     },
                     stepCompletionId = step.backendId,
+                    startedAtMillis = step.startedAt ?: step.createdAt,
                 )
             }
             val allCompleted = steps.isNotEmpty() && steps.all { it.status == "completed" }

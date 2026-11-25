@@ -250,7 +250,15 @@ data class ProbeTarget(
      * so the kind travels with the waypoint.
      */
     val kind: String = "",
-)
+) {
+    /** The room in words a participant reads. [room] stays the surveyed key the analysis uses. */
+    val roomLabel: String
+        get() = when (room) {
+            "library-open" -> "open reading room"
+            "library-silent" -> "silent reading room"
+            else -> room.replace('-', ' ')
+        }
+}
 
 /**
  * Configuration for the IP-140 probe step: scan one of these, then hold still.

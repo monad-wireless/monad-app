@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import dev.dubec.monad.lab.domain.QuestFeatures
 
 /**
@@ -63,6 +64,26 @@ object TaskConfigParser {
         // An empty string is a generator that had nothing to draw, not a request to render
         // a broken image placeholder in the middle of a step.
         return url?.takeIf { it.isNotEmpty() }
+    }
+
+    /** The words on an instruction step's button. "Continue" unless the quest says otherwise. */
+    fun buttonLabel(task: ActiveTaskDto): String =
+        ((task.config as? JsonObject)?.get("button") as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.content
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "Continue"
+
+    /** Whether an instruction step counts up from the moment it began (Study session). */
+    fun showsElapsed(task: ActiveTaskDto): Boolean =
+        ((task.config as? JsonObject)?.get("elapsed") as? JsonPrimitive)?.booleanOrNull == true
+
+    /** `07:05`, or `1:07:05` from one hour on. A clock that went backwards reads `00:00`. */
+    fun formatElapsed(totalSeconds: Long): String {
+        val s = totalSeconds.coerceAtLeast(0)
+        val mmss = "${(s % 3600 / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}"
+        return if (s >= 3600) "${s / 3600}:$mmss" else mmss
     }
 
     /**

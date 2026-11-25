@@ -358,7 +358,7 @@ private fun ProbeContent(
                 Text(
                     text = buildString {
                         append(target.label.ifBlank { target.value })
-                        if (target.room.isNotBlank()) append(" · ${target.room}")
+                        if (target.room.isNotBlank()) append(" · ${target.roomLabel}")
                     },
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -415,7 +415,7 @@ private fun ProbeContent(
                 )
                 if (matched.room.isNotBlank()) {
                     Text(
-                        text = "· ${matched.room}",
+                        text = "· ${matched.roomLabel}",
                         fontSize = 13.sp,
                         color = Color(0xFF64748B),
                     )
