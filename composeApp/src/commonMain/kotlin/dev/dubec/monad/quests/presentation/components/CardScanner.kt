@@ -23,9 +23,9 @@ import dev.dubec.monad.core.presentation.components.PermissionRequiredCard
 import dev.icerock.moko.permissions.DeniedAlwaysException
 import dev.icerock.moko.permissions.DeniedException
 import dev.icerock.moko.permissions.Permission
+import dev.icerock.moko.permissions.PermissionsController
 import dev.icerock.moko.permissions.camera.CAMERA
 import dev.icerock.moko.permissions.compose.BindEffect
-import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import qrscanner.CameraLens
@@ -38,9 +38,15 @@ import qrscanner.QrScanner
  * the rear camera, and a second capture session kills the pose stream (see `ProbeStep` and
  * `CameraOwnershipTest`); then the code comes from the tracker's own frames through [seenCard],
  * and it must survive one further decode, so a card passed at two metres is not a scan.
+ *
+ * [permissions] must be created and bound ([BindEffect]) by the caller, OUTSIDE any `Dialog`.
+ * On Android a Compose `Dialog` gives its content the dialog's own wrapper context, and moko's
+ * `BindEffect` throws `IllegalStateException` when `LocalContext` is not a `ComponentActivity`.
+ * Bound inside [ScannerDialog], it crashed every Android live-step scan on 1.2.0+23.
  */
 @Composable
 fun CardScanner(
+    permissions: PermissionsController,
     trackerOwnsCamera: Boolean,
     seenCard: String?,
     onCode: (String) -> Unit,
@@ -49,9 +55,6 @@ fun CardScanner(
     // false: a 280 dp strip inside a scrolling step.
     fill: Boolean = false,
 ) {
-    val factory = rememberPermissionsControllerFactory()
-    val permissions = remember(factory) { factory.createPermissionsController() }
-    BindEffect(permissions)
     val scope = rememberCoroutineScope()
     var granted by remember { mutableStateOf<Boolean?>(null) }
     var deniedForever by remember { mutableStateOf(false) }

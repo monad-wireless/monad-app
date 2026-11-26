@@ -36,6 +36,8 @@ import dev.dubec.monad.quests.domain.live.LiveAnswer
 import dev.dubec.monad.quests.domain.live.LiveWidget
 import dev.dubec.monad.quests.presentation.components.CardScanner
 import dev.dubec.monad.quests.presentation.components.ScannerDialog
+import dev.icerock.moko.permissions.compose.BindEffect
+import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
 
 private val Ink = Color(0xFF0F172A)
 private val Muted = Color(0xFF64748B)
@@ -148,6 +150,11 @@ private fun ProgressLine(widget: LiveWidget.Progress) {
 
 @Composable
 private fun ScanInput(widget: LiveWidget.Scan, trackerOwnsCamera: Boolean, seenCard: String?, onCode: (String) -> Unit) {
+    // Bound here, outside the dialog: inside a Dialog, Android's LocalContext is not the Activity
+    // and moko's BindEffect throws (see CardScanner).
+    val permissionsFactory = rememberPermissionsControllerFactory()
+    val permissions = remember(permissionsFactory) { permissionsFactory.createPermissionsController() }
+    BindEffect(permissions)
     var open by remember { mutableStateOf(false) }
     // The step scrolls, so an inline camera opened below the meter sat half off screen. With the
     // camera free, the scanner is a full-screen view over the step. While the pose tracker owns
@@ -155,6 +162,7 @@ private fun ScanInput(widget: LiveWidget.Scan, trackerOwnsCamera: Boolean, seenC
     if (open && !trackerOwnsCamera) {
         ScannerDialog(title = widget.label, hint = widget.hint, error = null, onClose = { open = false }) { cameraModifier ->
             CardScanner(
+                permissions = permissions,
                 trackerOwnsCamera = false,
                 seenCard = null,
                 onCode = { code ->
@@ -170,6 +178,7 @@ private fun ScanInput(widget: LiveWidget.Scan, trackerOwnsCamera: Boolean, seenC
         if (open && trackerOwnsCamera) {
             if (widget.hint.isNotBlank()) Text(widget.hint, fontSize = 13.sp, color = Muted)
             CardScanner(
+                permissions = permissions,
                 trackerOwnsCamera = trackerOwnsCamera,
                 seenCard = seenCard,
                 onCode = { code ->

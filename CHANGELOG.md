@@ -34,6 +34,15 @@ sidecars on S3 and the upload times in App Store Connect:
 
 From 1.2.0+18 on, the two numbers must be equal.
 
+## 1.2.0+24 — 2026-11-26
+
+- Android: a live step's "Scan" button (the Radio hunt) no longer crashes the app. Build 23 moved
+  the camera into `ScannerDialog`, and `CardScanner` bound its moko permission controller inside
+  that dialog. On Android a Compose `Dialog` gives its content a wrapper context, not the Activity,
+  and moko 0.20.1 `BindEffect` throws `IllegalStateException` on that. The controller is now
+  created and bound in `ScanInput`, outside the dialog, and passed to `CardScanner`. iOS was not
+  affected. Every Android Radio hunt run on 2026-11-26 ended as "interrupted by a crash".
+
 ## 1.2.0+23 — 2026-11-26
 
 - The joke line (`EggLine`, the public site's footer lines) is back, at the foot of the Home quest
