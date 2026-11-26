@@ -34,6 +34,19 @@ sidecars on S3 and the upload times in App Store Connect:
 
 From 1.2.0+18 on, the two numbers must be equal.
 
+## 1.2.0+23 — 2026-11-26
+
+- The joke line (`EggLine`, the public site's footer lines) is back, at the foot of the Home quest
+  board below the operator takes. Tap it for another line. It is not on the finished screen.
+- Every quest camera opens full screen over the step (`ScannerDialog`): live scan, probe and
+  scan_qr steps. Up to +22 it opened inline at a fixed 280–300 dp below the step's text, and the
+  step had to be scrolled to see the whole camera. A probe step no longer opens the camera by
+  itself: the participant taps "Scan the card". A wrong code shows its message inside the camera
+  view. While the pose tracker owns the camera, probe and live steps keep their text-only hint
+  inline, as before.
+- No app change: the "Radio hunt" quest became `audience: public` on 2026-11-26, so every
+  participant on build 20 or later sees it on the board.
+
 ## 1.2.0+22 — 2026-11-25
 
 Deploy the backend first: `GET /api/auth/me` returns `participant_code`.

@@ -29,6 +29,7 @@ import dev.dubec.monad.quests.data.dto.TaskConfigParser
 import dev.dubec.monad.core.config.isDebug
 import dev.dubec.monad.core.presentation.components.PermissionRequiredCard
 import dev.dubec.monad.quests.presentation.components.QuestStepCard
+import dev.dubec.monad.quests.presentation.components.ScannerDialog
 
 /**
  * QR Code scanning step component
@@ -108,9 +109,11 @@ fun QrCodeStep(
         modifier = modifier,
         content = {
             QrCodeContent(
+                title = task.name,
                 config = config,
                 isScanning = isScanning,
                 errorMessage = errorMessage,
+                onClose = { isScanning = false },
                 onScan = { scannedValue ->
                     // IP-128 — re-entrancy guard. The scanner keeps firing its
                     // callback for as long as the code stays in frame, so without
@@ -153,11 +156,35 @@ fun QrCodeStep(
  */
 @Composable
 private fun QrCodeContent(
+    title: String,
     config: QrCodeConfig?,
     isScanning: Boolean,
     errorMessage: String?,
+    onClose: () -> Unit,
     onScan: (String) -> Unit
 ) {
+    // The step scrolls, so the camera opens over the whole screen, not inline below the text.
+    if (isScanning) {
+        ScannerDialog(
+            title = title,
+            hint = config?.location?.let { "Location: $it" },
+            error = errorMessage,
+            onClose = onClose,
+        ) { cameraModifier ->
+            Box(modifier = cameraModifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))) {
+                QrScanner(
+                    modifier = Modifier.fillMaxSize(),
+                    flashlightOn = false,
+                    cameraLens = CameraLens.Back,
+                    openImagePicker = false,
+                    onCompletion = { scannedValue -> onScan(scannedValue) },
+                    imagePickerHandler = { /* Not used */ },
+                    onFailure = { errorMsg -> if (isDebug()) println("QR Scan failed: $errorMsg") }
+                )
+            }
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -172,31 +199,7 @@ private fun QrCodeContent(
             )
         }
 
-        // Camera view / QR Scanner
-        if (isScanning) {
-            // Actual QR scanner with camera view
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            ) {
-                QrScanner(
-                    modifier = Modifier.fillMaxSize(),
-                    flashlightOn = false,
-                    cameraLens = CameraLens.Back,
-                    openImagePicker = false,
-                    onCompletion = { scannedValue ->
-                        onScan(scannedValue)
-                    },
-                    imagePickerHandler = { /* Not used */ },
-                    onFailure = { errorMsg ->
-                        // Handle scan failure - could be logged or shown to user
-                        if (isDebug()) println("QR Scan failed: $errorMsg")
-                    }
-                )
-            }
-        } else {
+        if (!isScanning) {
             // Placeholder when not scanning
             Box(
                 modifier = Modifier

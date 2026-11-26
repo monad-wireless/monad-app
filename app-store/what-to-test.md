@@ -8,17 +8,27 @@ These two quests are the main focus. Run them in the FIIT STU library as often a
 - Keep the app open and the screen on until the end of the quest.
 - After the last step, check that the app says your result was sent.
 
-NEW IN THIS BUILD
-- Fixed: if the app closed or crashed during a quest and you opened it again, the quest could not be sent. A quest that continues after a restart is now sent normally. Please still keep the app open for the whole quest.
-- If the app ever shows "Could not be sent", the quest is closed and you can start the next one. Please tell us the time it happened.
-- Home now shows your points and how many quests you completed. You also see your points after each quest, and in My account with your runs. Do the numbers match what you did?
-- "What were people doing?" now starts at "Sitting". Change it if people were moving.
-- Counting and Zone count are now at the top of the quest list.
+NEW: RADIO HUNT
+A new game. Find three hidden cards in the library with no map. The sensors hear your phone and the screen says warmer or colder.
+- Keep the app open, the screen on and Bluetooth on for the whole game.
+- At each card, scan its code and stand still for 30 seconds.
+- Does the warmer/colder hint help you find the card? Tell us when it points the wrong way, and the time.
+- Play alone or as a group with one phone. Be quiet, people study there.
 
-ALSO WORTH A LOOK
-- Home is simpler. "Scan to start" and "Check in" are gone, and everything starts from a quest page. Do you find your way?
+NEW IN THIS BUILD
+- The camera in every quest now opens on the full screen. Is a card easier to scan?
+- A new line at the bottom of Home. Tap it for another one.
+- Home is simpler. "Scan to start" and "Check in" are gone, and every quest starts from its quest page. Do you find your way?
 - Open "About this study" on Home. Is it clear what we measure?
-- Scan a card with the camera of the phone. The app should show the quests at that card and start nothing by itself.
+- Scan a card with the camera of the phone, not in the app. The app should open the quests at that card and start nothing by itself. If a quest is already open, it should take you back to that quest.
+- Your recordings now carry one participant code for your account, the same on every phone and after every sign-in. Sign out and sign in again once, then run a quest. Tell us if anything looks different.
+- The consent page now lists exactly what the app sends. Is it clear?
+- The texts in onboarding, on the quest and card pages, and on the finished screen are new. Tell us about any text that is unclear.
+
+STILL WORTH A LOOK
+- If the app closed or crashed during a quest and you open it again, the quest should still be sent. Please keep the app open for the whole quest anyway.
+- If the app ever shows "Could not be sent", the quest is closed and you can start the next one. Please tell us the time it happened.
+- Home shows your points and how many quests you completed. Do the numbers match what you did?
 - Registration, sign-in, My Account and notifications.
 
 KNOWN ISSUES

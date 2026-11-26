@@ -45,6 +45,9 @@ fun CardScanner(
     seenCard: String?,
     onCode: (String) -> Unit,
     modifier: Modifier = Modifier,
+    // true: the camera takes all the room [modifier] gives it (a full-screen scanner).
+    // false: a 280 dp strip inside a scrolling step.
+    fill: Boolean = false,
 ) {
     val factory = rememberPermissionsControllerFactory()
     val permissions = remember(factory) { factory.createPermissionsController() }
@@ -101,7 +104,10 @@ fun CardScanner(
             onOpenSettings = { permissions.openAppSettings() },
         )
 
-        true -> Box(modifier = modifier.fillMaxWidth().height(280.dp).clip(RoundedCornerShape(8.dp))) {
+        true -> Box(
+            modifier = (if (fill) modifier.fillMaxSize() else modifier.fillMaxWidth().height(280.dp))
+                .clip(RoundedCornerShape(if (fill) 12.dp else 8.dp)),
+        ) {
             QrScanner(
                 modifier = Modifier.fillMaxSize(),
                 flashlightOn = false,

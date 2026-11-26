@@ -42,6 +42,7 @@ import dev.dubec.monad.quests.data.dto.ProbeConfig
 import dev.dubec.monad.quests.data.dto.ProbeTarget
 import dev.dubec.monad.quests.data.dto.TaskConfigParser
 import dev.dubec.monad.quests.presentation.components.QuestStepCard
+import dev.dubec.monad.quests.presentation.components.ScannerDialog
 
 /**
  * IP-140 — scan one of a named set of surveyed points, then hold still for a fixed dwell.
@@ -367,13 +368,8 @@ private fun ProbeContent(
             }
 
             if (config != null && config.targets.isNotEmpty() && sessionRunning) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (trackerOwnsCamera) Modifier else Modifier.height(300.dp))
-                        .clip(RoundedCornerShape(8.dp)),
-                ) {
-                    if (trackerOwnsCamera) {
+                if (trackerOwnsCamera) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
                         // DELIBERATELY NO VIEWFINDER. An ARSCNView here would render the tracker's
                         // session at 60 fps through a UIKit interop, and it would be mounted and
                         // unmounted at exactly the instant this step is most fragile — the read.
@@ -383,16 +379,41 @@ private fun ProbeContent(
                         // needs. If a viewfinder is ever wanted here, it is a measurement, not a
                         // guess: put it back and watch the main thread.
                         ProbeAimHint(seenCard)
-                    } else {
-                        QrScanner(
-                            modifier = Modifier.fillMaxSize(),
-                            flashlightOn = false,
-                            cameraLens = CameraLens.Back,
-                            openImagePicker = false,
-                            onCompletion = onScan,
-                            imagePickerHandler = { /* Not used */ },
-                            onFailure = { /* Surfaced by the notices above, not per frame. */ },
-                        )
+                    }
+                } else {
+                    // The step scrolls, so the camera opens over the whole screen, not inline
+                    // below the notices. This state lives in the "no card yet" branch, so it
+                    // resets when a card is matched and the dialog leaves with it.
+                    var scanning by remember { mutableStateOf(false) }
+                    Button(
+                        onClick = { scanning = true },
+                        enabled = !scanning,
+                        shape = RoundedCornerShape(6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5B6ECC)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Scan the card", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    if (scanning) {
+                        val single = config.targets.singleOrNull()
+                        ScannerDialog(
+                            title = single?.label?.ifBlank { single.value } ?: "Scan the card where you stand",
+                            hint = single?.takeIf { it.room.isNotBlank() }?.roomLabel,
+                            error = errorMessage,
+                            onClose = { scanning = false },
+                        ) { cameraModifier ->
+                            Box(modifier = cameraModifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))) {
+                                QrScanner(
+                                    modifier = Modifier.fillMaxSize(),
+                                    flashlightOn = false,
+                                    cameraLens = CameraLens.Back,
+                                    openImagePicker = false,
+                                    onCompletion = onScan,
+                                    imagePickerHandler = { /* Not used */ },
+                                    onFailure = { /* Surfaced by the notices, not per frame. */ },
+                                )
+                            }
+                        }
                     }
                 }
             }

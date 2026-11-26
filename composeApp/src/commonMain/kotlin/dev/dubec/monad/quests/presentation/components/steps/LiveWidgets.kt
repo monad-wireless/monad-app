@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import dev.dubec.monad.quests.domain.live.LiveAnswer
 import dev.dubec.monad.quests.domain.live.LiveWidget
 import dev.dubec.monad.quests.presentation.components.CardScanner
+import dev.dubec.monad.quests.presentation.components.ScannerDialog
 
 private val Ink = Color(0xFF0F172A)
 private val Muted = Color(0xFF64748B)
@@ -148,8 +149,25 @@ private fun ProgressLine(widget: LiveWidget.Progress) {
 @Composable
 private fun ScanInput(widget: LiveWidget.Scan, trackerOwnsCamera: Boolean, seenCard: String?, onCode: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    // The step scrolls, so an inline camera opened below the meter sat half off screen. With the
+    // camera free, the scanner is a full-screen view over the step. While the pose tracker owns
+    // the camera there is no preview to show, only a line of text, so that case stays inline.
+    if (open && !trackerOwnsCamera) {
+        ScannerDialog(title = widget.label, hint = widget.hint, error = null, onClose = { open = false }) { cameraModifier ->
+            CardScanner(
+                trackerOwnsCamera = false,
+                seenCard = null,
+                onCode = { code ->
+                    open = false
+                    onCode(code)
+                },
+                modifier = cameraModifier,
+                fill = true,
+            )
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (open) {
+        if (open && trackerOwnsCamera) {
             if (widget.hint.isNotBlank()) Text(widget.hint, fontSize = 13.sp, color = Muted)
             CardScanner(
                 trackerOwnsCamera = trackerOwnsCamera,
@@ -161,7 +179,7 @@ private fun ScanInput(widget: LiveWidget.Scan, trackerOwnsCamera: Boolean, seenC
             )
             ActionButton("Close camera", primary = false, enabled = true) { open = false }
         } else {
-            ActionButton(widget.label, primary = true, enabled = true) { open = true }
+            ActionButton(widget.label, primary = true, enabled = !open) { open = true }
         }
     }
 }

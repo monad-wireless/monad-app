@@ -74,6 +74,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.dubec.monad.home.presentation.model.QuestCardDt
 import dev.dubec.monad.lab.domain.SessionReport
 import dev.dubec.monad.core.config.AppConfig
+import dev.dubec.monad.core.presentation.components.EggLine
 import dev.dubec.monad.lab.presentation.LabConsoleScreen
 import dev.dubec.monad.lab.presentation.SessionStatusScreen
 import dev.dubec.monad.quests.presentation.quest_detail.QuestDetailScreen
@@ -349,6 +350,9 @@ class HomeScreen : Screen {
                     }
                 }
             }
+
+            // The website's footer line, at the foot of the board. Tap for another.
+            EggLine(modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
         }
     }
 
